@@ -116,6 +116,7 @@ const MIN_PANE = 220;
 /** A drag handle between two panes. It reports the drag distance in pixels. */
 function ResizeHandle({ label, onDrag }: { label: string; onDrag: (deltaX: number) => void }) {
   return (
+    // biome-ignore lint/a11y/useSemanticElements: a drag handle, not a thematic break
     <div
       role="separator"
       aria-orientation="vertical"

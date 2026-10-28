@@ -175,9 +175,9 @@ export function CronField({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {Array.from({ length: 28 }, (_, i) => (
-                <SelectItem key={i} value={String(i + 1)}>
-                  Day {i + 1}
+              {Array.from({ length: 28 }, (_, i) => i + 1).map((day) => (
+                <SelectItem key={day} value={String(day)}>
+                  Day {day}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -195,10 +195,11 @@ export function CronField({
           />
         )}
         {kind === "hourly" && (
-          <label className="flex items-center gap-1.5 text-sm text-muted-foreground">
+          <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
             at minute
             <Input
               type="number"
+              aria-label="Minute"
               min={0}
               max={59}
               className="w-16"
@@ -207,7 +208,7 @@ export function CronField({
                 update({ minute: Math.min(59, Math.max(0, Number(e.target.value))) })
               }
             />
-          </label>
+          </span>
         )}
       </div>
       <Input

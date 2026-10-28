@@ -49,7 +49,7 @@ import {
   Settings,
   Square,
   Trash2,
-  Workflow,
+  Workflow as WorkflowIcon,
   Zap,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -770,17 +770,19 @@ export function Editor({
   const selectedType = selected?.data.graphNode.type;
   const selectedConfig = selected?.data.graphNode.config;
   const selectedPath = typeof selectedConfig?.path === "string" ? selectedConfig.path : undefined;
+  const loadTestUrl = useCallback(
+    (nodeId: string, path: string | undefined) => {
+      testWebhookUrlFn({ data: { projectSlug, workflowId: workflow.id, nodeId, path } })
+        .then(({ url }) => setTestUrls((urls) => ({ ...urls, [nodeId]: url })))
+        .catch(() => undefined);
+    },
+    [projectSlug, workflow.id],
+  );
   useEffect(() => {
     if (!selectedId || !selectedType) return;
     if (!isWebhookType(selectedType) && !hasServiceTest(selectedType)) return;
     loadTestUrl(selectedId, selectedPath);
-  }, [selectedId, selectedType, selectedPath, projectSlug, workflow.id]);
-
-  function loadTestUrl(nodeId: string, path: string | undefined) {
-    testWebhookUrlFn({ data: { projectSlug, workflowId: workflow.id, nodeId, path } })
-      .then(({ url }) => setTestUrls((urls) => ({ ...urls, [nodeId]: url })))
-      .catch(() => undefined);
-  }
+  }, [selectedId, selectedType, selectedPath, loadTestUrl]);
 
   /** `whole`: the event starts the whole workflow, not only the trigger node. */
   async function listenForTestEvent(nodeId: string | undefined = selected?.id, whole = false) {
@@ -1085,7 +1087,12 @@ export function Editor({
     setAddActive(0);
   }
   const addFlat = useMemo(
-    () => addGroups.flatMap(([category, rows]) => (isCategoryOpen(category) ? rows : [])),
+    () =>
+      addGroups.flatMap(([category, rows]) =>
+        addQuery.trim() !== "" || openCategories === null || openCategories.includes(category)
+          ? rows
+          : [],
+      ),
     [addGroups, openCategories, addQuery],
   );
   const activeRow = addFlat[Math.min(addActive, addFlat.length - 1)];
@@ -1524,7 +1531,7 @@ export function Editor({
                             </Tooltip>
                             <Tooltip label="Auto arrange" side="right">
                               <ControlButton onClick={arrangeAndFit}>
-                                <Workflow className="fill-none" />
+                                <WorkflowIcon className="fill-none" />
                               </ControlButton>
                             </Tooltip>
                           </Controls>

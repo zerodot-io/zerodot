@@ -92,9 +92,9 @@ export const nodes: NodeDefinition[] = [
   tableDelete,
 ];
 
+export { credentialHeader } from "./credential-header";
 export * from "./credentials";
 export { validateCron } from "./cron";
-export { credentialHeader } from "./credential-header";
 export * from "./oauth2";
 export * from "./open-credential";
 export { type WaitCallbackData, waitCallbackData } from "./wait-callback";

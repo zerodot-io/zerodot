@@ -206,6 +206,7 @@ export function ZerodotEdge({
             {count} {count === 1 ? "item" : "items"}
           </span>
         )}
+        {/* biome-ignore lint/a11y/noStaticElementInteractions: hover only, the buttons inside take focus */}
         <div
           style={{ transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)` }}
           className={`nodrag nopan absolute flex gap-1 transition-opacity duration-150 ${

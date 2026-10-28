@@ -52,12 +52,12 @@ bash install.sh --check
 
 ## Docker or without Docker
 
-| | Docker (default) | Native (`--native`) |
-| --- | --- | --- |
-| What runs | Containers for Zerodot, Postgres 17 and Valkey 8 | systemd services: web, api, worker, sandbox |
-| Database and queue | Own containers | Uses Postgres and Valkey on the server if found. Installs them if not. |
-| Node and pnpm | Inside the image | Node 22 and the exact pnpm version of the repository. A private copy goes to `/opt` when the server has none that fits. The system Node is not changed. |
-| Best for | Most servers. Easy to move. | Small servers (less RAM), servers that already run Postgres, container VPS where Docker fails |
+|                    | Docker (default)                                 | Native (`--native`)                                                                                                                                     |
+| ------------------ | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| What runs          | Containers for Zerodot, Postgres 17 and Valkey 8 | systemd services: web, api, worker, sandbox                                                                                                             |
+| Database and queue | Own containers                                   | Uses Postgres and Valkey on the server if found. Installs them if not.                                                                                  |
+| Node and pnpm      | Inside the image                                 | Node 22 and the exact pnpm version of the repository. A private copy goes to `/opt` when the server has none that fits. The system Node is not changed. |
+| Best for           | Most servers. Easy to move.                      | Small servers (less RAM), servers that already run Postgres, container VPS where Docker fails                                                           |
 
 Without a flag, the script asks and recommends one.
 

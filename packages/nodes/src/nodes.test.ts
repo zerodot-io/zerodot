@@ -154,10 +154,11 @@ describe("http.request", () => {
     await run(true);
     await run(false);
     const [on, off] = fetchMock.mock.calls.map((c) => c.arguments as [URL, RequestInit]);
-    assert.equal(String(on?.[0]), "https://api.example.com/x?a=1&b=2");
-    assert.equal((on?.[1].headers as Headers).get("x-k"), "v");
-    assert.equal(String(off?.[0]), "https://api.example.com/x?a=1");
-    assert.equal((off?.[1].headers as Headers).get("x-k"), null);
+    assert.ok(on && off);
+    assert.equal(String(on[0]), "https://api.example.com/x?a=1&b=2");
+    assert.equal((on[1].headers as Headers).get("x-k"), "v");
+    assert.equal(String(off[0]), "https://api.example.com/x?a=1");
+    assert.equal((off[1].headers as Headers).get("x-k"), null);
   });
 
   it("fails on error status without fullResponse", async () => {

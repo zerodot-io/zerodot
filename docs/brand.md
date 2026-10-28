@@ -34,14 +34,13 @@
 
 Use few colors.
 
-| Role | Value | Use |
-| --- | --- | --- |
-| Ink | `#0A0A0A` | Text, logo |
-| Gray 1 | `#737373` | Secondary text |
-| Gray 2 | `#E5E5E5` | Borders |
-| Paper | `#FFFFFF` | Background |
+| Role   | Value     | Use                             |
+| ------ | --------- | ------------------------------- |
+| Ink    | `#0A0A0A` | Text, logo                      |
+| Gray 1 | `#737373` | Secondary text                  |
+| Gray 2 | `#E5E5E5` | Borders                         |
+| Paper  | `#FFFFFF` | Background                      |
 | Accent | `#FF6900` | Logo dot, links, primary action |
-
 - Use the accent on 5% of a screen at most.
 - Use status colors (error, success) only inside the app. Do not use them in brand material.
 

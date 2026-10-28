@@ -109,7 +109,13 @@ services:
       SANDBOX_MAX_WAIT_MS: ${SANDBOX_MAX_WAIT_MS:-250}
       SANDBOX_MAX_QUEUE: ${SANDBOX_MAX_QUEUE:-4}
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3002/healthz').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3002/healthz').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))",
+        ]
       interval: 5s
       timeout: 3s
       retries: 5
