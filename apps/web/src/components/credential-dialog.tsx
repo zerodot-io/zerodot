@@ -198,6 +198,16 @@ export function CredentialDialog({
     setError(null);
     setPending(true);
     try {
+      // A credential that fails its test is not saved. OAuth2 cannot test before it connects.
+      if (!isOAuth2) {
+        const result = await testCredentialFn({
+          data: { projectSlug, id: savedId ?? undefined, type, fields },
+        });
+        if (result.status === "failed") {
+          setError(result.message);
+          return;
+        }
+      }
       const saved = savedId
         ? await updateCredentialFn({ data: { projectSlug, id: savedId, name, fields } })
         : await createCredentialFn({ data: { projectSlug, name, type, fields } });
