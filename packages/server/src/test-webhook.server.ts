@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-import { forOrganization, webhookToken } from "@zerodot/db";
+import { findWebhookTrigger, forOrganization, webhookToken } from "@zerodot/db";
 import { registry } from "@zerodot/nodes";
 import { getServices } from "./services.server";
-import { holdForAnswer, parseBody, readBody } from "./webhook.server";
+import { holdForAnswer, parseBody, readBody, sandboxed } from "./webhook.server";
 
 /** A person listens for one test event for this long. */
 export const LISTEN_SECONDS = 120;
+/** The owner of a token keeps it this long: the listen, then the test run that answers. */
+const OWNER_SECONDS = LISTEN_SECONDS + 600;
 
 const PATH = /^[A-Za-z0-9_-]{1,100}$/;
 
@@ -13,6 +15,42 @@ const listenKey = (token: string) => `testhook:listen:${token}`;
 const eventKey = (token: string) => `testhook:event:${token}`;
 /** The editor says which test run answers the request that the URL got. */
 const runKey = (token: string) => `testhook:run:${token}`;
+/** The trigger node that listens on the token. A path is a word, so other projects can ask for it. */
+const ownerKey = (token: string) => `testhook:owner:${token}`;
+
+/** The trigger node that uses a test token. */
+export type TestHookOwner = { organizationId: string; workflowId: string; nodeId: string };
+
+const ownerId = (owner: TestHookOwner) =>
+  `${owner.organizationId}/${owner.workflowId}/${owner.nodeId}`;
+
+export class TestHookInUseError extends Error {
+  constructor() {
+    super("Another workflow uses this webhook path");
+  }
+}
+
+/** True when this node owns the token now. */
+async function owns(token: string, owner: TestHookOwner): Promise<boolean> {
+  const { redis } = await getServices();
+  return (await redis.get(ownerKey(token))) === ownerId(owner);
+}
+
+/**
+ * Gives the token to this node, or throws when another workflow has it: a published trigger with
+ * the same path, or a listen that is still open.
+ */
+export async function claimTestHook(token: string, owner: TestHookOwner) {
+  const { redis, db } = await getServices();
+  const published = await findWebhookTrigger(db, token);
+  if (published && published.workflowId !== owner.workflowId) throw new TestHookInUseError();
+  const id = ownerId(owner);
+  const set = await redis.set(ownerKey(token), id, "EX", OWNER_SECONDS, "NX");
+  if (set === null) {
+    if ((await redis.get(ownerKey(token))) !== id) throw new TestHookInUseError();
+    await redis.expire(ownerKey(token), OWNER_SECONDS);
+  }
+}
 
 /**
  * The last part of the URL of a trigger node: its path, or the token of the published trigger, or
@@ -47,29 +85,39 @@ export type ListenCheck = { type: string; config: Record<string, unknown> };
 /** The listen key holds the method that the Webhook node expects and its response mode. */
 export async function startListening(
   token: string,
+  owner: TestHookOwner,
   method: string,
   mode: string,
   check?: ListenCheck,
 ) {
   const { redis } = await getServices();
+  await claimTestHook(token, owner);
   await redis.del(eventKey(token), runKey(token));
   await redis.set(listenKey(token), JSON.stringify({ method, mode, check }), "EX", LISTEN_SECONDS);
 }
 
 /** The editor started a test run for the event. The held request waits for its answer. */
-export async function linkRun(token: string, runId: string, organizationId: string) {
+export async function linkRun(token: string, owner: TestHookOwner, runId: string) {
   const { redis } = await getServices();
-  await redis.set(runKey(token), JSON.stringify({ runId, organizationId }), "EX", 600);
+  if (!(await owns(token, owner))) return;
+  await redis.set(
+    runKey(token),
+    JSON.stringify({ runId, organizationId: owner.organizationId }),
+    "EX",
+    600,
+  );
 }
 
-export async function stopListening(token: string) {
+export async function stopListening(token: string, owner: TestHookOwner) {
   const { redis } = await getServices();
-  await redis.del(listenKey(token), eventKey(token));
+  if (!(await owns(token, owner))) return;
+  await redis.del(listenKey(token), eventKey(token), ownerKey(token));
 }
 
 /** The event that the test URL got, or null. A read removes it. */
-export async function takeEvent(token: string): Promise<unknown | null> {
+export async function takeEvent(token: string, owner: TestHookOwner): Promise<unknown | null> {
   const { redis } = await getServices();
+  if (!(await owns(token, owner))) return null;
   const text = await redis.getdel(eventKey(token));
   return text === null ? null : JSON.parse(text);
 }
@@ -78,6 +126,10 @@ const json = (body: unknown, status: number) => Response.json(body, { status });
 
 /** Test webhook: any method on /hooks-test/:token. It takes one request while the editor listens. */
 export async function handleTestWebhook(request: Request, token: string): Promise<Response> {
+  return sandboxed(await answerTestWebhook(request, token));
+}
+
+async function answerTestWebhook(request: Request, token: string): Promise<Response> {
   const { redis, config, db, secretKey } = await getServices();
   const listening = await redis.get(listenKey(token));
   const { method, mode, check } = listening

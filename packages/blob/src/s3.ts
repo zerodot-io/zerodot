@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { type BlobRef, type BlobStore, blobId } from "@zerodot/engine";
+import { blobIdParts } from "./id";
 import { listObjects, type S3Context, s3Send } from "./s3-client";
 import type { S3Keys, S3Target } from "./s3-sign";
 
@@ -20,7 +21,11 @@ export function s3BlobStore(config: S3BlobConfig): BlobStore {
     keys: config.keys,
     fetch: config.fetch ?? fetch,
   };
-  const keyOf = (id: string) => `${prefix}${id}`;
+  /** The key of a blob. A forged id with `..` could reach keys outside the prefix. */
+  const keyOf = (id: string) => {
+    const { runId, hash } = blobIdParts(id);
+    return `${prefix}${runId}/${hash}`;
+  };
 
   return {
     async put(runId, bytes, mimeType): Promise<BlobRef> {

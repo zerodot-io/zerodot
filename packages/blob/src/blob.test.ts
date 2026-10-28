@@ -112,6 +112,14 @@ describe("s3BlobStore", () => {
     await store.deleteRun(RUN);
     assert.deepEqual(await store.listRunIds(), [OTHER]);
   });
+
+  it("refuses a forged id that leaves the prefix", async () => {
+    const before = calls.length;
+    for (const id of ["../../other/secret.txt", `${RUN}/../../x`, "secret.txt"]) {
+      await assert.rejects(store.get({ $blob: id, mimeType: "text/plain", size: 1 }), /Invalid/);
+    }
+    assert.equal(calls.length, before);
+  });
 });
 
 describe("blobSetupFromEnv", () => {
