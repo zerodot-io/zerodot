@@ -1,5 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-import { Badge, Button, toast } from "@zerodot/ui";
+import {
+  Badge,
+  Button,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  Input,
+  toast,
+} from "@zerodot/ui";
 import { useCallback, useEffect, useState } from "react";
 import { addServerCatalog } from "../lib/flow";
 import {
@@ -23,15 +33,74 @@ export async function refreshServerCatalog(): Promise<void> {
   addServerCatalog(await getExtraCatalogFn());
 }
 
+/** What a person must know before they install: the code runs on the server. */
+function InstallConfirm({
+  item,
+  busy,
+  onCancel,
+  onConfirm,
+}: {
+  item: { name: string; label: string; version: string | null };
+  busy: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <Dialog open onOpenChange={(open) => !open && !busy && onCancel()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Install {item.label}?</DialogTitle>
+          <DialogDescription>
+            This adds the nodes of {item.name}
+            {item.version ? ` ${item.version}` : ""} to every project. The package code runs on the
+            server with the same rights as zerodot. Install only packages that you trust.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="outline" disabled={busy} onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button type="button" disabled={busy} onClick={onConfirm}>
+            {busy ? "Installing" : "Install"}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 type Overview = Awaited<ReturnType<typeof getNodePackagesFn>>;
 type PackageView = Overview["packages"][number];
 
-const STATUS_TEXT: Record<PackageView["status"], string> = {
-  loaded: "Installed",
-  error: "Failed to load",
-  "not-loaded": "Installed, not loaded yet",
-  available: "Not installed",
+const STATUS: Record<PackageView["status"], { text: string; dot: string }> = {
+  loaded: { text: "Installed", dot: "bg-emerald-500" },
+  error: { text: "Failed to load", dot: "bg-destructive" },
+  "not-loaded": { text: "Not loaded yet", dot: "bg-amber-500" },
+  available: { text: "Not installed", dot: "bg-muted-foreground/40" },
 };
+
+const parts = (version: string): number[] => version.split(".").map((n) => Number.parseInt(n, 10));
+
+/** True when `latest` is a higher version than `installed`. Plain numbers only. */
+function isNewer(latest: string | null, installed: string | null): boolean {
+  if (!latest || !installed) return false;
+  const a = parts(latest);
+  const b = parts(installed);
+  for (let i = 0; i < 3; i++) {
+    const x = a[i] ?? 0;
+    const y = b[i] ?? 0;
+    if (Number.isNaN(x) || Number.isNaN(y)) return false;
+    if (x !== y) return x > y;
+  }
+  return false;
+}
+
+const matchesPackage = (item: PackageView, query: string): boolean =>
+  `${item.label} ${item.name} ${item.description} ${item.nodes
+    .map((node) => `${node.label} ${node.description ?? ""} ${node.type}`)
+    .join(" ")}`
+    .toLowerCase()
+    .includes(query);
 
 function PackageRow({
   item,
@@ -47,19 +116,27 @@ function PackageRow({
   onRemove: () => void;
 }) {
   const installed = item.version !== null;
+  const status = STATUS[item.status];
   return (
-    <div className="flex items-start justify-between gap-4 rounded-xl border p-4">
-      <NodeIcon name={item.icon ?? "Package"} src={item.iconUrl ?? undefined} className="mt-0.5" />
+    <li className="flex items-start gap-4 px-4 py-4">
+      <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted">
+        <NodeIcon name={item.icon ?? "Package"} src={item.iconUrl ?? undefined} />
+      </span>
       <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <span className="flex items-center gap-2 font-medium">
-          {item.label}
-          <Badge variant={item.status === "error" ? "destructive" : "secondary"}>
-            {installed ? `${STATUS_TEXT[item.status]} ${item.version}` : STATUS_TEXT[item.status]}
-          </Badge>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="font-medium">{item.label}</span>
+          <span className="flex items-center gap-1.5 text-muted-foreground">
+            <span aria-hidden="true" className={`size-1.5 rounded-full ${status.dot}`} />
+            {status.text}
+            {installed && <span className="tabular-nums">· {item.version}</span>}
+          </span>
+          {isNewer(item.latest, item.version) && (
+            <Badge variant="secondary">Update {item.latest}</Badge>
+          )}
           {item.source === "env" && <Badge variant="outline">ZERODOT_NODE_PACKAGES</Badge>}
-        </span>
-        <span className="text-muted-foreground">{item.name}</span>
-        {item.description && <span className="text-muted-foreground">{item.description}</span>}
+        </div>
+        {item.description && <p className="text-pretty">{item.description}</p>}
+        <span className="font-mono text-muted-foreground">{item.name}</span>
         {item.error && <span className="text-destructive">{item.error}</span>}
       </div>
       {canChange &&
@@ -77,14 +154,45 @@ function PackageRow({
             {busy ? "Installing" : "Install"}
           </Button>
         ))}
-    </div>
+    </li>
   );
 }
 
-/** The Nodes section of the System page: what is installed, and what one can install. */
+function PackageGroup({
+  title,
+  count,
+  children,
+}: {
+  title: string;
+  count: number;
+  children: React.ReactNode;
+}) {
+  return (
+    <section aria-label={title} className="flex flex-col gap-2">
+      <h2 className="flex items-baseline gap-2 font-medium">
+        {title}
+        <span className="tabular-nums text-muted-foreground">{count}</span>
+      </h2>
+      <ul className="divide-y overflow-hidden rounded-xl border">{children}</ul>
+    </section>
+  );
+}
+
+type Filter = "all" | "installed" | "available";
+
+const FILTERS: { value: Filter; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "installed", label: "Installed" },
+  { value: "available", label: "Not installed" },
+];
+
+/** The Nodes page of the System section: what is installed, and what one can install. */
 export function NodePackagesSection() {
   const [overview, setOverview] = useState<Overview | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<Filter>("all");
+  const [confirm, setConfirm] = useState<PackageView | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -109,59 +217,117 @@ export function NodePackagesSection() {
       toast.error(errorText(error));
     } finally {
       setBusy(null);
+      setConfirm(null);
     }
   }
 
   if (!overview) return null;
-  const installed = overview.packages.filter((item) => item.version !== null);
-  const available = overview.packages.filter((item) => item.version === null);
+  const text = query.trim().toLowerCase();
+  const found = overview.packages.filter((item) => !text || matchesPackage(item, text));
+  const installed = found.filter((item) => item.version !== null);
+  const available = found.filter((item) => item.version === null);
+  const counts: Record<Filter, number> = {
+    all: found.length,
+    installed: installed.length,
+    available: available.length,
+  };
+  const showInstalled = filter !== "available" && installed.length > 0;
+  const showAvailable = filter !== "installed" && available.length > 0;
+
+  const row = (item: PackageView) => (
+    <PackageRow
+      key={item.name}
+      item={item}
+      canChange={overview.installEnabled}
+      busy={busy === item.name}
+      onInstall={() => setConfirm(item)}
+      onRemove={() =>
+        void change(
+          item.name,
+          () => uninstallNodePackageFn({ data: { name: item.name } }),
+          `${item.label} removed`,
+        )
+      }
+    />
+  );
+
   return (
-    <section className="flex flex-col gap-3">
-      <p className="text-muted-foreground">
-        zerodot comes with the core nodes. Install the others when you need them.
+    <div className="flex flex-col gap-6">
+      <p className="max-w-prose text-pretty text-muted-foreground">
+        zerodot comes with the core nodes. Install a package to add more nodes, for example
+        databases, email, or chat apps.
         {!overview.installEnabled && " Installing is off on this instance (ZERODOT_NODES_INSTALL)."}
       </p>
-      {installed.length === 0 && available.length === 0 && (
-        <p className="text-muted-foreground">No packages yet.</p>
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div role="tablist" aria-label="Filter packages" className="flex gap-1">
+          {FILTERS.map((option) => {
+            const on = option.value === filter;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                role="tab"
+                aria-selected={on}
+                onClick={() => setFilter(option.value)}
+                className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 transition-colors duration-150 ease-out hover:text-foreground ${on ? "bg-muted font-medium text-foreground" : "text-muted-foreground"}`}
+              >
+                {option.label}
+                <span className="tabular-nums text-muted-foreground">{counts[option.value]}</span>
+              </button>
+            );
+          })}
+        </div>
+        <Input
+          type="search"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Search by name, node, or use"
+          aria-label="Search packages"
+          className="w-72"
+        />
+      </div>
+
+      {showInstalled && (
+        <PackageGroup title="Installed" count={installed.length}>
+          {installed.map(row)}
+        </PackageGroup>
       )}
-      {installed.map((item) => (
-        <PackageRow
-          key={item.name}
-          item={item}
-          canChange={overview.installEnabled}
-          busy={busy === item.name}
-          onInstall={() => undefined}
-          onRemove={() =>
-            void change(
-              item.name,
-              () => uninstallNodePackageFn({ data: { name: item.name } }),
-              `${item.label} removed`,
-            )
-          }
-        />
-      ))}
-      {available.map((item) => (
-        <PackageRow
-          key={item.name}
-          item={item}
-          canChange={overview.installEnabled}
-          busy={busy === item.name}
-          onInstall={() =>
-            void change(
-              item.name,
-              () => installNodePackageFn({ data: { name: item.name } }),
-              `${item.label} installed`,
-            )
-          }
-          onRemove={() => undefined}
-        />
-      ))}
+      {showAvailable && (
+        <PackageGroup title="Available" count={available.length}>
+          {available.map(row)}
+        </PackageGroup>
+      )}
+      {!showInstalled && !showAvailable && (
+        <p className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">
+          {overview.packages.length === 0
+            ? "No packages yet."
+            : text
+              ? `No package matches "${query.trim()}".`
+              : "Nothing in this list."}
+        </p>
+      )}
       {overview.catalogError && (
         <p className="text-muted-foreground">
           The list of packages could not be read: {overview.catalogError}
         </p>
       )}
-    </section>
+
+      {confirm && (
+        <InstallConfirm
+          item={{ name: confirm.name, label: confirm.label, version: confirm.latest }}
+          busy={busy === confirm.name}
+          onCancel={() => setConfirm(null)}
+          onConfirm={() =>
+            void change(
+              confirm.name,
+              () => installNodePackageFn({ data: { name: confirm.name } }),
+              `${confirm.label} installed`,
+            )
+          }
+        />
+      )}
+    </div>
   );
 }
 
@@ -187,6 +353,7 @@ export function AvailableNodePackages({
 }) {
   const [available, setAvailable] = useState<Available | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [confirm, setConfirm] = useState<Available["packages"][number] | null>(null);
 
   useEffect(() => {
     getAvailableNodePackagesFn().then(setAvailable, () => setAvailable(null));
@@ -208,6 +375,7 @@ export function AvailableNodePackages({
       toast.error(errorText(error));
     } finally {
       setBusy(null);
+      setConfirm(null);
     }
   }
 
@@ -231,7 +399,7 @@ export function AvailableNodePackages({
           </span>
           {item.compatible &&
             (available.canInstall ? (
-              <Button disabled={busy !== null} onClick={() => void install(item)}>
+              <Button disabled={busy !== null} onClick={() => setConfirm(item)}>
                 {busy === item.name ? "Installing" : "Install"}
               </Button>
             ) : (
@@ -239,6 +407,14 @@ export function AvailableNodePackages({
             ))}
         </div>
       ))}
+      {confirm && (
+        <InstallConfirm
+          item={{ name: confirm.name, label: confirm.label, version: confirm.version }}
+          busy={busy === confirm.name}
+          onCancel={() => setConfirm(null)}
+          onConfirm={() => void install(confirm)}
+        />
+      )}
     </div>
   );
 }
