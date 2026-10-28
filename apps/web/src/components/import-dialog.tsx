@@ -16,7 +16,7 @@ import {
 import { type ChangeEvent, type FormEvent, useRef, useState } from "react";
 import { importWorkflowFn, installNodePackageFn, previewImportFn } from "../server/fns";
 import { NodeIcon } from "./node-icon";
-import { refreshServerCatalog } from "./node-packages";
+import { CommunityInstallConfirm, refreshServerCatalog } from "./node-packages";
 
 export type ImportResult = Awaited<ReturnType<typeof importWorkflowFn>>;
 type Preview = Awaited<ReturnType<typeof previewImportFn>>;
@@ -241,8 +241,35 @@ function MissingNodesDialog({
   const [installed, setInstalled] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const installable = needed.packages.filter((item) => item.compatible);
-  const canInstall = needed.canInstall && installable.length > 0;
+  const [confirm, setConfirm] = useState<Needed["packages"][number] | null>(null);
+  // Community packages are not in the batch: each one needs its own install, with the risk accepted.
+  const installable = needed.packages.filter((item) => item.compatible && !item.registry);
+  const canInstall = needed.canInstall && installable.some((item) => !installed.has(item.name));
+  const ready =
+    needed.unknown.length === 0 && needed.packages.every((item) => installed.has(item.name));
+
+  async function installCommunity(item: Needed["packages"][number]) {
+    if (!item.registry) return;
+    setInstalling(item.name);
+    setError(null);
+    try {
+      await installNodePackageFn({
+        data: {
+          name: item.name,
+          registry: item.registry.url,
+          version: item.version,
+          acceptRisk: true,
+        },
+      });
+      setInstalled((current) => new Set(current).add(item.name));
+      await refreshServerCatalog();
+    } catch (caught) {
+      setError(errorText(caught, "Could not install the package"));
+    } finally {
+      setInstalling(null);
+      setConfirm(null);
+    }
+  }
 
   async function finish(install: boolean) {
     setBusy(true);
@@ -288,7 +315,12 @@ function MissingNodesDialog({
               <li key={item.name} className="flex items-center gap-3 py-2">
                 <NodeIcon name={item.icon ?? "Package"} src={item.iconUrl ?? undefined} />
                 <span className="flex min-w-0 flex-1 flex-col">
-                  <span>{item.label}</span>
+                  <span>
+                    {item.label}
+                    {item.registry && (
+                      <span className="text-destructive"> · Community, {item.registry.name}</span>
+                    )}
+                  </span>
                   <span className="truncate text-muted-foreground">
                     {item.compatible ? labels.join(", ") : "Needs a newer zerodot"}
                   </span>
@@ -297,6 +329,14 @@ function MissingNodesDialog({
                   <Spinner />
                 ) : installed.has(item.name) ? (
                   <span className="text-muted-foreground">Installed</span>
+                ) : item.registry && item.compatible && needed.canInstallCommunity ? (
+                  <Button
+                    variant="outline"
+                    disabled={busy || installing !== null}
+                    onClick={() => setConfirm(item)}
+                  >
+                    Install
+                  </Button>
                 ) : null}
               </li>
             );
@@ -304,7 +344,7 @@ function MissingNodesDialog({
         </ul>
         {needed.unknown.length > 0 && (
           <p className="text-muted-foreground">
-            Not in the node catalog: {needed.unknown.join(", ")}.
+            Not in the node catalog or a registry: {needed.unknown.join(", ")}.
           </p>
         )}
         {needed.catalogError && (
@@ -317,6 +357,25 @@ function MissingNodesDialog({
             {error}
           </p>
         )}
+        {needed.packages.some((item) => item.registry && !installed.has(item.name)) && (
+          <p className="text-pretty text-muted-foreground">
+            zerodot did not check community packages. Install each one only when you trust its
+            author.
+          </p>
+        )}
+        {confirm?.registry && (
+          <CommunityInstallConfirm
+            item={{
+              name: confirm.name,
+              label: confirm.label,
+              version: confirm.version,
+              registry: confirm.registry,
+            }}
+            busy={installing === confirm.name}
+            onCancel={() => setConfirm(null)}
+            onConfirm={() => void installCommunity(confirm)}
+          />
+        )}
         <div className="flex justify-end gap-2">
           <Button variant="ghost" disabled={busy} onClick={onCancel}>
             Back
@@ -327,7 +386,7 @@ function MissingNodesDialog({
             onClick={() => void finish(false)}
           >
             {busy && !canInstall && <Spinner />}
-            Import anyway
+            {ready ? "Import" : "Import anyway"}
           </Button>
           {canInstall && (
             <Button disabled={busy} onClick={() => void finish(true)}>

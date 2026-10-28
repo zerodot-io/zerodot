@@ -508,14 +508,25 @@ export async function availableNodePackages(headers: Headers): Promise<Available
 export type NeededNodePackages = {
   /** True for an instance admin when installing is on. */
   canInstall: boolean;
+  /** True when `canInstall` and community packages are on. */
+  canInstallCommunity: boolean;
   catalogError: string | null;
-  /** Catalog packages that give one or more of the node types. */
-  packages: (AvailableNodePackage & { types: string[] })[];
-  /** Node types that no catalog package gives. */
+  /**
+   * Packages that give one or more of the node types. Official packages first. `registry` is set
+   * for a package from a community registry: it needs its own install, with the risk accepted.
+   */
+  packages: (AvailableNodePackage & {
+    types: string[];
+    registry: { url: string; name: string } | null;
+  })[];
+  /** Node types that no package gives. */
   unknown: string[];
 };
 
-/** The catalog packages that give the node types. Any signed-in person. */
+/**
+ * The packages that give the node types: from the official catalog, then from the community
+ * registries for the types that are left. Any signed-in person.
+ */
 export async function packagesForNodeTypes(
   headers: Headers,
   types: string[],
@@ -527,10 +538,47 @@ export async function packagesForNodeTypes(
     const given = item.nodes.map((node) => node.type).filter((type) => types.includes(type));
     if (given.length === 0) continue;
     for (const type of given) found.add(type);
-    packages.push({ ...item, types: given });
+    packages.push({ ...item, types: given, registry: null });
+  }
+  if (communityEnabled() && types.some((type) => !found.has(type))) {
+    const { db } = await getServices();
+    const have = new Set([
+      ...(await getNodePackages(db)).map((item) => item.name),
+      ...envPackages(),
+      ...packages.map((item) => item.name),
+    ]);
+    const saved = await getNodeRegistries(db);
+    const results = await Promise.allSettled(saved.map((item) => fetchRegistry(item.url)));
+    saved.forEach((registry, index) => {
+      const result = results[index];
+      if (result?.status !== "fulfilled") return;
+      for (const item of result.value.packages) {
+        if (have.has(item.name)) continue;
+        const given = item.nodes
+          .map((node) => node.type)
+          .filter((type) => types.includes(type) && !found.has(type));
+        if (given.length === 0) continue;
+        for (const type of given) found.add(type);
+        have.add(item.name);
+        packages.push({
+          name: item.name,
+          label: item.label,
+          summary: item.summary,
+          description: item.description,
+          version: item.version,
+          icon: item.icon ?? null,
+          iconUrl: item.iconUrl ?? null,
+          nodes: item.nodes,
+          compatible: satisfiesSdk(item.sdk, SDK_VERSION),
+          types: given,
+          registry: { url: registry.url, name: registry.name },
+        });
+      }
+    });
   }
   return {
     canInstall: available.canInstall,
+    canInstallCommunity: available.canInstall && communityEnabled(),
     catalogError: available.catalogError,
     packages,
     unknown: types.filter((type) => !found.has(type)),
