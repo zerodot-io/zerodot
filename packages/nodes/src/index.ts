@@ -28,15 +28,12 @@ import flowLoop from "./flow-loop";
 import flowNoop from "./flow-noop";
 import flowRespond from "./flow-respond";
 import flowStopError from "./flow-stop-error";
-import ftp from "./ftp";
 import httpRequest from "./http-request";
 import logicIf from "./logic-if";
 import logicSwitch from "./logic-switch";
 import mcpCallTool from "./mcp-call-tool";
 import rssRead from "./rss-read";
 import s3 from "./s3";
-import sftp from "./sftp";
-import sshNode from "./ssh-node";
 import tableDelete from "./table-delete";
 import tableGet from "./table-get";
 import tableGetAll from "./table-get-all";
@@ -92,9 +89,6 @@ export const nodes: NodeDefinition[] = [
   codeJs,
   mcpCallTool,
   coreExecuteCommand,
-  sshNode,
-  ftp,
-  sftp,
   s3,
   tableInsert,
   tableQuery,

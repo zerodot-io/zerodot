@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import type { ResolvedCredential } from "@zerodot/engine";
 import { credentialTypeByName } from "./credentials";
-import { connectSsh } from "./ssh";
 
 export type CredentialTestResult =
   | { status: "ok" }
@@ -27,33 +26,8 @@ async function checkTelegram({ data }: ResolvedCredential): Promise<void> {
   if (!response.ok) throw new Error(`Telegram answered with status ${response.status}`);
 }
 
-async function checkSsh(credential: ResolvedCredential): Promise<void> {
-  const client = await connectSsh(credential);
-  client.end();
-}
-
-async function checkFtp({ data }: ResolvedCredential): Promise<void> {
-  const host = text(data.host);
-  if (!host) throw new Error('The credential has no "host"');
-  const { Client } = await import("basic-ftp");
-  const client = new Client(TIMEOUT_MS);
-  try {
-    await client.access({
-      host,
-      port: text(data.port) ? Number(data.port) : 21,
-      user: text(data.username) ?? "anonymous",
-      password: text(data.password) ?? "anonymous@",
-      secure: data.secure === "true",
-    });
-  } finally {
-    client.close();
-  }
-}
-
 const checks: Record<string, (credential: ResolvedCredential) => Promise<void>> = {
   "telegram.bot": checkTelegram,
-  ssh: checkSsh,
-  ftp: checkFtp,
 };
 
 function secretsOf(data: unknown, found: string[] = []): string[] {

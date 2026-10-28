@@ -108,46 +108,6 @@ export const credentialTypes: CredentialTypeDefinition[] = [
     icon: "KeyRound",
   },
   {
-    type: "ssh",
-    label: "SSH",
-    // For the SSH and SFTP nodes. `authType` is "password" or "privateKey" (a PEM key).
-    fields: z.object({
-      host: z.string().min(1).meta({ placeholder: "ssh.example.com" }),
-      /** Empty means 22. */
-      port: z
-        .string()
-        .regex(/^\d{1,5}$/, "Not a port number")
-        .optional()
-        .meta({ placeholder: "22" }),
-      username: z.string().min(1).meta({ placeholder: "root" }),
-      authType: z.enum(["password", "privateKey"]).optional(),
-      password: z.string().min(1).optional(),
-      privateKey: z.string().min(1).optional(),
-      passphrase: z.string().min(1).optional(),
-    }),
-    secretFields: ["password", "privateKey", "passphrase"],
-    icon: "Terminal",
-  },
-  {
-    type: "ftp",
-    label: "FTP",
-    fields: z.object({
-      host: z.string().min(1).meta({ placeholder: "ftp.example.com" }),
-      /** Empty means 21. */
-      port: z
-        .string()
-        .regex(/^\d{1,5}$/, "Not a port number")
-        .optional()
-        .meta({ placeholder: "21" }),
-      username: z.string().min(1).optional().meta({ placeholder: "anonymous" }),
-      password: z.string().min(1).optional(),
-      /** Use FTPS (TLS). Empty means false. */
-      secure: z.enum(["true", "false"]).optional(),
-    }),
-    secretFields: ["password"],
-    icon: "FolderOpen",
-  },
-  {
     type: "s3",
     label: "S3",
     // For Amazon S3 and for S3-compatible services (MinIO, Cloudflare R2, Backblaze B2, and so
