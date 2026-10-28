@@ -15,6 +15,7 @@ import { Route as SignInRouteImport } from './routes/sign-in'
 import { Route as SignUpRouteImport } from './routes/sign-up'
 import { Route as SystemRouteImport } from './routes/system'
 import { Route as PProjectSlugRouteImport } from './routes/p.$projectSlug'
+import { Route as SystemNodesRouteImport } from './routes/system_.nodes'
 import { Route as PProjectSlugApiKeysRouteImport } from './routes/p.$projectSlug.api-keys'
 import { Route as PProjectSlugCredentialsRouteImport } from './routes/p.$projectSlug.credentials'
 import { Route as PProjectSlugInsightsRouteImport } from './routes/p.$projectSlug.insights'
@@ -55,6 +56,11 @@ const SystemRoute = SystemRouteImport.update({
 const PProjectSlugRoute = PProjectSlugRouteImport.update({
   id: '/p/$projectSlug',
   path: '/p/$projectSlug',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SystemNodesRoute = SystemNodesRouteImport.update({
+  id: '/system_/nodes',
+  path: '/system/nodes',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PProjectSlugApiKeysRoute = PProjectSlugApiKeysRouteImport.update({
@@ -123,6 +129,7 @@ export interface FileRoutesByFullPath {
   '/sign-up': typeof SignUpRoute
   '/system': typeof SystemRoute
   '/p/$projectSlug': typeof PProjectSlugRouteWithChildren
+  '/system/nodes': typeof SystemNodesRoute
   '/p/$projectSlug/api-keys': typeof PProjectSlugApiKeysRoute
   '/p/$projectSlug/credentials': typeof PProjectSlugCredentialsRoute
   '/p/$projectSlug/insights': typeof PProjectSlugInsightsRoute
@@ -142,6 +149,7 @@ export interface FileRoutesByTo {
   '/sign-up': typeof SignUpRoute
   '/system': typeof SystemRoute
   '/p/$projectSlug': typeof PProjectSlugRouteWithChildren
+  '/system/nodes': typeof SystemNodesRoute
   '/p/$projectSlug/api-keys': typeof PProjectSlugApiKeysRoute
   '/p/$projectSlug/credentials': typeof PProjectSlugCredentialsRoute
   '/p/$projectSlug/insights': typeof PProjectSlugInsightsRoute
@@ -162,6 +170,7 @@ export interface FileRoutesById {
   '/sign-up': typeof SignUpRoute
   '/system': typeof SystemRoute
   '/p/$projectSlug': typeof PProjectSlugRouteWithChildren
+  '/system_/nodes': typeof SystemNodesRoute
   '/p/$projectSlug/api-keys': typeof PProjectSlugApiKeysRoute
   '/p/$projectSlug/credentials': typeof PProjectSlugCredentialsRoute
   '/p/$projectSlug/insights': typeof PProjectSlugInsightsRoute
@@ -183,6 +192,7 @@ export interface FileRouteTypes {
     | '/sign-up'
     | '/system'
     | '/p/$projectSlug'
+    | '/system/nodes'
     | '/p/$projectSlug/api-keys'
     | '/p/$projectSlug/credentials'
     | '/p/$projectSlug/insights'
@@ -202,6 +212,7 @@ export interface FileRouteTypes {
     | '/sign-up'
     | '/system'
     | '/p/$projectSlug'
+    | '/system/nodes'
     | '/p/$projectSlug/api-keys'
     | '/p/$projectSlug/credentials'
     | '/p/$projectSlug/insights'
@@ -221,6 +232,7 @@ export interface FileRouteTypes {
     | '/sign-up'
     | '/system'
     | '/p/$projectSlug'
+    | '/system_/nodes'
     | '/p/$projectSlug/api-keys'
     | '/p/$projectSlug/credentials'
     | '/p/$projectSlug/insights'
@@ -241,6 +253,7 @@ export interface RootRouteChildren {
   SignUpRoute: typeof SignUpRoute
   SystemRoute: typeof SystemRoute
   PProjectSlugRoute: typeof PProjectSlugRouteWithChildren
+  SystemNodesRoute: typeof SystemNodesRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -285,6 +298,13 @@ declare module '@tanstack/react-router' {
       path: '/p/$projectSlug'
       fullPath: '/p/$projectSlug'
       preLoaderRoute: typeof PProjectSlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/system_/nodes': {
+      id: '/system_/nodes'
+      path: '/system/nodes'
+      fullPath: '/system/nodes'
+      preLoaderRoute: typeof SystemNodesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/p/$projectSlug/api-keys': {
@@ -406,6 +426,7 @@ const rootRouteChildren: RootRouteChildren = {
   SignUpRoute: SignUpRoute,
   SystemRoute: SystemRoute,
   PProjectSlugRoute: PProjectSlugRouteWithChildren,
+  SystemNodesRoute: SystemNodesRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

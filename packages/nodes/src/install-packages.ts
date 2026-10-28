@@ -356,6 +356,10 @@ export type CatalogPackage = {
   version: string;
   /** The node contract range of `version`. */
   sdk: string;
+  /** Name of a built-in icon. */
+  icon?: string;
+  /** The icon of the package as a `data:image/...` URL. Another address is dropped. */
+  iconUrl?: string;
   nodes: { type: string; label: string; description?: string }[];
 };
 
@@ -376,6 +380,10 @@ export function parseCatalog(json: unknown): CatalogPackage[] {
       description: isText(item.description) ? item.description : "",
       version: item.version,
       sdk: item.sdk,
+      ...(isText(item.icon) ? { icon: item.icon } : {}),
+      ...(isText(item.iconUrl) && item.iconUrl.startsWith("data:image/")
+        ? { iconUrl: item.iconUrl }
+        : {}),
       nodes: nodes
         .filter((node): node is { type: string; label?: unknown; description?: unknown } =>
           isText((node as { type?: unknown } | null)?.type),

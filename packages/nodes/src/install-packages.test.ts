@@ -183,12 +183,23 @@ describe("catalog", () => {
         },
         { name: "@evil/x", version: "1.0.0", sdk: "^1.0" },
         { name: "@zerodot/nover", sdk: "^1.0" },
+        {
+          name: "@zerodot/icons",
+          version: "1.0.0",
+          sdk: "^1.0",
+          icon: "Database",
+          iconUrl: "data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=",
+        },
+        { name: "@zerodot/remote", version: "1.0.0", sdk: "^1.0", iconUrl: "https://x/i.svg" },
       ],
     });
     assert.deepEqual(
       packages.map((p) => p.name),
-      ["@zerodot/redis"],
+      ["@zerodot/redis", "@zerodot/icons", "@zerodot/remote"],
     );
+    assert.equal(packages[1]?.icon, "Database");
+    assert.match(packages[1]?.iconUrl ?? "", /^data:image\/svg\+xml/);
+    assert.equal(packages[2]?.iconUrl, undefined);
     assert.deepEqual(packages[0]?.nodes, [{ type: "redis.database", label: "Redis" }]);
     assert.throws(() => parseCatalog({}), /no "packages"/);
   });

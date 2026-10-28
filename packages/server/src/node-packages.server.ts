@@ -63,6 +63,8 @@ export type NodePackageView = {
   error?: string;
   /** The newest version in the catalog. */
   latest: string | null;
+  icon: string | null;
+  iconUrl: string | null;
   nodes: { type: string; label: string; description?: string }[];
 };
 
@@ -99,6 +101,8 @@ export async function nodePackagesOverview(headers: Headers): Promise<NodePackag
       source: null,
       status: "available",
       latest: item.version,
+      icon: item.icon ?? null,
+      iconUrl: item.iconUrl ?? null,
       nodes: item.nodes,
     });
   }
@@ -112,6 +116,8 @@ export async function nodePackagesOverview(headers: Headers): Promise<NodePackag
       source: null,
       status: "not-loaded" as const,
       latest: null,
+      icon: null,
+      iconUrl: null,
       nodes: [],
     };
     const report = reports.get(name);
@@ -196,6 +202,8 @@ export type AvailableNodePackage = {
   label: string;
   description: string;
   version: string;
+  icon: string | null;
+  iconUrl: string | null;
   nodes: { type: string; label: string; description?: string }[];
   /** False when the newest version needs a newer zerodot. */
   compatible: boolean;
@@ -224,6 +232,8 @@ export async function availableNodePackages(headers: Headers): Promise<Available
         label: item.label,
         description: item.description,
         version: item.version,
+        icon: item.icon ?? null,
+        iconUrl: item.iconUrl ?? null,
         nodes: item.nodes,
         compatible: satisfiesSdk(item.sdk, SDK_VERSION),
       }));

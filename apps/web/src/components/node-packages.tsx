@@ -9,6 +9,7 @@ import {
   installNodePackageFn,
   uninstallNodePackageFn,
 } from "../server/fns";
+import { NodeIcon } from "./node-icon";
 
 function errorText(error: unknown): string {
   return error instanceof Error ? error.message : "Something went wrong";
@@ -48,7 +49,8 @@ function PackageRow({
   const installed = item.version !== null;
   return (
     <div className="flex items-start justify-between gap-4 rounded-xl border p-4">
-      <div className="flex min-w-0 flex-col gap-1">
+      <NodeIcon name={item.icon ?? "Package"} src={item.iconUrl ?? undefined} className="mt-0.5" />
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
         <span className="flex items-center gap-2 font-medium">
           {item.label}
           <Badge variant={item.status === "error" ? "destructive" : "secondary"}>
@@ -120,7 +122,6 @@ export function NodePackagesSection() {
   const available = overview.packages.filter((item) => item.version === null);
   return (
     <section className="flex flex-col gap-3">
-      <h2 className="font-medium">Nodes</h2>
       <p className="text-muted-foreground">
         zerodot comes with the core nodes. Install the others when you need them.
         {!overview.installEnabled && " Installing is off on this instance (ZERODOT_NODES_INSTALL)."}
@@ -177,7 +178,7 @@ const matches = (item: Available["packages"][number], query: string): boolean =>
     .includes(query);
 
 /**
- * Packages that are not installed, in the Add node list. They show when the person searches.
+ * Packages that are not installed, in the Add node list. A search narrows the list.
  * An instance admin can install one here. Others see who to ask.
  */
 export function AvailableNodePackages({
@@ -214,7 +215,7 @@ export function AvailableNodePackages({
   }
 
   const text = query.trim().toLowerCase();
-  if (!available || text === "") return null;
+  if (!available) return null;
   const found = available.packages.filter((item) => matches(item, text));
   if (found.length === 0) return null;
   return (
@@ -222,6 +223,7 @@ export function AvailableNodePackages({
       <span className="px-2 py-1.5 font-medium">Not installed ({found.length})</span>
       {found.map((item) => (
         <div key={item.name} className="flex items-center gap-3 rounded-lg px-2 py-2">
+          <NodeIcon name={item.icon ?? "Package"} src={item.iconUrl ?? undefined} />
           <span className="flex min-w-0 flex-1 flex-col">
             <span>{item.label}</span>
             <span className="text-muted-foreground">

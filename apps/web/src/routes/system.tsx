@@ -25,7 +25,6 @@ import {
 } from "@zerodot/ui";
 import { Bar, BarChart, BarXAxis, ChartTooltip, Grid, LineSparkline } from "@zerodot/ui/charts";
 import { useCallback, useEffect, useState } from "react";
-import { NodePackagesSection } from "../components/node-packages";
 import { formatAge, isStaleWorker } from "../lib/admin-format";
 import type { Json } from "../lib/json";
 import {
@@ -407,15 +406,20 @@ function System() {
             Live, every {REFRESH_MS / 1000}s
           </span>
         </div>
-        {homeSlug && (
-          <Link
-            to="/p/$projectSlug/workflows"
-            params={{ projectSlug: homeSlug }}
-            className="text-muted-foreground hover:text-foreground"
-          >
-            Back to app
+        <div className="flex items-center gap-4">
+          <Link to="/system/nodes" className="text-muted-foreground hover:text-foreground">
+            Nodes
           </Link>
-        )}
+          {homeSlug && (
+            <Link
+              to="/p/$projectSlug/workflows"
+              params={{ projectSlug: homeSlug }}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              Back to app
+            </Link>
+          )}
+        </div>
       </div>
 
       <StatGroup title="Now">
@@ -877,8 +881,6 @@ function System() {
           hint="held by the workflow limit"
         />
       </StatGroup>
-
-      <NodePackagesSection />
 
       <SignupSection />
 

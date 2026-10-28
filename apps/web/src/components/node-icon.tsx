@@ -29,6 +29,7 @@ import {
   Merge,
   MousePointerClick,
   OctagonX,
+  Package,
   PenLine,
   Plug,
   RefreshCw,
@@ -52,6 +53,7 @@ import {
 
 // Add an icon here when a node uses a new one. Importing the whole set would make the bundle big.
 const ICONS: Record<string, LucideIcon> = {
+  Package,
   Mail,
   Database,
   ArrowUpDown,
