@@ -8,18 +8,22 @@ import { describe, it } from "node:test";
 import { credentialTypeByName } from "./credentials";
 import { catalog, registry } from "./index";
 import {
+  checkRegistryUrl,
   clearCatalogCache,
   createPackageSyncer,
   fetchCatalog,
+  fetchRegistry,
   installedVersion,
   isLoaded,
   isOfficialPackage,
+  isPackageName,
   loadedVersion,
   loadInstalled,
   mergeWanted,
   onPackageUnload,
   packageEntry,
   parseCatalog,
+  parseRegistry,
   pickVersion,
   type SyncLog,
   switchVersion,
@@ -346,7 +350,7 @@ describe("syncPackages", () => {
           { name: "@zerodot/demo-have" },
           { name: "@zerodot/demo-get" },
           { name: "@zerodot/demo-fail", version: "1.0.0" },
-          { name: "left-pad" },
+          { name: "../evil" },
         ],
         {
           resolve: async () => "1.4.0",
@@ -364,7 +368,7 @@ describe("syncPackages", () => {
       });
       const byName = Object.fromEntries(result.reports.map((r) => [r.name, r]));
       assert.match(byName["@zerodot/demo-fail"]?.error ?? "", /offline/);
-      assert.match(byName["left-pad"]?.error ?? "", /Only @zerodot/);
+      assert.match(byName["../evil"]?.error ?? "", /not a valid package name/);
       assert.deepEqual(byName["@zerodot/demo-have"]?.added, ["demo.have"]);
       assert.deepEqual(byName["@zerodot/demo-get"]?.added, ["demo.get"]);
     } finally {
@@ -480,7 +484,7 @@ describe("createPackageSyncer", () => {
     const log: SyncLog = (level, message) => logs.push(`${level}:${message}`);
     const dir = mkdtempSync(join(tmpdir(), "zerodot-sync-"));
     try {
-      const sync = createPackageSyncer(async () => [{ name: "left-pad" }], log, dir);
+      const sync = createPackageSyncer(async () => [{ name: "../evil" }], log, dir);
       await sync();
       assert.deepEqual(logs, ["error:nodes.package"]);
       const broken = createPackageSyncer(
@@ -495,5 +499,70 @@ describe("createPackageSyncer", () => {
     } finally {
       rmSync(dir, { recursive: true });
     }
+  });
+});
+
+describe("isPackageName", () => {
+  it("allows npm names and refuses paths and options", () => {
+    assert.equal(isPackageName("@acme/zerodot-slack"), true);
+    assert.equal(isPackageName("zerodot-nodes-x"), true);
+    assert.equal(isPackageName("-x"), false);
+    assert.equal(isPackageName("@acme/../x"), false);
+    assert.equal(isPackageName("../x"), false);
+    assert.equal(isPackageName("Upper"), false);
+    assert.equal(isPackageName("a b"), false);
+  });
+});
+
+describe("community registry", () => {
+  const entry = (name: string) => ({ name, version: "1.0.0", sdk: "^1.0", nodes: [] });
+
+  it("keeps zerodot-* names only, and drops @zerodot/*, bad versions, and repeated names", () => {
+    const registry = parseRegistry({
+      name: "Acme",
+      homepage: "javascript:alert(1)",
+      packages: [
+        entry("@acme/zerodot-slack"),
+        entry("zerodot-mail"),
+        entry("@acme/slack"),
+        entry("zerodot"),
+        entry("@zerodot/redis"),
+        entry("@acme/zerodot-slack"),
+        { ...entry("@acme/zerodot-beta"), version: "1.0.0-beta.1" },
+        entry("-rf"),
+      ],
+    });
+    assert.equal(registry.name, "Acme");
+    assert.equal(registry.homepage, null);
+    assert.deepEqual(
+      registry.packages.map((item) => item.name),
+      ["@acme/zerodot-slack", "zerodot-mail"],
+    );
+    assert.throws(() => parseRegistry({ packages: [] }), /no "name"/);
+  });
+
+  it("allows https addresses only", () => {
+    assert.equal(checkRegistryUrl(" https://x.dev/r.json#a "), "https://x.dev/r.json");
+    assert.throws(() => checkRegistryUrl("http://x.dev/r.json"), /https/);
+    assert.throws(() => checkRegistryUrl("file:///etc/passwd"), /https/);
+    assert.throws(() => checkRegistryUrl("https://u:p@x.dev/r.json"), /password/);
+    assert.throws(() => checkRegistryUrl("nope"), /not a valid URL/);
+  });
+
+  it("refuses redirects and large files, and caches by address", async () => {
+    clearCatalogCache();
+    const seen: RequestInit[] = [];
+    const ok = (async (_url: string, init: RequestInit) => {
+      seen.push(init);
+      return new Response(JSON.stringify({ name: "A", packages: [entry("@a/zerodot-x")] }));
+    }) as typeof fetch;
+    await fetchRegistry("https://a.dev/r.json", ok, 1000);
+    await fetchRegistry("https://a.dev/r.json", ok, 2000);
+    assert.equal(seen.length, 1);
+    assert.equal(seen[0]?.redirect, "error");
+    const big = (async () => new Response("x".repeat(1_000_001))) as typeof fetch;
+    await assert.rejects(fetchRegistry("https://b.dev/r.json", big), /larger than 1 MB/);
+    const bad = (async () => new Response("{")) as typeof fetch;
+    await assert.rejects(fetchRegistry("https://c.dev/r.json", bad), /not valid JSON/);
   });
 });
