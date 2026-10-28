@@ -1,8 +1,6 @@
-<p align="center">
-  <img src="assets/cover.png" alt="zerodot" width="480">
-</p>
+![zerodot](assets/cover.png)
 
-# zerodot
+# •‑‑‑ zerodot
 
 Minimal, self-hosted workflow automation. AGPL-3.0-only. No telemetry. You own your workflow files.
 
