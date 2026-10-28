@@ -98,17 +98,6 @@ Zerodot refreshes the access token before a run, when it is less than 60 seconds
 
 Some services need extra settings. For Google, a refresh token comes only when the authorize request has `access_type=offline` and `prompt=consent`, and an app in "testing" mode loses its refresh tokens after 7 days.
 
-## GitHub nodes
-
-`GitHub` has the resources `issue` (create, createComment, edit, get, lock), `repository` (getProfile, getIssues, getPullRequests), `file` (get, list, create, edit), and `release` (create, get, getAll). The names follow the GitHub REST API. A list returns an array, with `limit` items or all items (`returnAll`). `file.get` adds the decoded text of the file as `text`.
-
-`GitHub Trigger` starts a run on events of one repository (`push`, `issues`, `pull_request`, and others, or all). Activate makes the webhook at GitHub. Deactivate removes it. The run input is `{ event, action, delivery, body }`, where `body` is the payload from GitHub. Zerodot checks the `X-Hub-Signature-256` header of each delivery.
-
-- The `Authentication` field of the node says which credential to use. `Access Token` uses a personal access token (`GitHub access token`). `OAuth2` uses the `GitHub OAuth2` credential (see "OAuth2 credentials").
-- For GitHub Enterprise Server, set `server` in the credential to its API address, for example `https://ghe.example.com/api/v3`.
-- GitHub sends webhook deliveries only to a public HTTPS address. Set `ZERODOT_BASE_URL` to it.
-- The token needs the scope `repo` (classic token) or "Webhooks: read and write" and "Issues: read and write" (fine-grained token) to use the webhook, issues, and files. The default OAuth2 scopes are `repo read:user`.
-
 ## Data and file nodes
 
 - `HTML Extract` reads HTML (a string, or the `data` field of the input) with CSS selectors. Each selector gives one key. Return the text, the HTML, an attribute, or the `value`. `Return Array` gives every match.
@@ -116,7 +105,6 @@ Some services need extra settings. For Google, a refresh token comes only when t
 - `RSS Read` fetches an RSS 2.0, RSS 1.0, or Atom feed and returns one item for each entry.
 - `Convert to File` makes a CSV, JSON, or text file from items. `Extract from File` reads them back. The file is base64 text in `binary.<property>` of the item. There is no separate binary store.
 - `Compression` makes or opens a gzip file. Zip is not supported.
-- `Edit Image` gets the size of an image, or resizes, crops, rotates, blurs, makes it gray, or converts it to JPEG, PNG, WebP, or AVIF (`sharp`).
 - `Read/Write Files from Disk` reads a file into a binary field, or writes one to disk. It reaches only the folder in `ZERODOT_FILES_DIR` on the worker. With the variable empty, the node is off. A path that leaves the folder (`..` or a symbolic link) fails.
 - `Execute Command` runs a shell command on the worker and returns `exitCode`, `stdout`, and `stderr`. It is off unless `ZERODOT_ENABLE_EXECUTE_COMMAND=true`, because everyone who can edit a workflow could run commands on the worker. In Docker, the command runs inside the worker container.
 - `Stop and Error` fails the run with a message or the `message` field of an object. It has no output, so the error workflow and `onError` of the run see it.
@@ -143,20 +131,6 @@ SANDBOX_REPLICAS=3 docker compose up -d      # or: docker compose up -d --scale 
 
 The code that you write in a Code node is yours. It is not a derivative work of zerodot, and the AGPL does not apply to it.
 
-## Email, server and database nodes
-
-- `On new email (IMAP)` is a trigger. It keeps an IMAP connection in IDLE state and starts one run for each unread mail in the mailbox, oldest first. `Action` can mark the mail as read. `Format` is `simple` (parsed fields), `resolved` (also the attachments as binary data), or `raw` (the whole message as base64). It needs an `IMAP` credential. If the connection closes, the worker starts the trigger again.
-- `SSH` runs a command on a server and returns `exitCode`, `stdout`, and `stderr`. `SFTP` and `FTP` list, download, upload, rename, and delete files. SSH and SFTP use an `SSH` credential (password or private key). FTP uses an `FTP` credential (FTPS with `secure`). The server host key is not checked.
-- `MongoDB` finds, inserts, updates, deletes, and aggregates documents, and has find-and-update and find-and-replace. Queries are JSON. Extended JSON works for ids and dates, for example `{"_id": {"$oid": "..."}}`. Ids and dates in the result are text. It needs a `MongoDB` credential (connection string and database).
-
-## Telegram nodes
-
-`Telegram` follows the Bot API: resources `message`, `chat`, `callback`, `file`, with the same operation and parameter names. `Telegram Trigger` receives updates on the webhook route. Publish or activate sets the Telegram webhook. Deactivate, or a publish that removes the trigger or changes its bot, removes it. A bot has one webhook, so one active workflow for each bot.
-
-- Telegram sends updates only to a public HTTPS address. Set `ZERODOT_BASE_URL` to it.
-- **Binary data.** zerodot has no binary store. A node puts a file in its output as `binary.<property>` (`data` as base64, `mimeType`, `fileName`). The node output limit (`ZERODOT_MAX_NODE_OUTPUT_BYTES`, 5 MB) is the file size limit, and base64 adds about a third.
-- **Send and wait.** `sendAndWait` sends a message with link buttons, and the run stops. A person opens a signed link (`/resume/<run>/<node>`), and the run goes on with the answer as the node output. After `limitWaitTimeHours` (default 168) the run goes on with `{ "data": { "timedOut": true } }`. The worker needs `ZERODOT_BASE_URL` to build the link.
-
 ## Polling triggers and node packages
 
 A polling trigger asks another service for news on a timer, while the workflow is active. A node type with a `poll()` function is a polling trigger. The worker calls it every `intervalSeconds` (at least 15, default 300). Each new item starts one run, and the item is the trigger input.
@@ -178,6 +152,8 @@ To install packages at start (for example in Docker or GitOps), list them:
 ```sh
 ZERODOT_NODE_PACKAGES=@zerodot/redis,@zerodot/github
 ```
+
+Official packages: `@zerodot/redis`, `@zerodot/mysql`, `@zerodot/postgres`, `@zerodot/mongodb`, `@zerodot/email` (send and IMAP trigger), `@zerodot/ssh` (SSH, FTP, SFTP), `@zerodot/s3`, `@zerodot/edit-image`, `@zerodot/mcp`, `@zerodot/telegram`, and `@zerodot/github`. Each package documents its nodes in [zerodot-nodes](https://github.com/zerodot-io/zerodot-nodes).
 
 - Packages live in `ZERODOT_NODES_DIR` (default `./.zerodot/nodes`; `/nodes` in the Docker image, on the `node-packages` volume). web, API, and worker share it.
 - `ZERODOT_NODES_INSTALL=false` turns off installing and removing in the app.

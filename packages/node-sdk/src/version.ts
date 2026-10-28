@@ -4,7 +4,7 @@
  * Version of the node contract (the shape of `NodeDefinition` and what a node can use).
  * A minor version only adds. A major version can break a node package.
  */
-export const SDK_VERSION = "1.1.1";
+export const SDK_VERSION = "1.2.0";
 
 type Version = [number, number, number];
 

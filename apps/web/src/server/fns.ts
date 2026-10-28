@@ -262,9 +262,13 @@ const testHookInput = workflowInput.extend({
   method: z.string().optional(),
   /** The response mode of the Webhook node. */
   mode: z.string().optional(),
-  /** A Telegram trigger: its bot credential and the updates that it wants. */
-  telegram: z
-    .object({ credentialId: z.string().min(1), updates: z.array(z.string()).default(["message"]) })
+  /** A trigger that registers its test address at a service (`webhookTest`): its type, credential, and config. */
+  service: z
+    .object({
+      type: z.string().min(1),
+      credentialId: z.string().min(1).nullable(),
+      config: z.record(z.string(), z.unknown()),
+    })
     .optional(),
 });
 
@@ -282,12 +286,22 @@ async function testHookToken(data: z.infer<typeof testHookInput>): Promise<strin
   return tokenOf(existing, data.workflowId, data.nodeId, data.path);
 }
 
-/** A Telegram test run took the webhook of the bot. Give it back. */
-async function restoreTelegram(data: z.infer<typeof testHookInput>) {
-  if (!data.telegram) return;
+/** A test run took the webhook of the account at the service. Give it back. */
+async function restoreService(data: z.infer<typeof testHookInput>) {
+  if (!data.service) return;
   const ctx = await serviceContext(data.projectSlug);
-  const { restoreTelegramWebhook } = await import("@zerodot/server/api/service.server");
-  await plain(restoreTelegramWebhook(ctx, data.workflowId, data.telegram.credentialId));
+  const { productionWebhookUrl } = await import("@zerodot/server/test-webhook.server");
+  const { restoreNodeAfterTest } = await import("@zerodot/server/api/service.server");
+  await plain(
+    restoreNodeAfterTest(ctx, {
+      workflowId: data.workflowId,
+      nodeId: data.nodeId,
+      nodeType: data.service.type,
+      credentialId: data.service.credentialId,
+      config: data.service.config,
+      productionUrl: await productionWebhookUrl(await testHookToken(data)),
+    }),
+  );
 }
 
 export const testWebhookUrlFn = createServerFn({ method: "GET" })
@@ -302,18 +316,26 @@ export const listenForTestEventFn = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const { startListening, testWebhookUrl } = await import("@zerodot/server/test-webhook.server");
     const token = await testHookToken(data);
-    if (data.telegram) {
+    if (data.service) {
       const ctx = await serviceContext(data.projectSlug);
-      const { pointTelegramAtTestUrl } = await import("@zerodot/server/api/service.server");
+      const { pointNodeAtTestUrl } = await import("@zerodot/server/api/service.server");
       await plain(
-        pointTelegramAtTestUrl(ctx, {
-          ...data.telegram,
-          token,
+        pointNodeAtTestUrl(ctx, {
+          workflowId: data.workflowId,
+          nodeId: data.nodeId,
+          nodeType: data.service.type,
+          credentialId: data.service.credentialId,
+          config: data.service.config,
           url: await testWebhookUrl(token),
         }),
       );
     }
-    await startListening(token, data.method ?? "POST", data.mode ?? "immediate", !!data.telegram);
+    await startListening(
+      token,
+      data.method ?? "POST",
+      data.mode ?? "immediate",
+      data.service && { type: data.service.type, config: data.service.config },
+    );
     return { ok: true };
   });
 
@@ -322,7 +344,7 @@ export const stopListeningFn = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const { stopListening } = await import("@zerodot/server/test-webhook.server");
     await stopListening(await testHookToken(data));
-    await restoreTelegram(data);
+    await restoreService(data);
     return { ok: true };
   });
 
@@ -341,7 +363,7 @@ export const takeTestEventFn = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const { takeEvent } = await import("@zerodot/server/test-webhook.server");
     const event = await takeEvent(await testHookToken(data));
-    if (event !== null) await restoreTelegram(data);
+    if (event !== null) await restoreService(data);
     return { event: asJson(event) };
   });
 
@@ -440,7 +462,7 @@ export const listRunsFn = createServerFn({ method: "GET" })
         versionIds.map(async (id) => [id, await orgWorkflows.getVersion(id)] as const),
       ),
     );
-    /** The name of the trigger node of a run, so a Telegram run does not show as "webhook". */
+    /** The name of the trigger node of a run, so a run of an app trigger does not show as "webhook". */
     const triggerNameOf = (r: (typeof page.items)[number]): string | null => {
       const graphJson = r.versionId ? versions.get(r.versionId)?.graph : r.graphSnapshot;
       const parsed = graphSchema.safeParse(graphJson);

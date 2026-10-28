@@ -38,7 +38,6 @@ import tableInsert from "./table-insert";
 import tableQuery from "./table-query";
 import tableUpdate from "./table-update";
 import tableUpsert from "./table-upsert";
-import { telegramNodes } from "./telegram";
 import triggerCron from "./trigger-cron";
 import triggerError from "./trigger-error";
 import triggerHttpPoll from "./trigger-http-poll";
@@ -91,7 +90,6 @@ export const nodes: NodeDefinition[] = [
   tableUpdate,
   tableUpsert,
   tableDelete,
-  ...telegramNodes,
 ];
 
 export * from "./credentials";
@@ -99,17 +97,6 @@ export { validateCron } from "./cron";
 export { credentialHeader } from "./credential-header";
 export * from "./oauth2";
 export * from "./open-credential";
-export {
-  checkTelegramUpdate,
-  DEFAULT_BASE_URL as TELEGRAM_DEFAULT_BASE_URL,
-  registerTelegramWebhook,
-  removeTelegramWebhook,
-  TELEGRAM_CREDENTIAL,
-  telegramAccess,
-  type UpdateVerdict,
-} from "./telegram";
-export { telegramConfig } from "./telegram/config";
-export { buildRequest as buildTelegramRequest } from "./telegram/request";
 export { type WaitCallbackData, waitCallbackData } from "./wait-callback";
 export { messagePage, parseWaitForm, renderWaitForm } from "./wait-form";
 
@@ -130,6 +117,8 @@ export type NodeCatalogEntry = {
   ports: { in: string[]; out: string[] };
   defaultConfig: unknown;
   credentialTypes: string[];
+  /** A trigger that registers its test address at a service. The hint replaces the address in the editor. */
+  webhookTest?: { hint: string };
   /** When each credential type applies, by config value. */
   credentialRules: Record<string, ShowRules>;
   /** JSON Schema of the config. The editor builds its form from it. */
@@ -145,6 +134,7 @@ const catalogEntry = (node: NodeDefinition): NodeCatalogEntry => ({
   actions: node.actions,
   icon: node.icon,
   iconUrl: node.iconUrl,
+  webhookTest: node.webhookTest,
   ports: node.ports,
   defaultConfig: node.defaultConfig,
   credentialTypes: node.credentialTypes ?? [],

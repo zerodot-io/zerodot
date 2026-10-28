@@ -107,17 +107,6 @@ export const credentialTypes: CredentialTypeDefinition[] = [
     oauth2: "custom",
     icon: "KeyRound",
   },
-  {
-    type: "telegram.bot",
-    label: "Telegram bot",
-    fields: z.object({
-      accessToken: z.string().min(1).meta({ placeholder: "123456:ABC-DEF…" }),
-      baseUrl: z.url().optional().meta({ placeholder: "https://api.telegram.org" }),
-    }),
-    secretFields: ["accessToken"],
-    icon: "Send",
-    iconUrl: "/icons/telegram.svg",
-  },
 ];
 
 export const credentialTypeByName = new Map(credentialTypes.map((t) => [t.type, t]));

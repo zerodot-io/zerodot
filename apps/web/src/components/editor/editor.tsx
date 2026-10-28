@@ -169,7 +169,8 @@ const isWebhookType = (type: string) => type === "trigger.webhook";
 
 const NO_ERROR_WORKFLOW = "__none";
 
-const isTelegramTrigger = (type: string) => type === "trigger.telegram";
+/** A trigger that registers its test address at a service, so a person does not call the address. */
+const hasServiceTest = (type: string) => catalogByType.get(type)?.webhookTest !== undefined;
 
 /** Show a message as a toast with an icon. A null message does nothing. */
 function setMessage(message: string | null) {
@@ -714,10 +715,10 @@ export function Editor({
     }
   }
 
-  /** The Execute workflow button. A Webhook or Telegram trigger waits for an event. */
+  /** The Execute workflow button. A Webhook or an app trigger waits for an event. */
   function testRun() {
     const listenable = nodes.find(
-      (n) => isWebhookType(n.data.graphNode.type) || isTelegramTrigger(n.data.graphNode.type),
+      (n) => isWebhookType(n.data.graphNode.type) || hasServiceTest(n.data.graphNode.type),
     );
     if (listenable) return void listenForTestEvent(listenable.id, true);
     return startRun();
@@ -754,7 +755,7 @@ export function Editor({
   const selectedPath = typeof selectedConfig?.path === "string" ? selectedConfig.path : undefined;
   useEffect(() => {
     if (!selectedId || !selectedType) return;
-    if (!isWebhookType(selectedType) && !isTelegramTrigger(selectedType)) return;
+    if (!isWebhookType(selectedType) && !hasServiceTest(selectedType)) return;
     loadTestUrl(selectedId, selectedPath);
   }, [selectedId, selectedType, selectedPath, projectSlug, workflow.id]);
 
@@ -778,11 +779,11 @@ export function Editor({
           workflowId: workflow.id,
           nodeId,
           path: typeof config.path === "string" ? config.path : undefined,
-          telegram: telegramOf(nodeId),
+          service: serviceOf(nodeId),
           method:
             typeof config.httpMethod === "string"
               ? config.httpMethod
-              : nodeType === "trigger.webhook" || telegramOf(nodeId)
+              : nodeType === "trigger.webhook" || serviceOf(nodeId)
                 ? "POST"
                 : "GET",
           // This node answers by itself, so the test route answers at once.
@@ -819,15 +820,11 @@ export function Editor({
     }).catch(() => undefined);
   };
 
-  /** A Telegram trigger needs its bot credential, to move the webhook of the bot to the test URL. */
-  function telegramOf(nodeId: string) {
+  /** An app trigger needs its credential and config, to move its webhook at the service to the test URL. */
+  function serviceOf(nodeId: string) {
     const node = nodesRef.current.find((n) => n.id === nodeId)?.data.graphNode;
-    if (!node || !isTelegramTrigger(node.type) || !node.credentialId) return undefined;
-    const updates = node.config.updates;
-    return {
-      credentialId: node.credentialId,
-      updates: Array.isArray(updates) ? updates.map(String) : ["message"],
-    };
+    if (!node || !hasServiceTest(node.type)) return undefined;
+    return { type: node.type, credentialId: node.credentialId ?? null, config: node.config };
   }
 
   /** The path of a Webhook node. It is part of the test URL. */
@@ -846,7 +843,7 @@ export function Editor({
         workflowId: workflow.id,
         nodeId,
         path: pathOf(nodeId),
-        telegram: telegramOf(nodeId),
+        service: serviceOf(nodeId),
       },
     }).catch(() => undefined);
   }
@@ -870,7 +867,7 @@ export function Editor({
             workflowId: workflow.id,
             nodeId: listeningId,
             path: pathOf(listeningId),
-            telegram: telegramOf(listeningId),
+            service: serviceOf(listeningId),
           },
         });
         if (event === null) return;

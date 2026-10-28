@@ -279,6 +279,13 @@ export type NodeDefinition<Schema extends z.ZodType = z.ZodType> = {
   /** For a trigger node with a webhook that needs its own checks or registration. */
   webhook?: NodeWebhook;
   /**
+   * For a trigger whose `webhook.activate` registers the address at another service. A test run
+   * in the editor then calls `activate` with the test address, and sets the production address
+   * back (or calls `deactivate`) when the test ends. A person does not call the test address, so
+   * the editor shows `hint` where the Webhook node shows its address. Plain data: the catalog has it.
+   */
+  webhookTest?: { hint: string };
+  /**
    * For a trigger node that asks another service for news. The worker calls it on a timer
    * (config key `intervalSeconds`, in seconds) while the workflow is active.
    */

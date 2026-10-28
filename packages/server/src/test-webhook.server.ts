@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { forOrganization, webhookToken } from "@zerodot/db";
-import { checkTelegramUpdate } from "@zerodot/nodes";
+import { registry } from "@zerodot/nodes";
 import { getServices } from "./services.server";
 import { holdForAnswer, parseBody, readBody } from "./webhook.server";
 
@@ -30,23 +30,32 @@ export async function tokenOf(
   return webhookToken(secretKey, workflowId, nodeId);
 }
 
+/** The address that the service gets when the workflow is active. */
+export async function productionWebhookUrl(token: string): Promise<string> {
+  const { config } = await getServices();
+  return `${config.ZERODOT_BASE_URL}/hooks/${token}`;
+}
+
 export async function testWebhookUrl(token: string): Promise<string> {
   const { config } = await getServices();
   return `${config.ZERODOT_BASE_URL}/hooks-test/${token}`;
 }
+
+/** A trigger with `webhookTest` checks the test requests like the production ones. */
+export type ListenCheck = { type: string; config: Record<string, unknown> };
 
 /** The listen key holds the method that the Webhook node expects and its response mode. */
 export async function startListening(
   token: string,
   method: string,
   mode: string,
-  telegram = false,
+  check?: ListenCheck,
 ) {
   const { redis } = await getServices();
   await redis.del(eventKey(token), runKey(token));
   await redis.set(
     listenKey(token),
-    JSON.stringify({ method, mode, telegram }),
+    JSON.stringify({ method, mode, check }),
     "EX",
     LISTEN_SECONDS,
   );
@@ -76,9 +85,9 @@ const json = (body: unknown, status: number) => Response.json(body, { status });
 export async function handleTestWebhook(request: Request, token: string): Promise<Response> {
   const { redis, config, db, secretKey } = await getServices();
   const listening = await redis.get(listenKey(token));
-  const { method, mode, telegram } = listening
-    ? (JSON.parse(listening) as { method: string; mode: string; telegram?: boolean })
-    : { method: null, mode: "immediate", telegram: false };
+  const { method, mode, check } = listening
+    ? (JSON.parse(listening) as { method: string; mode: string; check?: ListenCheck })
+    : { method: null, mode: "immediate", check: undefined };
   if (method !== null && method !== request.method) {
     return json(
       { error: { code: "method_not_allowed", message: `This webhook takes ${method}` } },
@@ -96,12 +105,24 @@ export async function handleTestWebhook(request: Request, token: string): Promis
     query: Object.fromEntries(url.searchParams),
     body: parseBody(text, request.headers.get("content-type") ?? ""),
   };
-  // Telegram signs its updates with the secret of the trigger. A forged request does not use up the listen.
-  if (
-    telegram &&
-    checkTelegramUpdate({}, { token, headers: event.headers, body: event.body }) !== "accept"
-  ) {
-    return json({ error: { code: "forbidden", message: "The secret is not valid" } }, 403);
+  // A trigger of an app checks its own requests (for example a secret). A forged request does not
+  // use up the listen.
+  const definition = check ? registry.get(check.type) : undefined;
+  if (check && definition?.webhook && definition.webhookTest) {
+    const verdict = await definition.webhook.receive({
+      config: definition.config.parse(check.config) as Record<string, unknown>,
+      credential: null,
+      url: `${config.ZERODOT_BASE_URL}/hooks-test/${token}`,
+      workflow: { id: "", name: "" },
+      node: { id: "", name: "" },
+      state: undefined,
+      signal: AbortSignal.timeout(30_000),
+      request: { ...event, rawBody: text },
+    });
+    if (verdict.verdict === "forbidden") {
+      return json({ error: { code: "forbidden", message: "The request is not valid" } }, 403);
+    }
+    if (verdict.verdict === "ignore") return json({ ignored: true }, 200);
   }
   // One request only. The delete tells the first request from a second one.
   // An unknown token gets the same answer, so the URL does not tell which tokens exist.

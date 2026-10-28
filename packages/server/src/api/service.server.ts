@@ -13,10 +13,7 @@ import {
 } from "@zerodot/engine";
 import {
   openCredential,
-  registerTelegramWebhook,
   registry,
-  removeTelegramWebhook,
-  telegramAccess,
   validateCron,
   validateGraphNodes,
 } from "@zerodot/nodes";
@@ -103,6 +100,7 @@ export async function publishWorkflow(
       ...n,
       poll: Boolean(registry.get(n.type)?.poll),
       listen: Boolean(registry.get(n.type)?.listen),
+      webhook: Boolean(registry.get(n.type)?.webhook),
     }));
   // A workflow with no trigger is valid: another workflow starts it with Execute Workflow.
   for (const node of triggerNodes.filter((n) => n.poll)) {
@@ -136,8 +134,7 @@ export async function publishWorkflow(
     const problem = validateCron(expression, typeof timezone === "string" ? timezone : "UTC");
     if (problem) throw badRequest(`"${node.name}": ${problem}`);
   }
-  // Telegram keeps a webhook until we remove it. Remember the triggers that this publish replaces.
-  const previous = wf.active ? await telegramTriggerNodes(ctx, wf.publishedVersionId) : [];
+  // A service keeps a webhook until we remove it. Remember the triggers that this publish replaces.
   const previousHooks = wf.active
     ? await nodeWebhookTargets(ctx, workflowId, wf.publishedVersionId)
     : [];
@@ -150,8 +147,6 @@ export async function publishWorkflow(
   if (!version) throw notFound("Workflow");
   await ctx.services.syncSchedules(ctx.principal.organizationId, workflowId);
   if (wf.active) {
-    await removeStaleTelegramWebhooks(ctx, previous, graph.nodes);
-    await syncTelegramWebhooks(ctx, workflowId, true);
     await removeStaleNodeWebhooks(ctx, workflowId, previousHooks, graph.nodes);
     await syncNodeWebhooks(ctx, workflowId, true);
   }
@@ -168,7 +163,7 @@ type NodeWebhookTarget = {
 
 /**
  * The trigger nodes of a published version that register a webhook at another service
- * (node types with a `webhook` lifecycle, for example the Telegram trigger), with the token
+ * (node types with a `webhook` lifecycle, for example a GitHub or Telegram trigger), with the token
  * and the saved state of each trigger.
  */
 async function nodeWebhookTargets(
@@ -258,133 +253,76 @@ async function removeStaleNodeWebhooks(
   }
 }
 
-const TELEGRAM_TIMEOUT_MS = 15_000;
+type TestRunTarget = {
+  workflowId: string;
+  nodeId: string;
+  nodeType: string;
+  credentialId: string | null;
+  /** The config of the node in the editor. It can be newer than the saved draft. */
+  config: Record<string, unknown>;
+};
 
-type TelegramTriggerNode = { id: string; credentialId: string | null };
-
-/** The Telegram triggers of a published version. */
-async function telegramTriggerNodes(
-  ctx: ApiContext,
-  versionId: string | null,
-): Promise<TelegramTriggerNode[]> {
-  if (!versionId) return [];
-  const version = await ctx.scope.workflows.getVersion(versionId);
-  const graph = graphSchema.safeParse(version?.graph);
-  if (!graph.success) return [];
-  return graph.data.nodes
-    .filter((n) => n.type === "trigger.telegram")
-    .map((n) => ({ id: n.id, credentialId: n.credentialId ?? null }));
-}
-
-/**
- * A trigger that left the graph, or got another bot, must not keep its webhook:
- * Telegram would go on sending updates of the old bot to a token that no longer works.
- * A failed removal does not block the publish.
- */
-async function removeStaleTelegramWebhooks(
-  ctx: ApiContext,
-  previous: TelegramTriggerNode[],
-  nodes: Graph["nodes"],
-) {
-  const kept = new Map(
-    nodes.filter((n) => n.type === "trigger.telegram").map((n) => [n.id, n.credentialId ?? null]),
-  );
-  for (const old of previous) {
-    if (!old.credentialId || kept.get(old.id) === old.credentialId) continue;
-    try {
-      const credential = await ctx.scope.credentials.open(old.credentialId);
-      await removeTelegramWebhook(telegramAccess(credential), {
-        signal: AbortSignal.timeout(TELEGRAM_TIMEOUT_MS),
-      });
-    } catch (error) {
-      console.error(
-        JSON.stringify({ msg: "telegram.webhook_cleanup_failed", error: String(error) }),
-      );
-    }
+/** The definition of a trigger that registers its test address at a service, or a 400 error. */
+function testableTrigger(nodeType: string) {
+  const definition = registry.get(nodeType);
+  if (!definition?.webhookTest || !definition.webhook?.activate) {
+    throw badRequest("This node cannot register a test address");
   }
+  return { definition, webhook: definition.webhook };
 }
 
 /**
- * Telegram sends updates only to a webhook that we set with the Bot API.
- * `on` sets the webhook of each Telegram trigger of the published version. Off removes it.
- * A bot has one webhook, so a second workflow with the same bot replaces the first.
+ * A test run of a trigger with `webhookTest`: the service sends its events to the test address
+ * until the editor stops listening. A service can have one address for an account, so a
+ * published workflow with the same account loses its address meanwhile.
  */
-async function syncTelegramWebhooks(ctx: ApiContext, workflowId: string, on: boolean) {
-  const wf = await requireWorkflow(ctx, workflowId);
-  if (!wf.publishedVersionId) return;
-  const version = await ctx.scope.workflows.getVersion(wf.publishedVersionId);
-  const nodes = graphSchema
-    .parse(version?.graph)
-    .nodes.filter((n) => n.type === "trigger.telegram");
-  if (nodes.length === 0) return;
-  const triggers = await ctx.scope.workflows.triggers([workflowId]);
-  for (const node of nodes) {
-    const token = triggers
-      .map((t) => t.config as { nodeId?: string; token?: string })
-      .find((c) => c.nodeId === node.id)?.token;
-    const credential = node.credentialId
-      ? await ctx.scope.credentials.open(node.credentialId)
-      : null;
-    if (!token) continue;
-    try {
-      const access = telegramAccess(credential);
-      const options = { signal: AbortSignal.timeout(TELEGRAM_TIMEOUT_MS) };
-      if (on) {
-        const updates = Array.isArray(node.config.updates)
-          ? node.config.updates.map(String)
-          : ["message"];
-        await registerTelegramWebhook(
-          access,
-          { url: `${ctx.services.baseUrl}/hooks/${token}`, token, updates },
-          options,
-        );
-      } else {
-        await removeTelegramWebhook(access, options);
-      }
-    } catch (error) {
-      // A failed removal must not block a stop. A failed set blocks the start.
-      if (on) {
-        throw badRequest(
-          `"${node.name}": ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
-    }
-  }
-}
-
-/**
- * A Telegram test run: the bot sends its updates to the test URL until the editor stops listening.
- * A bot has one webhook, so a published workflow with the same bot loses its webhook meanwhile.
- */
-export async function pointTelegramAtTestUrl(
-  ctx: ApiContext,
-  input: { credentialId: string; url: string; token: string; updates: string[] },
-) {
-  const credential = await ctx.scope.credentials.open(input.credentialId);
+export async function pointNodeAtTestUrl(ctx: ApiContext, input: TestRunTarget & { url: string }) {
+  const { definition, webhook } = testableTrigger(input.nodeType);
+  const wf = await requireWorkflow(ctx, input.workflowId);
+  const credential = input.credentialId
+    ? await openCredential(ctx.scope.credentials, input.credentialId)
+    : null;
   try {
-    await registerTelegramWebhook(telegramAccess(credential), input, {
-      signal: AbortSignal.timeout(TELEGRAM_TIMEOUT_MS),
+    await webhook.activate?.({
+      config: definition.config.parse(input.config) as Record<string, unknown>,
+      credential,
+      url: input.url,
+      workflow: { id: wf.id, name: wf.name },
+      node: { id: input.nodeId, name: "" },
+      state: undefined,
+      signal: AbortSignal.timeout(NODE_WEBHOOK_TIMEOUT_MS),
     });
   } catch (error) {
     throw badRequest(error instanceof Error ? error.message : String(error));
   }
 }
 
-/** Ends a Telegram test run. An active workflow gets its webhook back. Else the bot has none. */
-export async function restoreTelegramWebhook(
+/**
+ * Ends a test run. An active workflow gets its production address back. Else the trigger
+ * removes the address that the test run set.
+ */
+export async function restoreNodeAfterTest(
   ctx: ApiContext,
-  workflowId: string,
-  credentialId: string,
+  input: TestRunTarget & { productionUrl: string },
 ) {
-  const wf = await requireWorkflow(ctx, workflowId);
+  const wf = await requireWorkflow(ctx, input.workflowId);
   try {
-    if (wf.active) return await syncTelegramWebhooks(ctx, workflowId, true);
-    const credential = await ctx.scope.credentials.open(credentialId);
-    await removeTelegramWebhook(telegramAccess(credential), {
-      signal: AbortSignal.timeout(TELEGRAM_TIMEOUT_MS),
+    if (wf.active) return await syncNodeWebhooks(ctx, input.workflowId, true);
+    const { definition, webhook } = testableTrigger(input.nodeType);
+    const credential = input.credentialId
+      ? await openCredential(ctx.scope.credentials, input.credentialId)
+      : null;
+    await webhook.deactivate?.({
+      config: definition.config.parse(input.config) as Record<string, unknown>,
+      credential,
+      url: input.productionUrl,
+      workflow: { id: wf.id, name: wf.name },
+      node: { id: input.nodeId, name: "" },
+      state: undefined,
+      signal: AbortSignal.timeout(NODE_WEBHOOK_TIMEOUT_MS),
     });
   } catch (error) {
-    console.error(JSON.stringify({ msg: "telegram.webhook_restore_failed", error: String(error) }));
+    console.error(JSON.stringify({ msg: "node.webhook_restore_failed", error: String(error) }));
   }
 }
 
@@ -435,20 +373,10 @@ export async function importWorkflow(ctx: ApiContext, file: unknown, name?: stri
 export async function setWorkflowActive(ctx: ApiContext, workflowId: string, active: boolean) {
   const wf = await requireWorkflow(ctx, workflowId);
   if (active && !wf.publishedVersionId) throw conflict("Publish the workflow first");
-  // Set the webhook first. When Telegram refuses the address, the workflow stays off.
-  if (active) await syncTelegramWebhooks(ctx, workflowId, true);
-  if (active) {
-    try {
-      await syncNodeWebhooks(ctx, workflowId, true);
-    } catch (error) {
-      // Take back the Telegram webhook that was set above. The workflow stays off.
-      await syncTelegramWebhooks(ctx, workflowId, false).catch(() => undefined);
-      throw error;
-    }
-  }
+  // Set the webhooks first. When a service refuses the address, the workflow stays off.
+  if (active) await syncNodeWebhooks(ctx, workflowId, true);
   await ctx.scope.workflows.setActive(workflowId, active);
   await ctx.services.syncSchedules(ctx.principal.organizationId, workflowId);
-  if (!active) await syncTelegramWebhooks(ctx, workflowId, false);
   if (!active) await syncNodeWebhooks(ctx, workflowId, false);
   return { active };
 }

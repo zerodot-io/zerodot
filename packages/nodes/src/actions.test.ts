@@ -24,9 +24,4 @@ describe("node actions", () => {
       }
     });
   }
-
-  it("covers every operation of the Telegram node", () => {
-    const count = (type: string) => nodes.find((n) => n.type === type)?.actions?.length;
-    assert.equal(count("telegram.bot"), 24);
-  });
 });

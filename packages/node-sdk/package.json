@@ -1,6 +1,6 @@
 {
   "name": "@zerodot/node-sdk",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "description": "Contract for zerodot node packages: node types, helpers and the SDK version.",
   "license": "MIT",
   "repository": {

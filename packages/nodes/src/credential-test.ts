@@ -8,28 +8,6 @@ export type CredentialTestResult =
   /** This credential type has no safe check. The form shows no result. */
   | { status: "unsupported" };
 
-const TIMEOUT_MS = 10_000;
-
-const text = (value: unknown): string | undefined =>
-  typeof value === "string" && value !== "" ? value : undefined;
-
-async function checkTelegram({ data }: ResolvedCredential): Promise<void> {
-  const token = text(data.accessToken);
-  if (!token) throw new Error('The credential has no "accessToken"');
-  const base = (text(data.baseUrl) ?? "https://api.telegram.org").replace(/\/+$/, "");
-  const response = await fetch(`${base}/bot${token}/getMe`, {
-    signal: AbortSignal.timeout(TIMEOUT_MS),
-  });
-  if (response.status === 401 || response.status === 404) {
-    throw new Error("Telegram did not accept the token");
-  }
-  if (!response.ok) throw new Error(`Telegram answered with status ${response.status}`);
-}
-
-const checks: Record<string, (credential: ResolvedCredential) => Promise<void>> = {
-  "telegram.bot": checkTelegram,
-};
-
 function secretsOf(data: unknown, found: string[] = []): string[] {
   if (typeof data === "string") {
     if (data.length >= 4) found.push(data);
@@ -46,7 +24,7 @@ function secretsOf(data: unknown, found: string[] = []): string[] {
 export async function testCredential(
   credential: ResolvedCredential,
 ): Promise<CredentialTestResult> {
-  const check = checks[credential.type] ?? credentialTypeByName.get(credential.type)?.test;
+  const check = credentialTypeByName.get(credential.type)?.test;
   if (!check) return { status: "unsupported" };
   try {
     await check(credential);

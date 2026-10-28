@@ -2,7 +2,7 @@
 import { findWebhookTrigger, forOrganization } from "@zerodot/db";
 import type { WebhookVerdict } from "@zerodot/engine";
 import { graphSchema } from "@zerodot/engine";
-import { checkTelegramUpdate, originAllowed, registry } from "@zerodot/nodes";
+import { originAllowed, registry } from "@zerodot/nodes";
 import { enqueueRun, runResponseKey } from "@zerodot/queue";
 import { HELD_RETRY_AFTER_SECONDS } from "./held-limit";
 import { getServices } from "./services.server";
@@ -280,25 +280,11 @@ export async function handleWebhook(request: Request, token: string): Promise<Re
     body: parseBody(text, request.headers.get("content-type") ?? ""),
   };
 
-  // A trigger of an app node can check the request first. A bad request starts no run.
-  if (trigger.nodeType === "trigger.telegram") {
-    const verdict = checkTelegramUpdate(trigger.config as Record<string, unknown>, {
-      token,
-      headers: triggerInput.headers,
-      body: triggerInput.body,
-    });
-    if (verdict === "forbidden") {
-      return reply({ error: { code: "forbidden", message: "The secret is not valid" } }, 403);
-    }
-    // Telegram retries an update that does not get a 2xx answer.
-    if (verdict === "ignore") return reply({ ignored: true }, 200);
-  }
-
   const scope = forOrganization(db, trigger.organizationId, { secretKey });
   let runInput: unknown = triggerInput;
 
   // A trigger node with its own webhook code checks the request: the Webhook node (authentication,
-  // caller address, bots, "only run if").
+  // caller address, bots, "only run if"), or a trigger of an app (for example its secret).
   const definition = registry.get(trigger.nodeType);
   if (definition?.webhook) {
     const version = await scope.workflows.getVersion(trigger.publishedVersionId);

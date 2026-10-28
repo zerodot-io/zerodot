@@ -91,6 +91,24 @@ describe("forOrganization", { skip: !url }, () => {
     assert.equal(await forOrganization(db, "o2").workflows.getVersion(v1?.id ?? ""), null);
   });
 
+  it("gives a token to any trigger that has a webhook lifecycle", async () => {
+    const a = forOrganization(db, "o1");
+    const wf = await a.workflows.create({ name: "app-trigger" });
+    const trig = { id: "t9", type: "trigger.app", config: {}, webhook: true };
+    await a.workflows.publish(wf.id, { graph: { v: 1 }, triggerNodes: [trig], userId: null });
+    const [row] = await a.workflows.triggers([wf.id]);
+    const found = await findWebhookTrigger(db, tokenOf(row));
+    assert.equal(found?.nodeId, "t9");
+    assert.equal(found?.nodeType, "trigger.app");
+    const other = await a.workflows.create({ name: "no-webhook" });
+    await a.workflows.publish(other.id, {
+      graph: { v: 1 },
+      triggerNodes: [{ id: "t8", type: "trigger.app", config: {} }],
+      userId: null,
+    });
+    assert.deepEqual(await a.workflows.triggers([other.id]), []);
+  });
+
   it("runs: idempotency, results, org guard", async () => {
     const a = forOrganization(db, "o1");
     const b = forOrganization(db, "o2");

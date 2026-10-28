@@ -32,22 +32,25 @@ export type GraphTriggerNode = {
   poll?: boolean;
   /** True when the node type listens (its definition has `listen`). */
   listen?: boolean;
+  /** True when the node type has a webhook lifecycle (its definition has `webhook`). */
+  webhook?: boolean;
 };
 
 const TRIGGER_TYPES = {
   "trigger.webhook": "webhook",
   "trigger.cron": "cron",
   "trigger.manual": "manual",
-  "trigger.telegram": "webhook",
 } as const;
 
 function triggerKind(
   nodeType: string,
   poll = false,
   listen = false,
+  webhook = false,
 ): "webhook" | "cron" | "poll" | "listen" | "manual" | undefined {
   if (poll) return "poll";
   if (listen) return "listen";
+  if (webhook) return "webhook";
   return TRIGGER_TYPES[nodeType as keyof typeof TRIGGER_TYPES];
 }
 
@@ -276,7 +279,7 @@ export function workflows(db: Db, organizationId: string) {
         );
         const keep: string[] = [];
         for (const node of options.triggerNodes) {
-          const type = triggerKind(node.type, node.poll, node.listen);
+          const type = triggerKind(node.type, node.poll, node.listen, node.webhook);
           if (!type) continue;
           const previous = tokenByNode.get(node.id);
           const config =

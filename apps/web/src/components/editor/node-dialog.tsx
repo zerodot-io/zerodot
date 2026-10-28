@@ -581,8 +581,8 @@ export function NodeDialog({
 
   const isTrigger = entry?.category === "trigger";
   const isWebhookNode = graphNode?.type === "trigger.webhook";
-  // Telegram calls the test URL, not a person. The URL is not for them.
-  const isTelegram = graphNode?.type === "trigger.telegram";
+  // A service calls the test URL of some triggers, not a person. The URL is not for them.
+  const serviceHint = entry?.webhookTest?.hint;
   // Each node says which credential types apply for its current config.
   const credentialTypes =
     graphNode && entry
@@ -643,8 +643,8 @@ export function NodeDialog({
                       icon={<Zap className="size-5 animate-pulse text-primary" />}
                       title="Listening for test event"
                     >
-                      {isTelegram && <p>Send a message to your bot</p>}
-                      {testUrl && !isTelegram && (
+                      {serviceHint && <p>{serviceHint}</p>}
+                      {testUrl && !serviceHint && (
                         <>
                           <p>Send a request to:</p>
                           <code className="max-w-full break-all rounded-md bg-card p-2 text-xs">
@@ -665,8 +665,8 @@ export function NodeDialog({
                         Listen for test event
                       </Button>
                       <p className="max-w-xs">
-                        {isTelegram
-                          ? "Send a message to your bot. The workflow does not need a publish."
+                        {serviceHint
+                          ? `${serviceHint}. The workflow does not need a publish.`
                           : "Send one request to the test URL. The workflow does not need a publish."}
                       </p>
                     </EmptyState>
@@ -744,7 +744,7 @@ export function NodeDialog({
                 <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
                   {tab === "parameters" ? (
                     <>
-                      {testUrl && !isTelegram && (
+                      {testUrl && !serviceHint && (
                         <WebhookUrls
                           testUrl={testUrl}
                           productionUrl={webhookUrl}
