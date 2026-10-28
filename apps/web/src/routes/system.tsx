@@ -4,11 +4,10 @@ import { createFileRoute, Link, notFound, redirect } from "@tanstack/react-route
 import {
   Badge,
   Button,
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyTitle,
   Select,
   SelectContent,
   SelectItem,
@@ -25,6 +24,8 @@ import {
 } from "@zerodot/ui";
 import { Bar, BarChart, BarXAxis, ChartTooltip, Grid, LineSparkline } from "@zerodot/ui/charts";
 import { useCallback, useEffect, useState } from "react";
+import { ConfirmDialog } from "../components/confirm-dialog";
+import { SystemHeader } from "../components/system-header";
 import { formatAge, isStaleWorker } from "../lib/admin-format";
 import type { Json } from "../lib/json";
 import {
@@ -102,6 +103,8 @@ const asOverview = (value: Json): Overview => value as unknown as Overview;
 const REFRESH_MS = 5000;
 /** Samples kept for the live chart. 60 samples at 5 s is 5 minutes. */
 const SAMPLE_COUNT = 60;
+/** A run that waits longer than this makes the health banner warn. */
+const STUCK_MS = 5 * 60_000;
 const QUEUE_ITEMS = [
   { value: "runs", label: "Runs queue" },
   { value: "system", label: "System queue" },
@@ -168,7 +171,7 @@ function Stat({
     <div className="flex flex-col gap-1 p-4">
       <span className="text-muted-foreground">{label}</span>
       <span
-        className={`text-2xl font-semibold tabular-nums ${tone === "bad" ? "text-destructive" : ""}`}
+        className={`text-lg font-semibold tabular-nums ${tone === "bad" ? "text-destructive" : ""}`}
       >
         {value}
       </span>
@@ -224,6 +227,45 @@ function Meter({ value, max }: { value: number; max: number }) {
         style={{ width: `${pct}%` }}
       />
     </div>
+  );
+}
+
+type Health = { level: "ok" | "warn" | "down"; issues: string[] };
+
+const HEALTH: Record<Health["level"], { title: string; dot: string }> = {
+  ok: { title: "All systems normal", dot: "bg-emerald-500" },
+  warn: { title: "Needs attention", dot: "bg-amber-500" },
+  down: { title: "Runs cannot start", dot: "bg-red-500" },
+};
+
+/** One verdict for the whole instance, so a problem shows before one reads the numbers. */
+function HealthBanner({ health }: { health: Health }) {
+  const look = HEALTH[health.level];
+  return (
+    <section
+      aria-label="Health"
+      aria-live="polite"
+      className="flex flex-col gap-2 rounded-xl border p-4 sm:flex-row sm:items-center sm:justify-between"
+    >
+      <span className="flex items-center gap-2.5 font-medium">
+        <span aria-hidden="true" className="relative flex size-2">
+          {health.level !== "ok" && (
+            <span
+              className={`absolute inset-0 animate-ping rounded-full opacity-60 motion-reduce:animate-none ${look.dot}`}
+            />
+          )}
+          <span className={`relative size-2 rounded-full ${look.dot}`} />
+        </span>
+        {look.title}
+      </span>
+      {health.issues.length > 0 && (
+        <ul className="flex flex-wrap gap-x-4 gap-y-1 text-muted-foreground">
+          {health.issues.map((issue) => (
+            <li key={issue}>{issue}</li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 
@@ -394,34 +436,40 @@ function System() {
     active: sample.runsActive,
     waiting: sample.runsWaiting,
   }));
+  const issues: string[] = [];
+  const stale = overview.workers.length - live.length;
+  for (const q of overview.queues)
+    if (q.paused)
+      issues.push(`${QUEUE_ITEMS.find((o) => o.value === q.name)?.label ?? q.name} paused`);
+  if (stale > 0) issues.push(`${stale} stale ${stale === 1 ? "worker" : "workers"}`);
+  if (slots > 0 && busySlots >= slots && (runsQueue?.counts.waiting ?? 0) > 0) {
+    issues.push("All run slots busy");
+  }
+  const oldest = runsQueue?.oldestWaitingMs ?? null;
+  if (oldest !== null && oldest > STUCK_MS) {
+    issues.push(`Oldest run waits ${formatAge(oldest)}`);
+  }
+  if (failedJobs > 0) issues.push(`${failedJobs} failed ${failedJobs === 1 ? "job" : "jobs"}`);
+  if (finished > 0 && hour.failed / finished > 0.1) {
+    issues.push(`${Math.round((hour.failed / finished) * 100)}% of runs failed, last hour`);
+  }
+  const health: Health =
+    live.length === 0
+      ? { level: "down", issues: ["No workers online", ...issues] }
+      : { level: issues.length > 0 ? "warn" : "ok", issues };
   return (
-    <main className="mx-auto flex w-full max-w-5xl flex-col gap-8 p-6">
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-3">
-          <h1 className="text-lg font-semibold">System</h1>
-          <span className="flex items-center gap-1.5 text-muted-foreground">
-            <span
-              aria-hidden="true"
-              className="size-1.5 animate-pulse rounded-full bg-emerald-500 motion-reduce:animate-none"
-            />
-            Live, every {REFRESH_MS / 1000}s
-          </span>
-        </div>
-        <div className="flex items-center gap-4">
-          <Link to="/system/nodes" className="text-muted-foreground hover:text-foreground">
-            Nodes
-          </Link>
-          {homeSlug && (
-            <Link
-              to="/p/$projectSlug/workflows"
-              params={{ projectSlug: homeSlug }}
-              className="text-muted-foreground hover:text-foreground"
-            >
-              Back to app
-            </Link>
-          )}
-        </div>
-      </div>
+    <main className="reveal mx-auto flex w-full max-w-5xl flex-col gap-8 p-6">
+      <SystemHeader homeSlug={homeSlug}>
+        <span className="flex items-center gap-1.5 text-muted-foreground">
+          <span
+            aria-hidden="true"
+            className="size-1.5 animate-pulse rounded-full bg-emerald-500 motion-reduce:animate-none"
+          />
+          Live, every {REFRESH_MS / 1000}s
+        </span>
+      </SystemHeader>
+
+      <HealthBanner health={health} />
 
       <StatGroup title="Now">
         <Stat
@@ -531,8 +579,8 @@ function System() {
             <div key={q.name} className="flex flex-col gap-3 rounded-xl border p-4">
               <div className="flex items-center justify-between gap-2">
                 <span className="flex items-center gap-2 font-medium">
-                  {q.name}
-                  {q.paused && <Badge variant="secondary">paused</Badge>}
+                  {QUEUE_ITEMS.find((o) => o.value === q.name)?.label ?? q.name}
+                  {q.paused && <Badge variant="secondary">Paused</Badge>}
                 </span>
                 <Button
                   size="sm"
@@ -553,13 +601,11 @@ function System() {
                 </Button>
               </div>
               <dl className="grid grid-cols-3 gap-2">
-                {(
-                  ["waiting", "active", "delayed", "prioritized", "failed", "completed"] as const
-                ).map((key) => (
+                {STATE_ITEMS.map(({ value: key, label }) => (
                   <div key={key}>
-                    <dt className="text-muted-foreground">{key}</dt>
+                    <dt className="text-muted-foreground">{label}</dt>
                     <dd
-                      className={`text-lg font-semibold tabular-nums ${
+                      className={`font-medium tabular-nums ${
                         q.counts[key] === 0
                           ? "text-muted-foreground/60"
                           : key === "failed"
@@ -600,7 +646,12 @@ function System() {
 
       <Section title="Workers">
         {overview.workers.length === 0 ? (
-          <p className="text-muted-foreground">No workers online.</p>
+          <Empty>
+            <EmptyHeader>
+              <EmptyTitle>No workers online</EmptyTitle>
+              <EmptyDescription>Start a worker to run workflows.</EmptyDescription>
+            </EmptyHeader>
+          </Empty>
         ) : (
           <Table>
             <TableHeader>
@@ -699,9 +750,13 @@ function System() {
           </div>
         </div>
         {jobs.length === 0 ? (
-          <p className="rounded-xl border border-dashed p-6 text-center text-muted-foreground">
-            No {state} jobs in the {queue} queue.
-          </p>
+          <Empty>
+            <EmptyHeader>
+              <EmptyDescription>
+                No {state} jobs in the {queue} queue.
+              </EmptyDescription>
+            </EmptyHeader>
+          </Empty>
         ) : (
           <Table>
             <TableHeader>
@@ -887,13 +942,15 @@ function System() {
 
       <Section title="Recent admin actions">
         {overview.audit.length === 0 ? (
-          <p className="rounded-xl border border-dashed p-6 text-center text-muted-foreground">
-            No actions yet.
-          </p>
+          <Empty>
+            <EmptyHeader>
+              <EmptyDescription>No admin actions yet.</EmptyDescription>
+            </EmptyHeader>
+          </Empty>
         ) : (
-          <ul className="flex flex-col gap-1">
+          <ul className="divide-y overflow-hidden rounded-xl border">
             {overview.audit.map((row) => (
-              <li key={row.id} className="flex flex-wrap gap-x-2">
+              <li key={row.id} className="flex flex-wrap gap-x-2 px-4 py-2.5">
                 <span className="font-medium">{row.action}</span>
                 <span className="text-muted-foreground">
                   {row.targetType} {row.targetId} by {row.actorEmail},{" "}
@@ -906,27 +963,16 @@ function System() {
       </Section>
 
       {confirm && (
-        <Dialog open onOpenChange={(open) => !open && !busy && setConfirm(null)}>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle>{confirm.title}</DialogTitle>
-              <DialogDescription>{confirm.description}</DialogDescription>
-            </DialogHeader>
-            <div className="flex justify-end gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                disabled={busy}
-                onClick={() => setConfirm(null)}
-              >
-                Keep
-              </Button>
-              <Button type="button" variant="destructive" disabled={busy} onClick={runConfirmed}>
-                {confirm.action}
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+        <ConfirmDialog
+          title={confirm.title}
+          description={confirm.description}
+          action={confirm.action}
+          cancel="Keep"
+          destructive
+          busy={busy}
+          onCancel={() => setConfirm(null)}
+          onConfirm={() => void runConfirmed()}
+        />
       )}
     </main>
   );

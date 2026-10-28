@@ -5,3 +5,37 @@
 body {
   @apply bg-background text-foreground text-sm antialiased;
 }
+
+/* Children of a .reveal parent rise in one after the other when the page opens. */
+@keyframes reveal {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+.reveal > * {
+  animation: reveal 320ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+.reveal > :nth-child(2) {
+  animation-delay: 40ms;
+}
+.reveal > :nth-child(3) {
+  animation-delay: 80ms;
+}
+.reveal > :nth-child(4) {
+  animation-delay: 120ms;
+}
+.reveal > :nth-child(5) {
+  animation-delay: 160ms;
+}
+.reveal > :nth-child(n + 6) {
+  animation-delay: 200ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal > * {
+    animation: none;
+  }
+}

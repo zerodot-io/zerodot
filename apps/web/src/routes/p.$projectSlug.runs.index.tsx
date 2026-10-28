@@ -108,7 +108,18 @@ function Runs() {
 
   return (
     <main className="mx-auto flex w-full max-w-4xl flex-col gap-4 p-4">
-      <h1 className="font-semibold">Runs</h1>
+      <div className="flex items-center justify-between gap-2">
+        <h1 className="font-semibold">Runs</h1>
+        {search.wf && workflows.some((w) => w.id === search.wf) && (
+          <Link
+            to="/p/$projectSlug/workflows/$workflowId"
+            params={{ projectSlug, workflowId: search.wf }}
+            className="text-muted-foreground transition-colors duration-150 ease-out hover:text-foreground"
+          >
+            Open in editor
+          </Link>
+        )}
+      </div>
       <div className="flex flex-wrap gap-2">
         <FilterSelect
           label="Workflow"

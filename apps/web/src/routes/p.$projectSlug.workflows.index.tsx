@@ -9,18 +9,36 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
   Input,
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
+  Spinner,
   Switch,
   toast,
 } from "@zerodot/ui";
 import { Bar, BarChart, BarXAxis, ChartTooltip, Grid, LineSparkline } from "@zerodot/ui/charts";
-import { Copy, Download, EllipsisVertical, ExternalLink, History, Trash2 } from "lucide-react";
-import { type ChangeEvent, type FormEvent, type ReactNode, useRef, useState } from "react";
+import {
+  Copy,
+  Download,
+  EllipsisVertical,
+  ExternalLink,
+  History,
+  Plus,
+  Trash2,
+  Workflow,
+  X,
+} from "lucide-react";
+import { type ChangeEvent, type ReactNode, useRef, useState } from "react";
+import { ConfirmDialog } from "../components/confirm-dialog";
 import { FEED_TOOLTIP, TooltipPanel } from "../components/tooltip-panel";
 import { formatAge } from "../lib/admin-format";
 import { formatMs, formatPercent } from "../lib/insights";
@@ -151,6 +169,8 @@ function Workflows() {
     clearedCredentials: string[];
   } | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
+  const [toDelete, setToDelete] = useState<{ id: string; name: string } | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const [query, setQuery] = useState("");
   const [view, setView] = useState<View>("all");
@@ -205,13 +225,16 @@ function Workflows() {
     }
   }
 
-  async function onDelete(id: string, name: string) {
-    if (!window.confirm(`Delete "${name}" and its runs? This cannot be undone.`)) return;
+  async function onDelete(id: string) {
+    setDeleting(true);
     try {
       await deleteWorkflowFn({ data: { projectSlug, workflowId: id } });
       await router.invalidate();
+      setToDelete(null);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not delete the workflow");
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -286,18 +309,23 @@ function Workflows() {
     }
   }
 
-  async function onCreate(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const formEl = event.currentTarget;
-    const name = String(new FormData(formEl).get("name") ?? "").trim();
-    if (!name) return;
+  /** Creates a workflow with a free default name. One renames it in the editor. */
+  async function onCreate() {
+    const taken = new Set(workflows.map((w) => w.name));
+    let name = "Untitled workflow";
+    for (let i = 2; taken.has(name); i++) name = `Untitled workflow ${i}`;
     setPending(true);
-    const created = await createWorkflowFn({ data: { projectSlug, name } });
-    setPending(false);
-    await router.navigate({
-      to: "/p/$projectSlug/workflows/$workflowId",
-      params: { projectSlug, workflowId: created.id },
-    });
+    try {
+      const created = await createWorkflowFn({ data: { projectSlug, name } });
+      await router.navigate({
+        to: "/p/$projectSlug/workflows/$workflowId",
+        params: { projectSlug, workflowId: created.id },
+      });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not create the workflow");
+    } finally {
+      setPending(false);
+    }
   }
 
   return (
@@ -309,17 +337,7 @@ function Workflows() {
             {workflows.length} total, {activeCount} active
           </span>
         </div>
-        <form onSubmit={onCreate} className="flex gap-2">
-          <Input
-            name="name"
-            placeholder="New workflow name"
-            aria-label="Workflow name"
-            className="w-56"
-            required
-          />
-          <Button type="submit" disabled={pending}>
-            Create
-          </Button>
+        <div className="flex gap-2">
           <Button type="button" variant="outline" onClick={() => fileInput.current?.click()}>
             Import
           </Button>
@@ -331,7 +349,11 @@ function Workflows() {
             aria-label="Import a .zerodot.json file"
             onChange={onImport}
           />
-        </form>
+          <Button type="button" disabled={pending} onClick={() => void onCreate()}>
+            {pending ? <Spinner /> : <Plus />}
+            New workflow
+          </Button>
+        </div>
       </div>
 
       {kpis && (
@@ -458,7 +480,7 @@ function Workflows() {
                 role="tab"
                 aria-selected={on}
                 onClick={() => setView(o.value)}
-                className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 hover:text-foreground ${on ? "bg-muted font-medium text-foreground" : "text-muted-foreground"}`}
+                className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 transition-colors duration-150 ease-out hover:text-foreground ${on ? "bg-muted font-medium text-foreground" : "text-muted-foreground"}`}
               >
                 {o.label}
                 <span
@@ -470,14 +492,14 @@ function Workflows() {
             );
           })}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex w-full items-center gap-2 sm:w-auto">
           <Input
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search name or tag"
             aria-label="Search workflows"
-            className="w-48"
+            className="min-w-0 flex-1 sm:w-48 sm:flex-none"
           />
           <Select
             items={SORTS}
@@ -507,7 +529,15 @@ function Workflows() {
         </p>
       )}
       {imported && (
-        <div role="status" className="flex flex-col gap-1 rounded-lg border p-3">
+        <div role="status" className="relative flex flex-col gap-1 rounded-lg border p-3 pr-10">
+          <button
+            type="button"
+            aria-label="Dismiss"
+            onClick={() => setImported(null)}
+            className="absolute top-2 right-2 grid size-7 place-items-center rounded-md text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground"
+          >
+            <X className="size-4" />
+          </button>
           <span>
             Imported{" "}
             <Link
@@ -537,13 +567,28 @@ function Workflows() {
       )}
 
       {workflows.length === 0 ? (
-        <p className="rounded-xl border border-dashed p-6 text-center text-muted-foreground">
-          No workflows yet. Create one above.
-        </p>
+        <Empty>
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <Workflow />
+            </EmptyMedia>
+            <EmptyTitle>No workflows yet</EmptyTitle>
+            <EmptyDescription>A workflow runs steps for you when a trigger fires.</EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
+            <Button type="button" disabled={pending} onClick={() => void onCreate()}>
+              {pending ? <Spinner /> : <Plus />}
+              New workflow
+            </Button>
+          </EmptyContent>
+        </Empty>
       ) : visible.length === 0 ? (
-        <p className="rounded-xl border border-dashed p-6 text-center text-muted-foreground">
-          No workflows match.
-        </p>
+        <Empty>
+          <EmptyHeader>
+            <EmptyTitle>No workflows match</EmptyTitle>
+            <EmptyDescription>Change the search or the filter.</EmptyDescription>
+          </EmptyHeader>
+        </Empty>
       ) : (
         <ul className="divide-y overflow-hidden rounded-xl border">
           {visible.map((w) => {
@@ -651,7 +696,7 @@ function Workflows() {
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
                         variant="destructive"
-                        onClick={() => void onDelete(w.id, w.name)}
+                        onClick={() => setToDelete({ id: w.id, name: w.name })}
                       >
                         <Trash2 />
                         Delete
@@ -663,6 +708,19 @@ function Workflows() {
             );
           })}
         </ul>
+      )}
+
+      {toDelete && (
+        <ConfirmDialog
+          title={`Delete ${toDelete.name}?`}
+          description="The workflow and its runs are deleted. This cannot be undone."
+          action="Delete"
+          cancel="Keep"
+          destructive
+          busy={deleting}
+          onCancel={() => setToDelete(null)}
+          onConfirm={() => void onDelete(toDelete.id)}
+        />
       )}
     </main>
   );

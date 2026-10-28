@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-import { createFileRoute, Link, notFound, redirect } from "@tanstack/react-router";
+import { createFileRoute, notFound, redirect } from "@tanstack/react-router";
 import { NodePackagesSection } from "../components/node-packages";
+import { SystemHeader } from "../components/system-header";
 import { getHomeFn, getIsInstanceAdmin } from "../server/fns";
 
 export const Route = createFileRoute("/system_/nodes")({
@@ -17,27 +18,8 @@ export const Route = createFileRoute("/system_/nodes")({
 function SystemNodes() {
   const { homeSlug } = Route.useRouteContext();
   return (
-    <main className="mx-auto flex w-full max-w-4xl flex-col gap-6 p-6">
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <Link to="/system" className="text-muted-foreground hover:text-foreground">
-            System
-          </Link>
-          <span aria-hidden="true" className="text-muted-foreground">
-            /
-          </span>
-          <h1 className="text-lg font-semibold">Nodes</h1>
-        </div>
-        {homeSlug && (
-          <Link
-            to="/p/$projectSlug/workflows"
-            params={{ projectSlug: homeSlug }}
-            className="text-muted-foreground hover:text-foreground"
-          >
-            Back to app
-          </Link>
-        )}
-      </div>
+    <main className="reveal mx-auto flex w-full max-w-5xl flex-col gap-8 p-6">
+      <SystemHeader homeSlug={homeSlug} />
       <NodePackagesSection />
     </main>
   );

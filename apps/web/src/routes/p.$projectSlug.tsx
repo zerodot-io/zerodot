@@ -19,19 +19,20 @@ import {
   DropdownMenuTrigger,
   LogoMark,
   PROJECT_LABEL,
+  Tooltip,
 } from "@zerodot/ui";
 import {
-  Activity,
+  Braces,
+  ChartColumn,
   CircleUser,
-  Database,
   KeyRound,
+  ListChecks,
+  LockKeyhole,
   type LucideIcon,
   PanelLeftClose,
   PanelLeftOpen,
-  Play,
   Settings,
-  SquareFunction,
-  Variable,
+  Table2,
   Workflow,
 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -60,20 +61,20 @@ type NavTo =
 
 const navItems: { to: NavTo; label: string; icon: LucideIcon }[] = [
   { to: "/p/$projectSlug/workflows", label: "Workflows", icon: Workflow },
-  { to: "/p/$projectSlug/runs", label: "Runs", icon: Play },
-  { to: "/p/$projectSlug/insights", label: "Insights", icon: Activity },
-  { to: "/p/$projectSlug/credentials", label: "Credentials", icon: KeyRound },
-  { to: "/p/$projectSlug/variables", label: "Variables", icon: Variable },
-  { to: "/p/$projectSlug/tables", label: "Data tables", icon: Database },
-  { to: "/p/$projectSlug/api-keys", label: "API keys", icon: SquareFunction },
+  { to: "/p/$projectSlug/runs", label: "Runs", icon: ListChecks },
+  { to: "/p/$projectSlug/insights", label: "Insights", icon: ChartColumn },
+  { to: "/p/$projectSlug/credentials", label: "Credentials", icon: LockKeyhole },
+  { to: "/p/$projectSlug/variables", label: "Variables", icon: Braces },
+  { to: "/p/$projectSlug/tables", label: "Data tables", icon: Table2 },
+  { to: "/p/$projectSlug/api-keys", label: "API keys", icon: KeyRound },
   { to: "/p/$projectSlug/settings", label: "Project settings", icon: Settings },
 ];
 
 const railItem =
-  "group relative flex size-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground";
-// Label shows on hover or keyboard focus, to the right of the rail.
-const railLabel =
-  "pointer-events-none absolute left-full ml-2 whitespace-nowrap rounded-md border bg-card px-2 py-1 text-foreground opacity-0 shadow-md group-hover:opacity-100 group-focus-visible:opacity-100";
+  "flex size-9 items-center justify-center rounded-lg transition-colors duration-150 ease-out";
+const railActive = { className: "bg-muted text-foreground" };
+const railInactive = { className: "text-muted-foreground hover:bg-muted hover:text-foreground" };
+const railButton = `${railItem} ${railInactive.className}`;
 
 const HIDDEN_KEY = "zerodot:sidebar-hidden";
 
@@ -138,39 +139,35 @@ function ProjectLayout() {
           >
             <LogoMark />
           </button>
-          {navItems.map(({ to, label, icon: Icon }) =>
-            to === "/p/$projectSlug/workflows" ? (
-              <Link
-                key={to}
-                to={to}
-                params={{ projectSlug: slug }}
-                search={{ all: true }}
-                aria-label={label}
-                className={railItem}
-                activeProps={{ className: `${railItem} bg-muted text-foreground` }}
-              >
-                <Icon className="size-4" />
-                <span className={railLabel}>{label}</span>
-              </Link>
-            ) : (
-              <Link
-                key={to}
-                to={to}
-                params={{ projectSlug: slug }}
-                aria-label={label}
-                className={railItem}
-                activeProps={{ className: `${railItem} bg-muted text-foreground` }}
-              >
-                <Icon className="size-4" />
-                <span className={railLabel}>{label}</span>
-              </Link>
-            ),
-          )}
+          {navItems.map(({ to, label, icon: Icon }) => (
+            <Tooltip key={to} label={label} side="right">
+              {to === "/p/$projectSlug/workflows" ? (
+                <Link
+                  to={to}
+                  params={{ projectSlug: slug }}
+                  search={{ all: true }}
+                  className={railItem}
+                  activeProps={railActive}
+                  inactiveProps={railInactive}
+                >
+                  <Icon className="size-4" />
+                </Link>
+              ) : (
+                <Link
+                  to={to}
+                  params={{ projectSlug: slug }}
+                  className={railItem}
+                  activeProps={railActive}
+                  inactiveProps={railInactive}
+                >
+                  <Icon className="size-4" />
+                </Link>
+              )}
+            </Tooltip>
+          ))}
+          <span aria-hidden="true" className="my-0.5 h-px w-6 bg-border" />
           <DropdownMenu>
-            <DropdownMenuTrigger
-              aria-label="Account"
-              className={`${railItem} mt-1 border-t pt-0.5`}
-            >
+            <DropdownMenuTrigger aria-label="Account" className={railButton}>
               <CircleUser className="size-4" />
             </DropdownMenuTrigger>
             <DropdownMenuContent side="right" align="end">
@@ -210,17 +207,11 @@ function ProjectLayout() {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <button
-            type="button"
-            aria-label="Hide sidebar"
-            onClick={() => {
-              setHidden(true);
-            }}
-            className={railItem}
-          >
-            <PanelLeftClose className="size-4" />
-            <span className={railLabel}>Hide</span>
-          </button>
+          <Tooltip label="Hide sidebar" side="right">
+            <button type="button" onClick={() => setHidden(true)} className={railButton}>
+              <PanelLeftClose className="size-4" />
+            </button>
+          </Tooltip>
         </nav>
       </div>
       {about && <AboutDialog project={project.name} onClose={() => setAbout(false)} />}

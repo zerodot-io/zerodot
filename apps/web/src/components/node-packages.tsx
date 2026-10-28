@@ -7,12 +7,16 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
   Input,
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
+  Spinner,
   toast,
 } from "@zerodot/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -26,6 +30,7 @@ import {
   uninstallNodePackageFn,
   updateNodePackageFn,
 } from "../server/fns";
+import { ConfirmDialog } from "./confirm-dialog";
 import { NodeIcon } from "./node-icon";
 
 function errorText(error: unknown): string {
@@ -53,26 +58,40 @@ function InstallConfirm({
   onConfirm: () => void;
 }) {
   return (
-    <Dialog open onOpenChange={(open) => !open && !busy && onCancel()}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>Install {item.label}?</DialogTitle>
-          <DialogDescription>
-            This adds the nodes of {item.name}
-            {item.version ? ` ${item.version}` : ""} to every project. The package code runs on the
-            server with the same rights as zerodot. Install only packages that you trust.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="flex justify-end gap-2">
-          <Button type="button" variant="outline" disabled={busy} onClick={onCancel}>
-            Cancel
-          </Button>
-          <Button type="button" disabled={busy} onClick={onConfirm}>
-            {busy ? "Installing" : "Install"}
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
+    <ConfirmDialog
+      title={`Install ${item.label}?`}
+      description={`This adds the nodes of ${item.name}${item.version ? ` ${item.version}` : ""} to every project. The package code runs on the server with the same rights as zerodot. Install only packages that you trust.`}
+      action={busy ? "Installing" : "Install"}
+      busy={busy}
+      onCancel={onCancel}
+      onConfirm={onConfirm}
+    />
+  );
+}
+
+/** Asks before a package goes away: workflows that use its nodes stop working. */
+function RemoveConfirm({
+  item,
+  busy,
+  onCancel,
+  onConfirm,
+}: {
+  item: { name: string; label: string };
+  busy: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <ConfirmDialog
+      title={`Remove ${item.label}?`}
+      description={`This removes the nodes of ${item.name} from every project. Workflows that use these nodes stop working until you install the package again.`}
+      action={busy ? "Removing" : "Remove"}
+      cancel="Keep"
+      destructive
+      busy={busy}
+      onCancel={onCancel}
+      onConfirm={onConfirm}
+    />
   );
 }
 
@@ -137,7 +156,10 @@ function VersionDialog({
           </DialogDescription>
         </DialogHeader>
         {versions === null ? (
-          <p className="text-muted-foreground">Loading versions</p>
+          <p className="flex items-center gap-2 text-muted-foreground">
+            <Spinner />
+            Loading versions
+          </p>
         ) : (
           <div className="flex items-center gap-3">
             <span className="tabular-nums text-muted-foreground">{item.version}</span>
@@ -330,6 +352,7 @@ export function NodePackagesSection() {
   const [filter, setFilter] = useState<Filter>("all");
   const [confirm, setConfirm] = useState<PackageView | null>(null);
   const [versionOf, setVersionOf] = useState<PackageView | null>(null);
+  const [removing, setRemoving] = useState<PackageView | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -356,10 +379,18 @@ export function NodePackagesSection() {
       setBusy(null);
       setConfirm(null);
       setVersionOf(null);
+      setRemoving(null);
     }
   }
 
-  if (!overview) return null;
+  if (!overview) {
+    return (
+      <p className="flex items-center gap-2 text-muted-foreground">
+        <Spinner />
+        Loading packages
+      </p>
+    );
+  }
   const text = query.trim().toLowerCase();
   const found = overview.packages.filter((item) => !text || matchesPackage(item, text));
   const installed = found.filter((item) => item.version !== null);
@@ -380,13 +411,7 @@ export function NodePackagesSection() {
       busy={busy === item.name}
       onInstall={() => setConfirm(item)}
       onVersion={() => setVersionOf(item)}
-      onRemove={() =>
-        void change(
-          item.name,
-          () => uninstallNodePackageFn({ data: { name: item.name } }),
-          `${item.label} removed`,
-        )
-      }
+      onRemove={() => setRemoving(item)}
     />
   );
 
@@ -399,7 +424,7 @@ export function NodePackagesSection() {
       </p>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div role="tablist" aria-label="Filter packages" className="flex gap-1">
+        <div role="tablist" aria-label="Filter packages" className="-mx-2.5 flex gap-1">
           {FILTERS.map((option) => {
             const on = option.value === filter;
             return (
@@ -423,7 +448,7 @@ export function NodePackagesSection() {
           onChange={(event) => setQuery(event.target.value)}
           placeholder="Search by name, node, or use"
           aria-label="Search packages"
-          className="w-72"
+          className="w-full sm:w-72"
         />
       </div>
 
@@ -438,13 +463,17 @@ export function NodePackagesSection() {
         </PackageGroup>
       )}
       {!showInstalled && !showAvailable && (
-        <p className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">
-          {overview.packages.length === 0
-            ? "No packages yet."
-            : text
-              ? `No package matches "${query.trim()}".`
-              : "Nothing in this list."}
-        </p>
+        <Empty>
+          <EmptyHeader>
+            <EmptyDescription>
+              {overview.packages.length === 0
+                ? "No packages yet."
+                : text
+                  ? `No package matches "${query.trim()}".`
+                  : "Nothing in this list."}
+            </EmptyDescription>
+          </EmptyHeader>
+        </Empty>
       )}
       {overview.catalogError && (
         <p className="text-muted-foreground">
@@ -462,6 +491,20 @@ export function NodePackagesSection() {
               versionOf.name,
               () => updateNodePackageFn({ data: { name: versionOf.name, version } }),
               `${versionOf.label} is now ${version}`,
+            )
+          }
+        />
+      )}
+      {removing && (
+        <RemoveConfirm
+          item={removing}
+          busy={busy === removing.name}
+          onCancel={() => setRemoving(null)}
+          onConfirm={() =>
+            void change(
+              removing.name,
+              () => uninstallNodePackageFn({ data: { name: removing.name } }),
+              `${removing.label} removed`,
             )
           }
         />
