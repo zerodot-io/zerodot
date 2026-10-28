@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { type Db, getNodePackages, recordAudit, setNodePackages } from "@zerodot/db";
 import { SDK_VERSION, satisfiesSdk } from "@zerodot/node-sdk";
+import { catalog as nodeCatalog } from "@zerodot/nodes";
 import {
   type CatalogPackage,
   createPackageSyncer,
@@ -125,6 +126,12 @@ export async function nodePackagesOverview(headers: Headers): Promise<NodePackag
     view.source = fromEnv.has(name) ? "env" : "ui";
     view.status = report?.error ? "error" : report ? "loaded" : "not-loaded";
     if (report?.error) view.error = report.error;
+    // A loaded package shows the icon of its first node that has one. The catalog may lack it.
+    const loaded = nodeCatalog.find(
+      (entry) => report?.added.includes(entry.type) && (entry.iconUrl || entry.icon),
+    );
+    view.iconUrl = view.iconUrl ?? loaded?.iconUrl ?? null;
+    view.icon = view.icon ?? loaded?.icon ?? null;
     byName.set(name, view);
   }
   return {
