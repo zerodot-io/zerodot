@@ -15,6 +15,7 @@ import { Route as SignInRouteImport } from './routes/sign-in'
 import { Route as SignUpRouteImport } from './routes/sign-up'
 import { Route as SystemRouteImport } from './routes/system'
 import { Route as PProjectSlugRouteImport } from './routes/p.$projectSlug'
+import { Route as ShareTokenRouteImport } from './routes/share.$token'
 import { Route as SystemNodesRouteImport } from './routes/system_.nodes'
 import { Route as PProjectSlugApiKeysRouteImport } from './routes/p.$projectSlug.api-keys'
 import { Route as PProjectSlugCredentialsRouteImport } from './routes/p.$projectSlug.credentials'
@@ -56,6 +57,11 @@ const SystemRoute = SystemRouteImport.update({
 const PProjectSlugRoute = PProjectSlugRouteImport.update({
   id: '/p/$projectSlug',
   path: '/p/$projectSlug',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ShareTokenRoute = ShareTokenRouteImport.update({
+  id: '/share/$token',
+  path: '/share/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SystemNodesRoute = SystemNodesRouteImport.update({
@@ -129,6 +135,7 @@ export interface FileRoutesByFullPath {
   '/sign-up': typeof SignUpRoute
   '/system': typeof SystemRoute
   '/p/$projectSlug': typeof PProjectSlugRouteWithChildren
+  '/share/$token': typeof ShareTokenRoute
   '/system/nodes': typeof SystemNodesRoute
   '/p/$projectSlug/api-keys': typeof PProjectSlugApiKeysRoute
   '/p/$projectSlug/credentials': typeof PProjectSlugCredentialsRoute
@@ -149,6 +156,7 @@ export interface FileRoutesByTo {
   '/sign-up': typeof SignUpRoute
   '/system': typeof SystemRoute
   '/p/$projectSlug': typeof PProjectSlugRouteWithChildren
+  '/share/$token': typeof ShareTokenRoute
   '/system/nodes': typeof SystemNodesRoute
   '/p/$projectSlug/api-keys': typeof PProjectSlugApiKeysRoute
   '/p/$projectSlug/credentials': typeof PProjectSlugCredentialsRoute
@@ -170,6 +178,7 @@ export interface FileRoutesById {
   '/sign-up': typeof SignUpRoute
   '/system': typeof SystemRoute
   '/p/$projectSlug': typeof PProjectSlugRouteWithChildren
+  '/share/$token': typeof ShareTokenRoute
   '/system_/nodes': typeof SystemNodesRoute
   '/p/$projectSlug/api-keys': typeof PProjectSlugApiKeysRoute
   '/p/$projectSlug/credentials': typeof PProjectSlugCredentialsRoute
@@ -192,6 +201,7 @@ export interface FileRouteTypes {
     | '/sign-up'
     | '/system'
     | '/p/$projectSlug'
+    | '/share/$token'
     | '/system/nodes'
     | '/p/$projectSlug/api-keys'
     | '/p/$projectSlug/credentials'
@@ -212,6 +222,7 @@ export interface FileRouteTypes {
     | '/sign-up'
     | '/system'
     | '/p/$projectSlug'
+    | '/share/$token'
     | '/system/nodes'
     | '/p/$projectSlug/api-keys'
     | '/p/$projectSlug/credentials'
@@ -232,6 +243,7 @@ export interface FileRouteTypes {
     | '/sign-up'
     | '/system'
     | '/p/$projectSlug'
+    | '/share/$token'
     | '/system_/nodes'
     | '/p/$projectSlug/api-keys'
     | '/p/$projectSlug/credentials'
@@ -253,6 +265,7 @@ export interface RootRouteChildren {
   SignUpRoute: typeof SignUpRoute
   SystemRoute: typeof SystemRoute
   PProjectSlugRoute: typeof PProjectSlugRouteWithChildren
+  ShareTokenRoute: typeof ShareTokenRoute
   SystemNodesRoute: typeof SystemNodesRoute
 }
 
@@ -298,6 +311,13 @@ declare module '@tanstack/react-router' {
       path: '/p/$projectSlug'
       fullPath: '/p/$projectSlug'
       preLoaderRoute: typeof PProjectSlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/share/$token': {
+      id: '/share/$token'
+      path: '/share/$token'
+      fullPath: '/share/$token'
+      preLoaderRoute: typeof ShareTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/system_/nodes': {
@@ -426,6 +446,7 @@ const rootRouteChildren: RootRouteChildren = {
   SignUpRoute: SignUpRoute,
   SystemRoute: SystemRoute,
   PProjectSlugRoute: PProjectSlugRouteWithChildren,
+  ShareTokenRoute: ShareTokenRoute,
   SystemNodesRoute: SystemNodesRoute,
 }
 export const routeTree = rootRouteImport

@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import { after, before, describe, it } from "node:test";
-import { createDb, forOrganization } from "@zerodot/db";
+import { createDb, forOrganization, useWorkflowShare } from "@zerodot/db";
 import { resetDatabase as reset, seedOrganization } from "@zerodot/db/testing";
 import type { ApiServices } from "./context.server";
 import { handleApi } from "./handler.server";
@@ -367,8 +367,29 @@ describe("public API", { skip: !url }, () => {
       body: { file: { ...exported.json, variables: ["missing_key"] } },
     });
     assert.equal(imported.status, 201);
-    assert.equal(imported.json.name, "Portable");
+    // The name is taken, so the import gets a number.
+    assert.equal(imported.json.name, "Portable 2");
     assert.deepEqual(imported.json.missingVariables, ["missing_key"]);
+    assert.deepEqual(imported.json.missingNodeTypes, []);
+
+    const unknown = await call("POST", "/workflows/import", {
+      key: memberKey,
+      body: {
+        file: {
+          ...exported.json,
+          nodes: [
+            { id: "x", type: "acme.unknown", name: "X", position: { x: 0, y: 0 }, config: {} },
+          ],
+          edges: [],
+        },
+      },
+    });
+    assert.equal(unknown.status, 201);
+    assert.deepEqual(unknown.json.missingNodeTypes, ["acme.unknown"]);
+    assert.equal(
+      (await call("POST", "/workflows/import", { key: memberKey, body: {} })).status,
+      400,
+    );
     const detail = await call("GET", `/workflows/${imported.json.id}`, { key: memberKey });
     assert.equal(detail.json.published, false);
     assert.ok(detail.json.draftGraph);
@@ -378,6 +399,57 @@ describe("public API", { skip: !url }, () => {
       body: { file: { hello: 1 } },
     });
     assert.equal(bad.status, 400);
+  });
+
+  it("shares a workflow at many links", async () => {
+    const created = await call("POST", "/workflows", {
+      key: memberKey,
+      body: { name: "Shared", graph: graph() },
+    });
+    const id = String(created.json.id);
+    const list = `/workflows/${id}/shares`;
+    assert.deepEqual((await call("GET", list, { key: memberKey })).json.items, []);
+
+    const open = await call("POST", list, { key: memberKey, body: {} });
+    assert.equal(open.status, 201);
+    assert.ok(String(open.json.url).startsWith(`${BASE}/share/`));
+    assert.equal(open.json.protected, false);
+
+    const sold = await call("POST", list, {
+      key: memberKey,
+      body: { label: "Buyer A", password: "long enough", singleUse: true },
+    });
+    assert.equal(sold.json.label, "Buyer A");
+    assert.equal(sold.json.protected, true);
+    assert.equal(sold.json.singleUse, true);
+    assert.notEqual(sold.json.url, open.json.url);
+    assert.equal(
+      (await call("POST", list, { key: memberKey, body: { password: "short" } })).status,
+      400,
+    );
+    assert.equal(((await call("GET", list, { key: memberKey })).json.items as Json[]).length, 2);
+
+    const token = String(sold.json.token);
+    const changed = await call("PATCH", `/shares/${token}`, {
+      key: memberKey,
+      body: { password: null, label: "Buyer B", refresh: true },
+    });
+    assert.equal(changed.json.protected, false);
+    assert.equal(changed.json.label, "Buyer B");
+    assert.equal(changed.json.singleUse, true);
+
+    assert.ok(await useWorkflowShare(handle.db, token));
+    const items = (await call("GET", list, { key: memberKey })).json.items as Json[];
+    assert.ok(items.find((item) => item.token === token)?.usedAt);
+
+    assert.equal((await call("GET", list, { key: otherKey })).status, 404);
+    assert.equal(
+      (await call("PATCH", `/shares/${token}`, { key: otherKey, body: {} })).status,
+      404,
+    );
+    assert.equal((await call("DELETE", `/shares/${token}`, { key: otherKey })).json.deleted, false);
+    assert.equal((await call("DELETE", `/shares/${token}`, { key: memberKey })).json.deleted, true);
+    assert.equal(((await call("GET", list, { key: memberKey })).json.items as Json[]).length, 1);
   });
 
   it("queues a test run that stops at a node", async () => {

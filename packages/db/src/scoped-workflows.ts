@@ -3,11 +3,12 @@ import { createHmac, randomBytes } from "node:crypto";
 import { and, desc, eq, inArray, lt, max, notInArray, or, sql } from "drizzle-orm";
 import type { Db } from "./client";
 import { decodeCursor, type Page, pageOf } from "./cursor";
-import { trigger, triggerState, workflow, workflowVersion } from "./schema";
+import { trigger, triggerState, workflow, workflowShare, workflowVersion } from "./schema";
 
 export type WorkflowRow = typeof workflow.$inferSelect;
 export type WorkflowVersionRow = typeof workflowVersion.$inferSelect;
 export type TriggerRow = typeof trigger.$inferSelect;
+export type WorkflowShareRow = typeof workflowShare.$inferSelect;
 
 export type WorkflowSettingsPatch = Partial<
   Pick<
@@ -110,6 +111,20 @@ export function workflows(db: Db, organizationId: string) {
       return pageOf(rows, limit);
     },
 
+    /** Names of the workflows that are the name, or the name with a number after it. */
+    async namesLike(name: string): Promise<string[]> {
+      const rows = await db
+        .select({ name: workflow.name })
+        .from(workflow)
+        .where(
+          and(
+            eq(workflow.organizationId, organizationId),
+            or(eq(workflow.name, name), sql`starts_with(${workflow.name}, ${`${name} `})`),
+          ),
+        );
+      return rows.map((row) => row.name);
+    },
+
     async get(id: string): Promise<WorkflowRow | null> {
       const [row] = await db.select().from(workflow).where(owned(id)).limit(1);
       return row ?? null;
@@ -174,6 +189,74 @@ export function workflows(db: Db, organizationId: string) {
 
     async remove(id: string): Promise<boolean> {
       const rows = await db.delete(workflow).where(owned(id)).returning({ id: workflow.id });
+      return rows.length > 0;
+    },
+
+    /** The share links of a workflow, newest first. */
+    async listShares(workflowId: string): Promise<WorkflowShareRow[]> {
+      return db
+        .select()
+        .from(workflowShare)
+        .where(
+          and(
+            eq(workflowShare.organizationId, organizationId),
+            eq(workflowShare.workflowId, workflowId),
+          ),
+        )
+        .orderBy(desc(workflowShare.createdAt));
+    },
+
+    /** One share link by its token, or null. */
+    async getShare(token: string): Promise<WorkflowShareRow | null> {
+      const [row] = await db
+        .select()
+        .from(workflowShare)
+        .where(and(eq(workflowShare.organizationId, organizationId), eq(workflowShare.id, token)))
+        .limit(1);
+      return row ?? null;
+    },
+
+    /** Makes a new share link with a new token. */
+    async createShare(input: {
+      workflowId: string;
+      file: unknown;
+      createdBy: string | null;
+      label?: string | null;
+      passwordHash?: string | null;
+      singleUse?: boolean;
+    }): Promise<WorkflowShareRow> {
+      const [row] = await db
+        .insert(workflowShare)
+        .values({ id: randomBytes(18).toString("base64url"), organizationId, ...input })
+        .returning();
+      if (!row) throw new Error("insert returned no row");
+      return row;
+    },
+
+    /** Changes a share link. A field that is not sent stays as it is. */
+    async updateShare(
+      token: string,
+      patch: {
+        label?: string | null;
+        file?: unknown;
+        passwordHash?: string | null;
+        singleUse?: boolean;
+      },
+    ): Promise<WorkflowShareRow | null> {
+      const [row] = await db
+        .update(workflowShare)
+        .set({ ...patch, updatedAt: new Date() })
+        .where(and(eq(workflowShare.organizationId, organizationId), eq(workflowShare.id, token)))
+        .returning();
+      return row ?? null;
+    },
+
+    /** Removes a share link. It stops working. */
+    async removeShare(token: string): Promise<boolean> {
+      const rows = await db
+        .delete(workflowShare)
+        .where(and(eq(workflowShare.organizationId, organizationId), eq(workflowShare.id, token)))
+        .returning({ id: workflowShare.id });
       return rows.length > 0;
     },
 

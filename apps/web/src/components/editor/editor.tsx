@@ -54,6 +54,7 @@ import {
   Plus,
   Rocket,
   Settings,
+  Share2,
   Square,
   Trash2,
   Workflow as WorkflowIcon,
@@ -101,6 +102,7 @@ import {
 import { NodeIcon } from "../node-icon";
 import { AvailableNodePackages } from "../node-packages";
 import type { TableHint } from "../schema-form";
+import { ShareDialog } from "../share-dialog";
 import { TimezoneSelect } from "../timezone-select";
 import { NodeDialog, type NodeIO } from "./node-dialog";
 import { RunsSheet } from "./runs-sheet";
@@ -282,6 +284,7 @@ export function Editor({
   const [addOpen, setAddOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const [runsOpen, setRunsOpen] = useState(false);
   const [canvasEl, setCanvasEl] = useState<HTMLElement | null>(null);
   const [addQuery, setAddQuery] = useState("");
@@ -921,15 +924,19 @@ export function Editor({
     setMessage(`Draft restored from version ${version}`);
   }
 
+  /** Saves the canvas now when autosave has not run yet, so an export matches the canvas. */
+  async function saveNow() {
+    if (JSON.stringify(graph) === lastSaved.current) return;
+    await saveDraftFn({ data: { projectSlug, workflowId: workflow.id, graph } });
+    lastSaved.current = JSON.stringify(graph);
+    setSaveState("saved");
+  }
+
   /** Download the saved draft. Autosave runs first, so the file matches the canvas. */
   async function exportFile() {
     setMessage(null);
     try {
-      if (JSON.stringify(graph) !== lastSaved.current) {
-        await saveDraftFn({ data: { projectSlug, workflowId: workflow.id, graph } });
-        lastSaved.current = JSON.stringify(graph);
-        setSaveState("saved");
-      }
+      await saveNow();
       const file = await exportWorkflowFn({ data: { projectSlug, workflowId: workflow.id } });
       const blob = new Blob([JSON.stringify(file, null, 2)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
@@ -1253,8 +1260,21 @@ export function Editor({
                         <Download />
                         Export as a file
                       </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setShareOpen(true)}>
+                        <Share2 />
+                        Share
+                      </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
+                  {shareOpen && (
+                    <ShareDialog
+                      projectSlug={projectSlug}
+                      workflowId={workflow.id}
+                      workflowName={workflow.name}
+                      beforeShare={saveNow}
+                      onClose={() => setShareOpen(false)}
+                    />
+                  )}
                   <RunsSheet
                     open={runsOpen}
                     onOpenChange={setRunsOpen}

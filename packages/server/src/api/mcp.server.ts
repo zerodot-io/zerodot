@@ -152,6 +152,62 @@ export const tools: Tool[] = [
       }),
   }),
   tool({
+    name: "export_workflow",
+    description:
+      "Get the draft as a .zerodot.json file. It has no variable values and no credential data.",
+    shape: idShape,
+    readOnly: true,
+    call: (ctx, args) => invoke(ctx, "GET", "/workflows/:id/export", { params: { id: args.id } }),
+  }),
+  tool({
+    name: "preview_import",
+    description:
+      "Check a .zerodot.json file or a share link before import_workflow. Nothing changes. " +
+      "It lists node types that are not installed and the node packages that give them. " +
+      "A single-use link is used by this read: preview its file, or import it at once.",
+    shape: s.workflowImportBody.shape,
+    readOnly: true,
+    call: (ctx, args) => invoke(ctx, "POST", "/workflows/import/preview", { body: args }),
+  }),
+  tool({
+    name: "import_workflow",
+    description:
+      "Create a draft workflow from a .zerodot.json `file`, or from a share `url` of any " +
+      "zerodot. A protected link needs `password`. A name that is taken gets a number.",
+    shape: s.workflowImportBody.shape,
+    call: (ctx, args) => invoke(ctx, "POST", "/workflows/import", { body: args }),
+  }),
+  tool({
+    name: "list_workflow_shares",
+    description: "List the share links of a workflow, newest first, with when each was used.",
+    shape: idShape,
+    readOnly: true,
+    call: (ctx, args) => invoke(ctx, "GET", "/workflows/:id/shares", { params: { id: args.id } }),
+  }),
+  tool({
+    name: "create_workflow_share",
+    description:
+      "Share a copy of the draft at a new public link. Make one link for each buyer: set " +
+      "`label` to the buyer, `password` so only they can import, and `singleUse` so the link " +
+      "stops working after one import.",
+    shape: { ...idShape, ...s.shareInput.shape },
+    call: (ctx, args) => {
+      const { id, ...body } = args;
+      return invoke(ctx, "POST", "/workflows/:id/shares", { params: { id }, body });
+    },
+  }),
+  tool({
+    name: "update_workflow_share",
+    description:
+      "Change the label, password, or single use of a share link. With `refresh`, the link " +
+      "gets a copy of the current draft.",
+    shape: { ...s.shareParam.shape, ...s.shareUpdate.shape },
+    call: (ctx, args) => {
+      const { token, ...body } = args;
+      return invoke(ctx, "PATCH", "/shares/:token", { params: { token }, body });
+    },
+  }),
+  tool({
     name: "run_workflow",
     description:
       "Run the published version of a workflow. With `wait` the answer holds the output of " +

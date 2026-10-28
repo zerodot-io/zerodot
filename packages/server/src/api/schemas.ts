@@ -66,18 +66,88 @@ export const workflowPatch = z
 
 export const workflowExport = workflowExportSchema;
 
-export const workflowImportBody = z.object({
-  /** A `.zerodot.json` file. */
-  file: z.unknown(),
-  /** Replaces the name in the file. */
-  name: z.string().trim().min(1).max(120).optional(),
-});
+export const workflowImportBody = z
+  .object({
+    /** A `.zerodot.json` file. */
+    file: z.unknown().optional().describe("A .zerodot.json file. Send this or `url`."),
+    url: z
+      .url()
+      .optional()
+      .describe("A share link, or any URL of a .zerodot.json file. Send this or `file`."),
+    password: z.string().max(200).optional().describe("The password of a protected share link"),
+    /** Replaces the name in the file. */
+    name: z.string().trim().min(1).max(120).optional(),
+  })
+  .refine((v) => (v.file === undefined) !== (v.url === undefined), "Send `file` or `url`");
 
 export const workflowImportResult = z.object({
   id: z.uuid(),
   name: z.string(),
   missingVariables: z.array(z.string()),
   clearedCredentials: z.array(z.string()),
+  missingNodeTypes: z
+    .array(z.string())
+    .describe("Node types that are not installed. Those steps do not run until they are."),
+});
+
+export const importPreview = z.object({
+  name: z.string().nullable(),
+  nodeCount: z.number().int(),
+  missingNodeTypes: z.array(z.string()),
+  missingVariables: z.array(z.string()),
+  clearedCredentials: z.array(z.string()),
+  packages: z
+    .array(
+      z.object({
+        name: z.string(),
+        label: z.string(),
+        version: z.string(),
+        compatible: z.boolean(),
+        types: z.array(z.string()),
+      }),
+    )
+    .describe("Node packages that give the missing node types. An instance admin installs them."),
+  unknownNodeTypes: z.array(z.string()).describe("Missing node types that no package gives"),
+  catalogError: z.string().nullable(),
+});
+
+export const shareInput = z.object({
+  label: z
+    .string()
+    .trim()
+    .max(120)
+    .nullable()
+    .optional()
+    .describe("A name for you, for example the name of the buyer"),
+  password: z
+    .string()
+    .min(8)
+    .max(200)
+    .nullable()
+    .optional()
+    .describe("Only people with this password can import. Null removes the password."),
+  singleUse: z
+    .boolean()
+    .optional()
+    .describe("The link works for one import. Then it stops working."),
+});
+
+export const shareUpdate = shareInput.extend({
+  refresh: z.boolean().optional().describe("Put a copy of the current draft in the link"),
+});
+
+export const shareParam = z.object({ token: z.string().min(1).max(64) });
+
+export const workflowShare = z.object({
+  token: z.string(),
+  url: z.string(),
+  workflowId: z.uuid(),
+  label: z.string().nullable(),
+  createdAt: iso,
+  updatedAt: iso.describe("When the copy in the link was made"),
+  protected: z.boolean(),
+  singleUse: z.boolean(),
+  usedAt: iso.nullable(),
 });
 
 export const versionSummary = z.object({

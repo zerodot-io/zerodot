@@ -13,6 +13,8 @@ import {
 } from "@zerodot/engine";
 import { openCredential, registry, validateCron, validateGraphNodes } from "@zerodot/nodes";
 import { ZodError } from "zod";
+import { fetchSharedFile, ShareFetchError } from "../share-fetch";
+import { hashSharePassword } from "../share-password";
 import type { ApiContext } from "./context.server";
 import { ApiError, badRequest, conflict, notFound } from "./errors";
 
@@ -327,18 +329,14 @@ export async function exportWorkflow(ctx: ApiContext, workflowId: string) {
   return buildExport(wf.name, graphSchema.parse(wf.draftGraph));
 }
 
-/**
- * Make a workflow from a `.zerodot.json` file. The new workflow is a draft. A credential that
- * this project does not have is cleared, and the result lists the variable keys it lacks.
- */
-export async function importWorkflow(ctx: ApiContext, file: unknown, name?: string) {
+/** Checks a `.zerodot.json` file against this project. Throws a 400 for a bad file. */
+async function parseImportFile(ctx: ApiContext, file: unknown) {
   const [credentials, variables] = await Promise.all([
     ctx.scope.credentials.list(),
     ctx.scope.variables.list(),
   ]);
-  let parsed: ReturnType<typeof parseImport>;
   try {
-    parsed = parseImport(file, {
+    return parseImport(file, {
       credentialIds: credentials.map((c) => c.id),
       variableKeys: variables.map((v) => v.key),
     });
@@ -352,9 +350,48 @@ export async function importWorkflow(ctx: ApiContext, file: unknown, name?: stri
     }
     throw error;
   }
+}
+
+/** Node types of the graph that no installed node package gives. */
+function missingNodeTypes(graph: Graph): string[] {
+  const types = new Set(graph.nodes.map((node) => node.type));
+  return [...types].filter((type) => !registry.get(type)).sort();
+}
+
+/**
+ * What an import would do, without a change. `missingNodeTypes` are the node types that no
+ * installed node package gives.
+ */
+export async function previewImport(ctx: ApiContext, file: unknown) {
+  const parsed = await parseImportFile(ctx, file);
+  checkedGraph(parsed.graph, { nodes: false });
+  return {
+    name: parsed.name,
+    nodeCount: parsed.graph.nodes.length,
+    missingNodeTypes: missingNodeTypes(parsed.graph),
+    missingVariables: parsed.missingVariables,
+    clearedCredentials: parsed.clearedCredentials,
+  };
+}
+
+/** The name, or the name with the first free number after it: "Sync", "Sync 2", "Sync 3". */
+async function freeName(ctx: ApiContext, wanted: string): Promise<string> {
+  const base = wanted.slice(0, 112);
+  const taken = new Set(await ctx.scope.workflows.namesLike(base));
+  let name = base;
+  for (let i = 2; taken.has(name); i++) name = `${base} ${i}`;
+  return name;
+}
+
+/**
+ * Make a workflow from a `.zerodot.json` file. The new workflow is a draft. A credential that
+ * this project does not have is cleared, and the result lists the variable keys it lacks.
+ */
+export async function importWorkflow(ctx: ApiContext, file: unknown, name?: string) {
+  const parsed = await parseImportFile(ctx, file);
   const graph = checkedGraph(parsed.graph, { nodes: false });
   const row = await ctx.scope.workflows.create({
-    name: (name ?? parsed.name ?? "Imported workflow").slice(0, 120),
+    name: await freeName(ctx, name ?? parsed.name ?? "Imported workflow"),
   });
   await ctx.scope.workflows.saveDraft(row.id, graph);
   return {
@@ -362,7 +399,137 @@ export async function importWorkflow(ctx: ApiContext, file: unknown, name?: stri
     name: row.name,
     missingVariables: parsed.missingVariables,
     clearedCredentials: parsed.clearedCredentials,
+    missingNodeTypes: missingNodeTypes(graph),
   };
+}
+
+export type WorkflowShare = {
+  token: string;
+  url: string;
+  workflowId: string;
+  label: string | null;
+  createdAt: Date;
+  /** When the copy in the link was made. */
+  updatedAt: Date;
+  /** Only people with the password can import. */
+  protected: boolean;
+  /** The link works for one import. */
+  singleUse: boolean;
+  /** When the single-use link was used. Then it does not work. */
+  usedAt: Date | null;
+};
+
+/** The settings of a share link. A field that is not sent stays as it is. */
+export type ShareInput = {
+  /** A name for the owner, for example the name of the buyer. */
+  label?: string | null;
+  /** A password of 8 or more characters, or null for anyone with the link. */
+  password?: string | null;
+  singleUse?: boolean;
+};
+
+const shareView = (
+  ctx: ApiContext,
+  row: {
+    id: string;
+    workflowId: string;
+    label: string | null;
+    createdAt: Date;
+    updatedAt: Date;
+    passwordHash: string | null;
+    singleUse: boolean;
+    usedAt: Date | null;
+  },
+): WorkflowShare => ({
+  token: row.id,
+  url: `${ctx.services.baseUrl}/share/${row.id}`,
+  workflowId: row.workflowId,
+  label: row.label,
+  createdAt: row.createdAt,
+  updatedAt: row.updatedAt,
+  protected: row.passwordHash !== null,
+  singleUse: row.singleUse,
+  usedAt: row.usedAt,
+});
+
+async function sharePatch(input: ShareInput) {
+  return {
+    ...(input.label !== undefined && { label: input.label?.trim() || null }),
+    ...(input.password !== undefined && {
+      passwordHash: input.password === null ? null : await hashSharePassword(input.password),
+    }),
+    ...(input.singleUse !== undefined && { singleUse: input.singleUse }),
+  };
+}
+
+/** The share links of a workflow, newest first. */
+export async function listWorkflowShares(
+  ctx: ApiContext,
+  workflowId: string,
+): Promise<WorkflowShare[]> {
+  await requireWorkflow(ctx, workflowId);
+  const rows = await ctx.scope.workflows.listShares(workflowId);
+  return rows.map((row) => shareView(ctx, row));
+}
+
+/**
+ * Makes a new public link to a copy of the saved draft. Each link has its own URL, label,
+ * password, and single use, so each buyer can get their own link. The copy has no variable
+ * values and no credential data.
+ */
+export async function createWorkflowShare(
+  ctx: ApiContext,
+  workflowId: string,
+  input: ShareInput = {},
+): Promise<WorkflowShare> {
+  const file = await exportWorkflow(ctx, workflowId);
+  const row = await ctx.scope.workflows.createShare({
+    workflowId,
+    file,
+    createdBy: ctx.principal.userId,
+    ...(await sharePatch(input)),
+  });
+  return shareView(ctx, row);
+}
+
+/**
+ * Changes a share link. With `refresh`, the link gets a copy of the current draft. A used
+ * single-use link stays used: make a new link instead.
+ */
+export async function updateWorkflowShare(
+  ctx: ApiContext,
+  token: string,
+  input: ShareInput & { refresh?: boolean },
+): Promise<WorkflowShare> {
+  const share = await ctx.scope.workflows.getShare(token);
+  if (!share) throw notFound("Share link");
+  const file = input.refresh ? await exportWorkflow(ctx, share.workflowId) : undefined;
+  const row = await ctx.scope.workflows.updateShare(token, {
+    ...(await sharePatch(input)),
+    ...(file !== undefined && { file }),
+  });
+  if (!row) throw notFound("Share link");
+  return shareView(ctx, row);
+}
+
+/** Removes a share link. It stops working. */
+export async function deleteWorkflowShare(ctx: ApiContext, token: string): Promise<boolean> {
+  return ctx.scope.workflows.removeShare(token);
+}
+
+/**
+ * Reads a share link, or any URL of a `.zerodot.json` file, on the server. A single-use link is
+ * used by this read. A protected link needs `password`.
+ */
+export async function readImportLink(url: string, password?: string | null): Promise<unknown> {
+  try {
+    return await fetchSharedFile(url, password);
+  } catch (error) {
+    if (error instanceof ShareFetchError) {
+      throw badRequest(error.message, { passwordRequired: error.passwordRequired });
+    }
+    throw error;
+  }
 }
 
 export async function setWorkflowActive(ctx: ApiContext, workflowId: string, active: boolean) {
