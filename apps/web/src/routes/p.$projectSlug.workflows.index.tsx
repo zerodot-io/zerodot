@@ -33,12 +33,15 @@ import {
   ExternalLink,
   History,
   Plus,
+  Share2,
   Trash2,
   Workflow,
   X,
 } from "lucide-react";
-import { type ChangeEvent, type ReactNode, useRef, useState } from "react";
+import { type ReactNode, useState } from "react";
 import { ConfirmDialog } from "../components/confirm-dialog";
+import { ImportDialog, type ImportResult } from "../components/import-dialog";
+import { ShareDialog } from "../components/share-dialog";
 import { FEED_TOOLTIP, TooltipPanel } from "../components/tooltip-panel";
 import { formatAge } from "../lib/admin-format";
 import { formatMs, formatPercent } from "../lib/insights";
@@ -47,7 +50,6 @@ import {
   deleteWorkflowFn,
   duplicateWorkflowFn,
   exportWorkflowFn,
-  importWorkflowFn,
   listWorkflowsFn,
   setActiveFn,
 } from "../server/fns";
@@ -161,14 +163,9 @@ function Workflows() {
   const { projectSlug } = Route.useParams();
   const router = useRouter();
   const [pending, setPending] = useState(false);
-  const fileInput = useRef<HTMLInputElement>(null);
-  const [imported, setImported] = useState<{
-    id: string;
-    name: string;
-    missingVariables: string[];
-    clearedCredentials: string[];
-  } | null>(null);
-  const [problem, setProblem] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [imported, setImported] = useState<ImportResult | null>(null);
+  const [sharing, setSharing] = useState<{ id: string; name: string } | null>(null);
   const [toDelete, setToDelete] = useState<{ id: string; name: string } | null>(null);
   const [deleting, setDeleting] = useState(false);
 
@@ -287,26 +284,10 @@ function Workflows() {
     ms: p.avgMs ?? 0,
   }));
 
-  async function onImport(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file) return;
-    setImported(null);
-    setProblem(null);
-    try {
-      const parsed: unknown = JSON.parse(await file.text());
-      const result = await importWorkflowFn({ data: { projectSlug, file: parsed } });
-      setImported(result);
-      await router.invalidate();
-    } catch (error) {
-      setProblem(
-        error instanceof SyntaxError
-          ? "This file is not valid JSON"
-          : error instanceof Error
-            ? error.message
-            : "Could not import the file",
-      );
-    }
+  async function onImported(result: ImportResult) {
+    setImporting(false);
+    setImported(result);
+    await router.invalidate();
   }
 
   /** Creates a workflow with a free default name. One renames it in the editor. */
@@ -338,17 +319,16 @@ function Workflows() {
           </span>
         </div>
         <div className="flex gap-2">
-          <Button type="button" variant="outline" onClick={() => fileInput.current?.click()}>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              setImported(null);
+              setImporting(true);
+            }}
+          >
             Import
           </Button>
-          <input
-            ref={fileInput}
-            type="file"
-            accept=".json,application/json"
-            className="hidden"
-            aria-label="Import a .zerodot.json file"
-            onChange={onImport}
-          />
           <Button type="button" disabled={pending} onClick={() => void onCreate()}>
             {pending ? <Spinner /> : <Plus />}
             New workflow
@@ -523,11 +503,6 @@ function Workflows() {
         </div>
       </div>
 
-      {problem && (
-        <p role="alert" className="text-destructive">
-          {problem}
-        </p>
-      )}
       {imported && (
         <div role="status" className="relative flex flex-col gap-1 rounded-lg border p-3 pr-10">
           <button
@@ -693,6 +668,10 @@ function Workflows() {
                         <Download />
                         Export
                       </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setSharing({ id: w.id, name: w.name })}>
+                        <Share2 />
+                        Share
+                      </DropdownMenuItem>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
                         variant="destructive"
@@ -710,6 +689,21 @@ function Workflows() {
         </ul>
       )}
 
+      {importing && (
+        <ImportDialog
+          projectSlug={projectSlug}
+          onClose={() => setImporting(false)}
+          onImported={(result) => void onImported(result)}
+        />
+      )}
+      {sharing && (
+        <ShareDialog
+          projectSlug={projectSlug}
+          workflowId={sharing.id}
+          workflowName={sharing.name}
+          onClose={() => setSharing(null)}
+        />
+      )}
       {toDelete && (
         <ConfirmDialog
           title={`Delete ${toDelete.name}?`}

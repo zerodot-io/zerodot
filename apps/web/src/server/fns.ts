@@ -3,6 +3,7 @@
 import { createServerFn, createServerOnlyFn } from "@tanstack/react-start";
 import type { forOrganization } from "@zerodot/db";
 import { type CodeLog, type Graph, GraphError, graphSchema, validateGraph } from "@zerodot/engine";
+import type { WorkflowShare } from "@zerodot/server/api/service.server";
 import { z } from "zod";
 
 type OrgDb = Parameters<typeof forOrganization>[0];
@@ -427,6 +428,83 @@ export const importWorkflowFn = createServerFn({ method: "POST" })
     const ctx = await serviceContext(data.projectSlug);
     const { importWorkflow } = await import("@zerodot/server/api/service.server");
     return plain(importWorkflow(ctx, data.file));
+  });
+
+/**
+ * What an import would do. It also lists the node packages that give the node types this
+ * instance does not have, so a person can install them first.
+ */
+export const previewImportFn = createServerFn({ method: "POST" })
+  .validator(slugInput.extend({ file: z.unknown() }))
+  .handler(async ({ data }) => {
+    const ctx = await serviceContext(data.projectSlug);
+    // Load the node packages before the check, so an installed node is not reported missing.
+    const { getServices } = await import("@zerodot/server/services.server");
+    await getServices();
+    const { previewImport } = await import("@zerodot/server/api/service.server");
+    const preview = await plain(previewImport(ctx, data.file));
+    if (preview.missingNodeTypes.length === 0) return { ...preview, needed: null };
+    const { packagesForNodeTypes } = await nodePackageServer();
+    return {
+      ...preview,
+      needed: await packagesForNodeTypes(await adminHeaders(), preview.missingNodeTypes),
+    };
+  });
+
+/** A share link with its times as text. */
+const shareView = (share: WorkflowShare) => ({
+  ...share,
+  createdAt: share.createdAt.toISOString(),
+  updatedAt: share.updatedAt.toISOString(),
+  usedAt: share.usedAt?.toISOString() ?? null,
+});
+
+const shareInput = z.object({
+  label: z.string().trim().max(120).nullable().optional(),
+  password: z.string().min(8).max(200).nullable().optional(),
+  singleUse: z.boolean().optional(),
+});
+
+const shareTokenInput = slugInput.extend({ token: z.string().min(1).max(64) });
+
+export const listWorkflowSharesFn = createServerFn({ method: "GET" })
+  .validator(workflowInput)
+  .handler(async ({ data }) => {
+    const ctx = await serviceContext(data.projectSlug);
+    const { listWorkflowShares } = await import("@zerodot/server/api/service.server");
+    return (await plain(listWorkflowShares(ctx, data.workflowId))).map(shareView);
+  });
+
+/** Makes a new share link with a copy of the saved draft. */
+export const createWorkflowShareFn = createServerFn({ method: "POST" })
+  .validator(workflowInput.extend(shareInput.shape))
+  .handler(async ({ data }) => {
+    const ctx = await serviceContext(data.projectSlug);
+    const { createWorkflowShare } = await import("@zerodot/server/api/service.server");
+    const { label, password, singleUse } = data;
+    return shareView(
+      await plain(createWorkflowShare(ctx, data.workflowId, { label, password, singleUse })),
+    );
+  });
+
+/** Changes a share link. With `refresh`, it gets a copy of the current draft. */
+export const updateWorkflowShareFn = createServerFn({ method: "POST" })
+  .validator(shareTokenInput.extend({ ...shareInput.shape, refresh: z.boolean().optional() }))
+  .handler(async ({ data }) => {
+    const ctx = await serviceContext(data.projectSlug);
+    const { updateWorkflowShare } = await import("@zerodot/server/api/service.server");
+    const { label, password, singleUse, refresh } = data;
+    return shareView(
+      await plain(updateWorkflowShare(ctx, data.token, { label, password, singleUse, refresh })),
+    );
+  });
+
+export const deleteWorkflowShareFn = createServerFn({ method: "POST" })
+  .validator(shareTokenInput)
+  .handler(async ({ data }) => {
+    const ctx = await serviceContext(data.projectSlug);
+    const { deleteWorkflowShare } = await import("@zerodot/server/api/service.server");
+    return plain(deleteWorkflowShare(ctx, data.token));
   });
 
 export const startTestRunFn = createServerFn({ method: "POST" })

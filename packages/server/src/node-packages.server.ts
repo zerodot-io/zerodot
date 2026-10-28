@@ -6,7 +6,6 @@ import {
   type CatalogPackage,
   compatibleVersions,
   createPackageSyncer,
-  DEFAULT_CATALOG_URL,
   fetchCatalog,
   fetchPackument,
   installedVersion,
@@ -28,6 +27,7 @@ import { listenForNodesChanged, publishNodesChanged } from "@zerodot/queue";
 import type { Redis } from "ioredis";
 import { isInstanceAdmin, requireInstanceAdmin } from "./admin.server";
 import { badRequest, conflict, notFound } from "./api/errors";
+import { catalogUrl } from "./node-catalog";
 import { getServices } from "./services.server";
 import { sessionFor } from "./session.server";
 
@@ -83,8 +83,6 @@ export type NodePackagesOverview = {
   catalogError: string | null;
   packages: NodePackageView[];
 };
-
-const catalogUrl = (): string => process.env.ZERODOT_NODE_CATALOG_URL || DEFAULT_CATALOG_URL;
 
 export async function nodePackagesOverview(headers: Headers): Promise<NodePackagesOverview> {
   await requireInstanceAdmin(headers);
@@ -319,5 +317,39 @@ export async function availableNodePackages(headers: Headers): Promise<Available
       (await isInstanceAdmin({ id: session.user.id, email: session.user.email })),
     catalogError,
     packages,
+  };
+}
+
+// ---- Import a workflow that uses nodes this instance does not have. ----
+
+export type NeededNodePackages = {
+  /** True for an instance admin when installing is on. */
+  canInstall: boolean;
+  catalogError: string | null;
+  /** Catalog packages that give one or more of the node types. */
+  packages: (AvailableNodePackage & { types: string[] })[];
+  /** Node types that no catalog package gives. */
+  unknown: string[];
+};
+
+/** The catalog packages that give the node types. Any signed-in person. */
+export async function packagesForNodeTypes(
+  headers: Headers,
+  types: string[],
+): Promise<NeededNodePackages> {
+  const available = await availableNodePackages(headers);
+  const packages: NeededNodePackages["packages"] = [];
+  const found = new Set<string>();
+  for (const item of available.packages) {
+    const given = item.nodes.map((node) => node.type).filter((type) => types.includes(type));
+    if (given.length === 0) continue;
+    for (const type of given) found.add(type);
+    packages.push({ ...item, types: given });
+  }
+  return {
+    canInstall: available.canInstall,
+    catalogError: available.catalogError,
+    packages,
+    unknown: types.filter((type) => !found.has(type)),
   };
 }

@@ -5,6 +5,7 @@ import { catalog, credentialTypeCatalog, validateCredentialData } from "@zerodot
 import { runStreamKey } from "@zerodot/queue";
 import { z } from "zod";
 import { buildInsights } from "../insights.server";
+import { catalogPackagesForTypes } from "../node-catalog";
 import { streamEvents } from "../stream.server";
 import type { ApiContext } from "./context.server";
 import { badRequest, conflict, notFound } from "./errors";
@@ -22,10 +23,15 @@ import { defineRoute, Reply, type Route } from "./route";
 import * as s from "./schemas";
 import {
   checkedGraph,
+  createWorkflowShare,
+  deleteWorkflowShare,
   exportWorkflow,
   getRunDetail,
   importWorkflow,
+  listWorkflowShares,
+  previewImport,
   publishWorkflow,
+  readImportLink,
   requireWorkflow,
   restoreVersion,
   retryRun,
@@ -34,9 +40,22 @@ import {
   startAndMaybeWait,
   startProductionRun,
   startTestRun,
+  updateWorkflowShare,
+  type WorkflowShare,
 } from "./service.server";
 
 const iso = (d: Date) => d.toISOString();
+
+const presentShare = (share: WorkflowShare) => ({
+  ...share,
+  createdAt: iso(share.createdAt),
+  updatedAt: iso(share.updatedAt),
+  usedAt: share.usedAt ? iso(share.usedAt) : null,
+});
+
+/** The file of an import body: the file, or what the link gives. */
+const importFile = (body: { file?: unknown; url?: string; password?: string }) =>
+  body.url === undefined ? body.file : readImportLink(body.url, body.password);
 
 async function workflowDetail(ctx: ApiContext, id: string) {
   const wf = await requireWorkflow(ctx, id);
@@ -120,7 +139,79 @@ const workflows: Route[] = [
     body: s.workflowImportBody,
     response: s.workflowImportResult,
     async handler(ctx, { body }) {
-      return new Reply(201, await importWorkflow(ctx, body.file, body.name));
+      return new Reply(201, await importWorkflow(ctx, await importFile(body), body.name));
+    },
+  }),
+  defineRoute({
+    method: "POST",
+    path: "/workflows/import/preview",
+    summary: "Check a .zerodot.json file or link before an import",
+    description:
+      "Nothing changes. The answer lists the node types that are not installed and the node packages that give them. A single-use link is used by this read too: preview its file instead.",
+    tag: "Workflows",
+    body: s.workflowImportBody,
+    response: s.importPreview,
+    async handler(ctx, { body }) {
+      const preview = await previewImport(ctx, await importFile(body));
+      const found = await catalogPackagesForTypes(preview.missingNodeTypes);
+      return {
+        ...preview,
+        packages: found.packages,
+        unknownNodeTypes: found.unknown,
+        catalogError: found.catalogError,
+      };
+    },
+  }),
+  defineRoute({
+    method: "GET",
+    path: "/workflows/:id/shares",
+    summary: "List the share links of a workflow",
+    tag: "Workflows",
+    params: s.idParam,
+    response: z.object({ items: z.array(s.workflowShare) }),
+    async handler(ctx, { params }) {
+      return { items: (await listWorkflowShares(ctx, params.id)).map(presentShare) };
+    },
+  }),
+  defineRoute({
+    method: "POST",
+    path: "/workflows/:id/shares",
+    summary: "Share a copy of the draft at a new link",
+    description:
+      "Each link has its own URL, label, password, and single use, for example one for each buyer. Another zerodot imports the URL with POST /workflows/import. The copy has no variable values and no credential data.",
+    tag: "Workflows",
+    status: 201,
+    params: s.idParam,
+    body: s.shareInput,
+    response: s.workflowShare,
+    async handler(ctx, { params, body }) {
+      return new Reply(201, presentShare(await createWorkflowShare(ctx, params.id, body)));
+    },
+  }),
+  defineRoute({
+    method: "PATCH",
+    path: "/shares/:token",
+    summary: "Change a share link",
+    description:
+      "Change the label, password, or single use. With `refresh`, the link gets a copy of the current draft. A used single-use link stays used.",
+    tag: "Workflows",
+    params: s.shareParam,
+    body: s.shareUpdate,
+    response: s.workflowShare,
+    async handler(ctx, { params, body }) {
+      return presentShare(await updateWorkflowShare(ctx, params.token, body));
+    },
+  }),
+  defineRoute({
+    method: "DELETE",
+    path: "/shares/:token",
+    summary: "Delete a share link",
+    description: "The link stops working.",
+    tag: "Workflows",
+    params: s.shareParam,
+    response: s.deleted,
+    async handler(ctx, { params }) {
+      return { deleted: await deleteWorkflowShare(ctx, params.token) };
     },
   }),
   defineRoute({

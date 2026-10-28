@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-import { and, asc, eq, isNotNull, sql } from "drizzle-orm";
+import { and, asc, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import { apiKeys } from "./api-keys";
 import type { BlobSetup } from "./blob-setup";
 import type { Db } from "./client";
@@ -11,6 +11,7 @@ import {
   run,
   trigger,
   workflow,
+  workflowShare,
 } from "./schema";
 import { credentials } from "./scoped-credentials";
 import { runs } from "./scoped-runs";
@@ -33,6 +34,7 @@ export type {
   GraphTriggerNode,
   TriggerRow,
   WorkflowRow,
+  WorkflowShareRow,
   WorkflowVersionRow,
 } from "./scoped-workflows";
 
@@ -93,6 +95,34 @@ export async function findWebhookTrigger(db: Db, token: string) {
   if (!row) return null;
   const config = row.config as Record<string, unknown>;
   return { ...row, nodeId: String(config.nodeId ?? ""), nodeType: String(config.nodeType ?? "") };
+}
+
+/** The share link of a token. The caller has no session. Null when the token is unknown. */
+export async function findWorkflowShare(db: Db, token: string) {
+  const [row] = await db
+    .select({
+      file: workflowShare.file,
+      passwordHash: workflowShare.passwordHash,
+      singleUse: workflowShare.singleUse,
+      usedAt: workflowShare.usedAt,
+    })
+    .from(workflowShare)
+    .where(eq(workflowShare.id, token))
+    .limit(1);
+  return row ?? null;
+}
+
+/**
+ * Marks a single-use share link as used and returns its file. Null when another read used it
+ * first, so only one read gets the file.
+ */
+export async function useWorkflowShare(db: Db, token: string) {
+  const [row] = await db
+    .update(workflowShare)
+    .set({ usedAt: new Date() })
+    .where(and(eq(workflowShare.id, token), isNull(workflowShare.usedAt)))
+    .returning({ file: workflowShare.file });
+  return row ?? null;
 }
 
 /** Resolve a project slug to an organization the user belongs to. Null if not a member. */

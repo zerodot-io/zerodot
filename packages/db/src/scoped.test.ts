@@ -7,10 +7,12 @@ import {
   ConflictError,
   createDb,
   findWebhookTrigger,
+  findWorkflowShare,
   forOrganization,
   rotateSecretKey,
   runMigrations,
   schema,
+  useWorkflowShare,
 } from "./index";
 
 const url = process.env.DATABASE_URL;
@@ -51,6 +53,50 @@ describe("forOrganization", { skip: !url }, () => {
     assert.equal(await b.workflows.remove(wf.id), false);
     assert.equal((await b.workflows.list()).items.length, 0);
     assert.equal((await a.workflows.get(wf.id))?.name, "one");
+  });
+
+  it("finds names with a number after them", async () => {
+    const a = forOrganization(db, "o1");
+    for (const n of ["Sync", "Sync 2", "Syncer", "Other"]) await a.workflows.create({ name: n });
+    assert.deepEqual((await a.workflows.namesLike("Sync")).sort(), ["Sync", "Sync 2"]);
+    assert.deepEqual(await forOrganization(db, "o2").workflows.namesLike("Sync"), []);
+  });
+
+  it("shares a workflow at many links", async () => {
+    const a = forOrganization(db, "o1");
+    const b = forOrganization(db, "o2");
+    const wf = await a.workflows.create({ name: "shared" });
+    assert.deepEqual(await a.workflows.listShares(wf.id), []);
+    const one = await a.workflows.createShare({
+      workflowId: wf.id,
+      file: { v: 1 },
+      createdBy: null,
+    });
+    const two = await a.workflows.createShare({
+      workflowId: wf.id,
+      file: { v: 1 },
+      createdBy: null,
+      label: "Buyer",
+      singleUse: true,
+    });
+    assert.notEqual(one.id, two.id);
+    assert.equal((await a.workflows.listShares(wf.id)).length, 2);
+    assert.deepEqual(await b.workflows.listShares(wf.id), []);
+    assert.equal(await b.workflows.getShare(one.id), null);
+    assert.equal(await b.workflows.updateShare(one.id, { passwordHash: "x" }), null);
+    assert.equal(await b.workflows.removeShare(one.id), false);
+
+    await a.workflows.updateShare(one.id, { file: { v: 2 }, passwordHash: "salt:hash" });
+    assert.deepEqual((await findWorkflowShare(db, one.id))?.file, { v: 2 });
+    assert.equal((await findWorkflowShare(db, one.id))?.passwordHash, "salt:hash");
+
+    assert.deepEqual((await useWorkflowShare(db, two.id))?.file, { v: 1 });
+    assert.equal(await useWorkflowShare(db, two.id), null);
+    assert.ok((await findWorkflowShare(db, two.id))?.usedAt);
+
+    assert.equal(await a.workflows.removeShare(one.id), true);
+    assert.equal(await findWorkflowShare(db, one.id), null);
+    assert.ok(await findWorkflowShare(db, two.id));
   });
 
   it("pages with cursor", async () => {

@@ -63,3 +63,34 @@ export const workflowVersion = pgTable(
   },
   (t) => [unique("workflow_version_unique").on(t.workflowId, t.version)],
 );
+
+/**
+ * A public link to a copy of a workflow. The copy is a `.zerodot.json` file, made when the link
+ * is made or updated. It has no variable values and no credential data. A workflow can have many
+ * links, for example one for each buyer.
+ */
+export const workflowShare = pgTable(
+  "workflow_share",
+  {
+    /** The random token in the link. */
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    workflowId: uuid("workflow_id")
+      .notNull()
+      .references(() => workflow.id, { onDelete: "cascade" }),
+    /** A name for the owner, for example the name of the buyer. */
+    label: text("label"),
+    file: jsonb("file").notNull(),
+    /** Scrypt hash of the password, as `salt:hash` in hex. Null: anyone with the link can read it. */
+    passwordHash: text("password_hash"),
+    /** The link works for one read. Then `usedAt` is set and the link stops working. */
+    singleUse: boolean("single_use").notNull().default(false),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    createdBy: text("created_by").references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("workflow_share_workflow_idx").on(t.organizationId, t.workflowId, t.createdAt)],
+);
