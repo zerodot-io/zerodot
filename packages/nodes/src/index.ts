@@ -30,7 +30,6 @@ import flowNoop from "./flow-noop";
 import flowRespond from "./flow-respond";
 import flowStopError from "./flow-stop-error";
 import ftp from "./ftp";
-import { githubNodes } from "./github";
 import httpRequest from "./http-request";
 import logicIf from "./logic-if";
 import logicSwitch from "./logic-switch";
@@ -109,7 +108,6 @@ export const nodes: NodeDefinition[] = [
   tableUpsert,
   tableDelete,
   ...telegramNodes,
-  ...githubNodes,
 ];
 
 export * from "./credentials";

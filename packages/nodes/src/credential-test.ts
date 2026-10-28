@@ -16,24 +16,6 @@ const TIMEOUT_MS = 10_000;
 const text = (value: unknown): string | undefined =>
   typeof value === "string" && value !== "" ? value : undefined;
 
-const GITHUB_API = "https://api.github.com";
-
-async function checkGithub({ data }: ResolvedCredential): Promise<void> {
-  const token = text(data.accessToken);
-  if (!token) throw new Error("The credential is not connected to an account yet");
-  const base = (text(data.server) ?? GITHUB_API).replace(/\/+$/, "");
-  const response = await fetch(`${base}/user`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: "application/vnd.github+json",
-      "User-Agent": "zerodot",
-    },
-    signal: AbortSignal.timeout(TIMEOUT_MS),
-  });
-  if (response.status === 401) throw new Error("GitHub did not accept the token");
-  if (!response.ok) throw new Error(`GitHub answered with status ${response.status}`);
-}
-
 async function checkTelegram({ data }: ResolvedCredential): Promise<void> {
   const token = text(data.accessToken);
   if (!token) throw new Error('The credential has no "accessToken"');
@@ -93,8 +75,6 @@ async function checkImap(credential: ResolvedCredential): Promise<void> {
 }
 
 const checks: Record<string, (credential: ResolvedCredential) => Promise<void>> = {
-  "github.token": checkGithub,
-  "github.oauth2": checkGithub,
   "telegram.bot": checkTelegram,
   ssh: checkSsh,
   ftp: checkFtp,

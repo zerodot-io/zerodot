@@ -452,53 +452,6 @@ describe("oauth2.generic credential", () => {
   });
 });
 
-describe("github.oauth2 credential", () => {
-  const base = { clientId: "id", clientSecret: "secret" };
-
-  it("uses github.com and default scopes", () => {
-    assert.equal(validateCredentialData("github.oauth2", base), null);
-    assert.deepEqual(oauth2ConfigOf("github.oauth2", base), {
-      authUrl: "https://github.com/login/oauth/authorize",
-      tokenUrl: "https://github.com/login/oauth/access_token",
-      scopes: ["repo", "read:user"],
-      authentication: "body",
-      pkce: true,
-    });
-  });
-
-  it("takes scopes separated by spaces or commas", () => {
-    assert.deepEqual(
-      oauth2ConfigOf("github.oauth2", { ...base, scope: "gist, user  workflow" })?.scopes,
-      ["gist", "user", "workflow"],
-    );
-  });
-
-  it("uses the host of GitHub Enterprise Server", () => {
-    const config = oauth2ConfigOf("github.oauth2", {
-      ...base,
-      server: "https://ghe.example.com/api/v3",
-    });
-    assert.equal(config?.authUrl, "https://ghe.example.com/login/oauth/authorize");
-    assert.equal(config?.tokenUrl, "https://ghe.example.com/login/oauth/access_token");
-  });
-
-  it("rejects a server that is not a URL, and token fields from a client", () => {
-    assert.match(
-      String(validateCredentialData("github.oauth2", { ...base, server: "nope" })),
-      /server/,
-    );
-    assert.equal(oauth2ConfigOf("github.oauth2", { ...base, server: "nope" }), null);
-    assert.match(
-      String(validateCredentialData("github.oauth2", { ...base, refreshToken: "r" })),
-      /set by the server/,
-    );
-  });
-
-  it("is in the catalog", () => {
-    assert.equal(credentialTypeCatalog.find((t) => t.type === "github.oauth2")?.oauth2, true);
-  });
-});
-
 describe("code.js", () => {
   const def = node("code.js");
 

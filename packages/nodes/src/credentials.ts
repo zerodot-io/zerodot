@@ -46,31 +46,6 @@ export const JWT_ALGORITHMS = [
 const text = (value: unknown): string | undefined =>
   typeof value === "string" && value !== "" ? value : undefined;
 
-const GITHUB_API = "https://api.github.com";
-const GITHUB_DEFAULT_SCOPES = ["repo", "read:user"];
-
-/**
- * GitHub, and GitHub Enterprise Server when `server` is set (its API address, for example
- * `https://ghe.example.com/api/v3`). The sign-in pages are on the host of the server.
- */
-const githubOAuth2: OAuth2Resolver = (data) => {
-  const server = text(data.server) ?? GITHUB_API;
-  let origin: string;
-  try {
-    origin = server === GITHUB_API ? "https://github.com" : new URL(server).origin;
-  } catch {
-    return null;
-  }
-  const scope = text(data.scope);
-  return {
-    authUrl: `${origin}/login/oauth/authorize`,
-    tokenUrl: `${origin}/login/oauth/access_token`,
-    scopes: scope ? scope.split(/[\s,]+/).filter(Boolean) : GITHUB_DEFAULT_SCOPES,
-    authentication: "body",
-    pkce: true,
-  };
-};
-
 export const credentialTypes: CredentialTypeDefinition[] = [
   {
     type: "http.basic",
@@ -131,36 +106,6 @@ export const credentialTypes: CredentialTypeDefinition[] = [
     serverFields: [...OAUTH2_TOKEN_FIELDS],
     oauth2: "custom",
     icon: "KeyRound",
-  },
-  {
-    type: "github.token",
-    label: "GitHub access token",
-    fields: z.object({
-      accessToken: z.string().min(1).meta({ placeholder: "ghp_…" }),
-      /** The API address of GitHub Enterprise Server. Empty means github.com. */
-      server: z.url().optional().meta({ placeholder: "https://api.github.com" }),
-    }),
-    secretFields: ["accessToken"],
-    icon: "KeyRound",
-    iconUrl: "/icons/github.svg",
-  },
-  {
-    type: "github.oauth2",
-    label: "GitHub OAuth2",
-    fields: z.object({
-      clientId: z.string().min(1),
-      clientSecret: z.string().min(1),
-      /** The API address of GitHub Enterprise Server. Empty means github.com. */
-      server: z.url().optional().meta({ placeholder: "https://api.github.com" }),
-      /** Scopes, separated by spaces. Empty means `repo read:user`. */
-      scope: z.string().optional().meta({ placeholder: "repo read:user" }),
-      ...oauth2TokenShape,
-    }),
-    secretFields: ["clientSecret", "accessToken", "refreshToken"],
-    serverFields: [...OAUTH2_TOKEN_FIELDS],
-    oauth2: githubOAuth2,
-    icon: "KeyRound",
-    iconUrl: "/icons/github.svg",
   },
   {
     type: "smtp",
