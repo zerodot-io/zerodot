@@ -713,6 +713,27 @@ export const installNodePackageFn = createServerFn({ method: "POST" })
     return installNodePackage(await adminHeaders(), data);
   });
 
+const updateNodePackageInput = z.object({
+  name: z.string().min(1).max(214),
+  version: z.string().regex(/^\d+\.\d+\.\d+$/),
+});
+
+/** The versions of an installed package that one can switch to. Instance admins only. */
+export const getNodePackageVersionsFn = createServerFn({ method: "GET" })
+  .validator(packageNameInput)
+  .handler(async ({ data }) => {
+    const { nodePackageVersions } = await nodePackageServer();
+    return nodePackageVersions(await adminHeaders(), data);
+  });
+
+/** Moves an installed package to another version, up or down. Needs no restart. */
+export const updateNodePackageFn = createServerFn({ method: "POST" })
+  .validator(updateNodePackageInput)
+  .handler(async ({ data }) => {
+    const { updateNodePackage } = await nodePackageServer();
+    return updateNodePackage(await adminHeaders(), data);
+  });
+
 export const uninstallNodePackageFn = createServerFn({ method: "POST" })
   .validator(packageNameInput)
   .handler(async ({ data }) => {

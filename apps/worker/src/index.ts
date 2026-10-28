@@ -17,7 +17,7 @@ import {
 } from "@zerodot/db";
 import { createSandboxClient } from "@zerodot/engine";
 import { registry } from "@zerodot/nodes";
-import { createPackageSyncer, mergeWanted } from "@zerodot/nodes/install";
+import { createPackageSyncer, mergeWanted, onPackageUnload } from "@zerodot/nodes/install";
 import { parseNodePackages } from "@zerodot/nodes/load";
 import {
   APP_VERSION,
@@ -392,6 +392,9 @@ syncRunRetention(systemQueue).catch((error) =>
 syncRunSweep(systemQueue).catch((error) =>
   log("error", "runs.sweep_sync_failed", { error: String(error) }),
 );
+
+// A package changes or goes: close its listeners first. The next pass starts them with the new code.
+onPackageUnload((_name, types) => listenManager.stopTypes(types));
 
 void listenManager.reconcile();
 const listenTimer = setInterval(() => void listenManager.reconcile(), LISTEN_TICK_MS);

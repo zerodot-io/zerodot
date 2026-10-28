@@ -8,16 +8,23 @@ import {
   DialogHeader,
   DialogTitle,
   Input,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
   toast,
 } from "@zerodot/ui";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { addServerCatalog } from "../lib/flow";
 import {
   getAvailableNodePackagesFn,
   getExtraCatalogFn,
   getNodePackagesFn,
+  getNodePackageVersionsFn,
   installNodePackageFn,
   uninstallNodePackageFn,
+  updateNodePackageFn,
 } from "../server/fns";
 import { NodeIcon } from "./node-icon";
 
@@ -69,16 +76,7 @@ function InstallConfirm({
   );
 }
 
-type Overview = Awaited<ReturnType<typeof getNodePackagesFn>>;
-type PackageView = Overview["packages"][number];
-
-const STATUS: Record<PackageView["status"], { text: string; dot: string }> = {
-  loaded: { text: "Installed", dot: "bg-emerald-500" },
-  error: { text: "Failed to load", dot: "bg-destructive" },
-  "not-loaded": { text: "Not loaded yet", dot: "bg-amber-500" },
-  available: { text: "Not installed", dot: "bg-muted-foreground/40" },
-};
-
+/** Numbers of a version, to tell an update from a downgrade. Plain numbers only. */
 const parts = (version: string): number[] => version.split(".").map((n) => Number.parseInt(n, 10));
 
 /** True when `latest` is a higher version than `installed`. Plain numbers only. */
@@ -95,6 +93,101 @@ function isNewer(latest: string | null, installed: string | null): boolean {
   return false;
 }
 
+/** Picks another version of an installed package, newer or older. The change needs no restart. */
+function VersionDialog({
+  item,
+  busy,
+  onCancel,
+  onConfirm,
+}: {
+  item: { name: string; label: string; version: string };
+  busy: boolean;
+  onCancel: () => void;
+  onConfirm: (version: string) => void;
+}) {
+  const [versions, setVersions] = useState<string[] | null>(null);
+  const [target, setTarget] = useState<string | null>(null);
+  const close = useRef(onCancel);
+  close.current = onCancel;
+
+  useEffect(() => {
+    getNodePackageVersionsFn({ data: { name: item.name } }).then(
+      (found) => {
+        setVersions(found.versions);
+        setTarget(found.versions.find((version) => version !== item.version) ?? null);
+      },
+      (error) => {
+        toast.error(errorText(error));
+        close.current();
+      },
+    );
+  }, [item.name, item.version]);
+
+  const newer = target !== null && isNewer(target, item.version);
+  const action = target === null ? "Change" : newer ? "Update" : "Downgrade";
+  return (
+    <Dialog open onOpenChange={(open) => !open && !busy && onCancel()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Change version of {item.label}</DialogTitle>
+          <DialogDescription>
+            The new version runs at once, with no restart. Open workflow runs finish with the old
+            version. The package code runs on the server with the same rights as zerodot. If the new
+            version does not load, the old one stays.
+          </DialogDescription>
+        </DialogHeader>
+        {versions === null ? (
+          <p className="text-muted-foreground">Loading versions</p>
+        ) : (
+          <div className="flex items-center gap-3">
+            <span className="tabular-nums text-muted-foreground">{item.version}</span>
+            <span aria-hidden="true">→</span>
+            <Select
+              items={versions.map((version) => ({ value: version, label: version }))}
+              value={target ?? ""}
+              onValueChange={(next) => setTarget(next)}
+            >
+              <SelectTrigger className="w-40" aria-label="Version">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {versions.map((version) => (
+                  <SelectItem key={version} value={version} disabled={version === item.version}>
+                    {version}
+                    {version === item.version ? " (installed)" : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="outline" disabled={busy} onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            disabled={busy || target === null}
+            onClick={() => target && onConfirm(target)}
+          >
+            {busy ? "Changing" : action}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+type Overview = Awaited<ReturnType<typeof getNodePackagesFn>>;
+type PackageView = Overview["packages"][number];
+
+const STATUS: Record<PackageView["status"], { text: string; dot: string }> = {
+  loaded: { text: "Installed", dot: "bg-emerald-500" },
+  error: { text: "Failed to load", dot: "bg-destructive" },
+  "not-loaded": { text: "Not loaded yet", dot: "bg-amber-500" },
+  available: { text: "Not installed", dot: "bg-muted-foreground/40" },
+};
+
 const matchesPackage = (item: PackageView, query: string): boolean =>
   `${item.label} ${item.name} ${item.description} ${item.nodes
     .map((node) => `${node.label} ${node.description ?? ""} ${node.type}`)
@@ -107,12 +200,14 @@ function PackageRow({
   canChange,
   busy,
   onInstall,
+  onVersion,
   onRemove,
 }: {
   item: PackageView;
   canChange: boolean;
   busy: boolean;
   onInstall: () => void;
+  onVersion: () => void;
   onRemove: () => void;
 }) {
   const installed = item.version !== null;
@@ -120,6 +215,7 @@ function PackageRow({
   const [open, setOpen] = useState(false);
   const summary = item.summary || item.description;
   const hasDetails = item.description !== "" || item.nodes.length > 0;
+  const hasUpdate = item.compatible && isNewer(item.latest, item.version);
   return (
     <li className="flex items-start gap-4 px-4 py-4">
       <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted">
@@ -133,9 +229,7 @@ function PackageRow({
             {status.text}
             {installed && <span className="tabular-nums">· {item.version}</span>}
           </span>
-          {isNewer(item.latest, item.version) && (
-            <Badge variant="secondary">Update {item.latest}</Badge>
-          )}
+          {hasUpdate && <Badge variant="secondary">Update {item.latest}</Badge>}
           {item.source === "env" && <Badge variant="outline">ZERODOT_NODE_PACKAGES</Badge>}
         </div>
         {summary && <p className="text-pretty">{summary}</p>}
@@ -173,14 +267,24 @@ function PackageRow({
       </div>
       {canChange &&
         (installed ? (
-          <Button
-            variant="outline"
-            disabled={busy || item.source === "env"}
-            title={item.source === "env" ? "Remove it from ZERODOT_NODE_PACKAGES" : undefined}
-            onClick={onRemove}
-          >
-            Remove
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              variant={hasUpdate ? "default" : "outline"}
+              disabled={busy || item.source === "env"}
+              title={item.source === "env" ? "Change it in ZERODOT_NODE_PACKAGES" : undefined}
+              onClick={onVersion}
+            >
+              {hasUpdate ? "Update" : "Version"}
+            </Button>
+            <Button
+              variant="outline"
+              disabled={busy || item.source === "env"}
+              title={item.source === "env" ? "Remove it from ZERODOT_NODE_PACKAGES" : undefined}
+              onClick={onRemove}
+            >
+              Remove
+            </Button>
+          </div>
         ) : (
           <Button disabled={busy} onClick={onInstall}>
             {busy ? "Installing" : "Install"}
@@ -225,6 +329,7 @@ export function NodePackagesSection() {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const [confirm, setConfirm] = useState<PackageView | null>(null);
+  const [versionOf, setVersionOf] = useState<PackageView | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -250,6 +355,7 @@ export function NodePackagesSection() {
     } finally {
       setBusy(null);
       setConfirm(null);
+      setVersionOf(null);
     }
   }
 
@@ -273,6 +379,7 @@ export function NodePackagesSection() {
       canChange={overview.installEnabled}
       busy={busy === item.name}
       onInstall={() => setConfirm(item)}
+      onVersion={() => setVersionOf(item)}
       onRemove={() =>
         void change(
           item.name,
@@ -345,6 +452,20 @@ export function NodePackagesSection() {
         </p>
       )}
 
+      {versionOf?.version && (
+        <VersionDialog
+          item={{ name: versionOf.name, label: versionOf.label, version: versionOf.version }}
+          busy={busy === versionOf.name}
+          onCancel={() => setVersionOf(null)}
+          onConfirm={(version) =>
+            void change(
+              versionOf.name,
+              () => updateNodePackageFn({ data: { name: versionOf.name, version } }),
+              `${versionOf.label} is now ${version}`,
+            )
+          }
+        />
+      )}
       {confirm && (
         <InstallConfirm
           item={{ name: confirm.name, label: confirm.label, version: confirm.latest }}

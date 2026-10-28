@@ -152,12 +152,26 @@ export function registerCredentialType(definition: CredentialTypeDefinition): vo
   addedCredentialTypeCatalog.push(entry);
 }
 
-/** The browser calls this with the entries that the server added. A known type is skipped. */
+/** Removes credential types that `registerCredentialType` added, for example on a package upgrade. */
+export function unregisterCredentialTypes(types: string[]): void {
+  for (const type of types) {
+    if (!addedCredentialTypeCatalog.some((entry) => entry.type === type)) continue;
+    credentialTypeByName.delete(type);
+    for (const list of [credentialTypes, credentialTypeCatalog, addedCredentialTypeCatalog] as {
+      type: string;
+    }[][]) {
+      const at = list.findIndex((entry) => entry.type === type);
+      if (at >= 0) list.splice(at, 1);
+    }
+  }
+}
+
+/** The browser calls this with the entries that the server added. A known entry is replaced. */
 export function mergeCredentialTypeCatalog(entries: CredentialTypeCatalogEntry[]): void {
   for (const entry of entries) {
-    if (!credentialTypeCatalog.some((known) => known.type === entry.type)) {
-      credentialTypeCatalog.push(entry);
-    }
+    const at = credentialTypeCatalog.findIndex((known) => known.type === entry.type);
+    if (at >= 0) credentialTypeCatalog[at] = entry;
+    else credentialTypeCatalog.push(entry);
   }
 }
 

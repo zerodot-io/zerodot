@@ -4,9 +4,11 @@ import { SDK_VERSION, satisfiesSdk } from "@zerodot/node-sdk";
 import { catalog as nodeCatalog } from "@zerodot/nodes";
 import {
   type CatalogPackage,
+  compatibleVersions,
   createPackageSyncer,
   DEFAULT_CATALOG_URL,
   fetchCatalog,
+  fetchPackument,
   installedVersion,
   installFromNpm,
   isOfficialPackage,
@@ -17,7 +19,9 @@ import {
   reconcilePackages,
   resolveVersion,
   type SyncLog,
+  switchVersion,
   uninstallFromNpm,
+  withInstallLock,
 } from "@zerodot/nodes/install";
 import { parseNodePackages } from "@zerodot/nodes/load";
 import { listenForNodesChanged, publishNodesChanged } from "@zerodot/queue";
@@ -65,6 +69,8 @@ export type NodePackageView = {
   error?: string;
   /** The newest version in the catalog. */
   latest: string | null;
+  /** False when `latest` needs a newer zerodot, so the update badge must not show. */
+  compatible: boolean;
   icon: string | null;
   iconUrl: string | null;
   nodes: { type: string; label: string; description?: string }[];
@@ -104,6 +110,7 @@ export async function nodePackagesOverview(headers: Headers): Promise<NodePackag
       source: null,
       status: "available",
       latest: item.version,
+      compatible: satisfiesSdk(item.sdk, SDK_VERSION),
       icon: item.icon ?? null,
       iconUrl: item.iconUrl ?? null,
       nodes: item.nodes,
@@ -120,6 +127,7 @@ export async function nodePackagesOverview(headers: Headers): Promise<NodePackag
       source: null,
       status: "not-loaded" as const,
       latest: null,
+      compatible: false,
       icon: null,
       iconUrl: null,
       nodes: [],
@@ -203,6 +211,59 @@ export async function uninstallNodePackage(
     targetId: input.name,
   });
   await publishNodesChanged(redis);
+}
+
+/** Installable versions of an installed package: the ones that work with this zerodot, newest first. */
+export async function nodePackageVersions(
+  headers: Headers,
+  input: { name: string },
+): Promise<{ installed: string | null; versions: string[] }> {
+  await requireInstanceAdmin(headers);
+  checkName(input.name);
+  return {
+    installed: installedVersion(nodesDir(), input.name),
+    versions: compatibleVersions(await fetchPackument(input.name)),
+  };
+}
+
+/**
+ * Moves an installed package to another version, up or down, and runs it in every process without
+ * a restart. The old version comes back when the new one does not load.
+ */
+export async function updateNodePackage(
+  headers: Headers,
+  input: { name: string; version: string },
+): Promise<{ name: string; from: string; to: string; added: string[] }> {
+  const actor = await requireInstanceAdmin(headers);
+  checkName(input.name);
+  if (envPackages().includes(input.name)) {
+    throw conflict("This package is in ZERODOT_NODE_PACKAGES. Change it there");
+  }
+  const { db, redis } = await getServices();
+  const saved = await getNodePackages(db);
+  const current = saved.find((item) => item.name === input.name);
+  if (!current) throw notFound("Package");
+  const dir = nodesDir();
+  if (input.version === current.version) throw badRequest("This version is installed already");
+  if (!compatibleVersions(await fetchPackument(input.name)).includes(input.version)) {
+    throw badRequest(`Version ${input.version} does not work with this zerodot`);
+  }
+  const report = await withInstallLock(dir, () =>
+    switchVersion(dir, input.name, input.version),
+  ).catch((error: unknown) => {
+    throw conflict(error instanceof Error ? error.message : "The package did not load");
+  });
+  const rest = saved.filter((item) => item.name !== input.name);
+  await setNodePackages(db, [...rest, { name: input.name, version: input.version }]);
+  await recordAudit(db, {
+    actor,
+    action: "node_package.update",
+    targetType: "node_package",
+    targetId: input.name,
+    details: { from: current.version, to: input.version },
+  });
+  await publishNodesChanged(redis);
+  return { name: input.name, from: current.version, to: input.version, added: report.added };
 }
 
 // ---- The Add node list. Any signed-in person can see what is available. ----

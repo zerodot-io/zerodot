@@ -1,10 +1,20 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { execFile } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { createRequire } from "node:module";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { SDK_VERSION, satisfiesSdk } from "@zerodot/node-sdk";
+import { unregisterCredentialTypes } from "./credentials";
 import {
   loadNodePackages,
   type ManifestReader,
@@ -35,7 +45,7 @@ function ensureNodesDir(dir: string): void {
   }
 }
 
-type Packument = {
+export type Packument = {
   versions?: Record<string, { zerodot?: PackageManifest } | undefined>;
 };
 
@@ -58,6 +68,22 @@ export function pickVersion(packument: Packument, sdkVersion: string = SDK_VERSI
     if (!best || compareTriples(parts, best.parts) > 0) best = { version, parts };
   }
   return best?.version ?? null;
+}
+
+/** Every version (no pre-release) whose `zerodot.sdk` range fits this zerodot, newest first. */
+export function compatibleVersions(
+  packument: Packument,
+  sdkVersion: string = SDK_VERSION,
+): string[] {
+  const found: { version: string; parts: Triple }[] = [];
+  for (const [version, meta] of Object.entries(packument.versions ?? {})) {
+    const parts = parseVersion(version);
+    const range = meta?.zerodot?.sdk;
+    if (parts && typeof range === "string" && satisfiesSdk(range, sdkVersion)) {
+      found.push({ version, parts });
+    }
+  }
+  return found.sort((a, b) => compareTriples(b.parts, a.parts)).map((item) => item.version);
 }
 
 export async function fetchPackument(
@@ -210,30 +236,167 @@ export const manifestReaderFor =
 const lastReports = new Map<string, NodePackageReport>();
 export const packageReports = (): NodePackageReport[] => [...lastReports.values()];
 
-/** Node types that each loaded package added. A restart clears it. */
-const loadedTypes = new Map<string, string[]>();
-export const isLoaded = (name: string): boolean => loadedTypes.has(name);
+type Loaded = {
+  /** Version on disk when the package was loaded. */
+  version: string | null;
+  nodes: string[];
+  credentialTypes: string[];
+  /** The file that was loaded, and how. */
+  entry: string;
+  format: "cjs" | "esm";
+};
 
-/** Loads installed packages into this process. A package that is loaded already is skipped. */
+/** What each loaded package added. A restart clears it. */
+const loaded = new Map<string, Loaded>();
+export const isLoaded = (name: string): boolean => loaded.has(name);
+
+/** The version of a package that this process runs, or null. */
+export const loadedVersion = (name: string): string | null => loaded.get(name)?.version ?? null;
+
+/** Packages that were loaded as ES modules. A process cannot free those: only a restart does. */
+export const esmPackages = (): string[] =>
+  [...loaded].filter(([, item]) => item.format === "esm").map(([name]) => name);
+
+const isCommonJs = (entry: string): boolean => entry.endsWith(".cjs");
+
+const SHARED_MODULE = /[\\/]node_modules[\\/](zod|@zerodot[\\/][^\\/]+)[\\/]/;
+
+/**
+ * Forgets the modules a package loaded, so the next `require` reads the files again and the old
+ * code can be freed. It walks the modules that the entry required and removes the ones inside
+ * the nodes folder. zod and the zerodot packages stay: all packages share one copy.
+ */
+function evictModules(dir: string, entry: string): void {
+  // The cache is keyed by real paths. A link in the path of the nodes folder would hide the modules.
+  const real = realpathSync(entry);
+  const cache = createRequire(real).cache;
+  const root = cache[real];
+  if (!root) return;
+  const inside = join(realpathSync(dir), "node_modules");
+  const gone = new Set<NodeJS.Module>();
+  const walk = (module: NodeJS.Module): void => {
+    if (gone.has(module)) return;
+    const file = module.filename;
+    if (module !== root && (!file.startsWith(inside) || SHARED_MODULE.test(file))) return;
+    gone.add(module);
+    for (const child of module.children) walk(child);
+  };
+  walk(root);
+  for (const module of gone) delete cache[module.filename];
+  // A module that stays holds its children in a list. Without this the old code stays reachable.
+  for (const module of Object.values(cache)) {
+    if (module) module.children = module.children.filter((child) => !gone.has(child));
+  }
+}
+
+/** What `importPackage` found for the package that loads now. */
+const pending = new Map<string, Pick<Loaded, "version" | "entry" | "format">>();
+
+/** How many times a package was loaded as an ES module. It makes a new address each time. */
+let esmLoads = 0;
+
+async function importPackage(dir: string, name: string): Promise<Record<string, unknown>> {
+  const entry = packageEntry(dir, name);
+  const version = installedVersion(dir, name);
+  if (isCommonJs(entry)) {
+    // The cache has no entry for this file, so `require` reads the file from disk.
+    const exports = createRequire(entry)(entry) as Record<string, unknown>;
+    pending.set(name, { version, entry, format: "cjs" });
+    return exports;
+  }
+  // An ES module cannot be removed from memory. A new address loads a new copy (a small leak).
+  pending.set(name, { version, entry, format: "esm" });
+  return import(/* @vite-ignore */ `${pathToFileURL(entry).href}?v=${++esmLoads}`);
+}
+
+type UnloadHook = (name: string, nodeTypes: string[]) => Promise<void> | void;
+const unloadHooks = new Set<UnloadHook>();
+
+/**
+ * Runs `hook` before a package is unloaded, with the node types it added. A process closes what
+ * it keeps open for those nodes (for example listeners). Returns a function that removes the hook.
+ */
+export function onPackageUnload(hook: UnloadHook): () => void {
+  unloadHooks.add(hook);
+  return () => unloadHooks.delete(hook);
+}
+
+/**
+ * Loads installed packages into this process. A package that is loaded already is skipped, unless
+ * the version on disk changed: then it is unloaded and loaded again.
+ */
 export async function loadInstalled(dir: string, names: string[]): Promise<NodePackageReport[]> {
-  const todo = names.filter((name) => !loadedTypes.has(name));
+  for (const name of names) {
+    const current = loaded.get(name);
+    if (current && current.version !== installedVersion(dir, name)) await unloadPackage(name, dir);
+  }
+  const todo = names.filter((name) => !loaded.has(name));
   const reports = await loadNodePackages(
     todo,
-    (name) => import(/* @vite-ignore */ pathToFileURL(packageEntry(dir, name)).href),
+    (name) => importPackage(dir, name),
     manifestReaderFor(dir),
   );
   for (const report of reports) {
+    const found = pending.get(report.name);
+    pending.delete(report.name);
     lastReports.set(report.name, report);
-    if (!report.error) loadedTypes.set(report.name, report.added);
+    if (report.error) {
+      // The files are loaded. Remove them again, so a failed package leaves nothing in memory.
+      if (found?.format === "cjs") evictModules(dir, found.entry);
+      continue;
+    }
+    if (found) {
+      loaded.set(report.name, {
+        ...found,
+        nodes: report.added,
+        credentialTypes: report.credentialTypes,
+      });
+    }
   }
   return reports;
 }
 
-/** Removes the nodes of a package from this process. Credential types stay until a restart. */
-export async function unloadPackage(name: string): Promise<void> {
+/**
+ * Removes a package from this process: its nodes, its credential types, and its code in memory.
+ * A hook closes what the process keeps open for those nodes first.
+ */
+export async function unloadPackage(name: string, dir: string = nodesDir()): Promise<void> {
+  const item = loaded.get(name);
+  if (!item) return;
+  for (const hook of unloadHooks) await hook(name, item.nodes);
   const { unregisterNodes } = await import("./index");
-  unregisterNodes(loadedTypes.get(name) ?? []);
-  loadedTypes.delete(name);
+  unregisterNodes(item.nodes);
+  unregisterCredentialTypes(item.credentialTypes);
+  if (item.format === "cjs") evictModules(dir, item.entry);
+  loaded.delete(name);
+}
+
+/**
+ * Moves an installed package to `version` (newer or older) and runs it in this process. When the
+ * new version does not install or load, the old version comes back, in the files and in memory,
+ * and the error is thrown. The caller holds the install lock.
+ */
+export async function switchVersion(
+  dir: string,
+  name: string,
+  version: string,
+  deps: { install?: typeof installFromNpm } = {},
+): Promise<NodePackageReport> {
+  const install = deps.install ?? installFromNpm;
+  const from = installedVersion(dir, name);
+  try {
+    await install(dir, name, version);
+    const [report] = await loadInstalled(dir, [name]);
+    if (report && !report.error) return report;
+    throw new Error(report?.error ?? "The package did not load");
+  } catch (error) {
+    if (from) {
+      await install(dir, name, from)
+        .then(() => loadInstalled(dir, [name]))
+        .catch(() => undefined);
+    }
+    throw error;
+  }
 }
 
 export type WantedPackage = { name: string; version?: string };
@@ -303,9 +466,9 @@ export async function reconcilePackages(
   deps?: Parameters<typeof syncPackages>[2],
 ): Promise<SyncResult> {
   const names = new Set(wanted.map((item) => item.name));
-  for (const name of [...loadedTypes.keys()]) {
+  for (const name of [...loaded.keys()]) {
     if (!names.has(name)) {
-      await unloadPackage(name);
+      await unloadPackage(name, dir);
       lastReports.delete(name);
     }
   }

@@ -148,10 +148,12 @@ export const catalog: NodeCatalogEntry[] = nodes.map(catalogEntry);
 /** The entries that `registerNodes` added. The browser does not have them in its bundle. */
 export const addedCatalog: NodeCatalogEntry[] = [];
 
-/** The browser calls this with the entries that the server added. A known type is skipped. */
+/** The browser calls this with the entries that the server added. A known entry is replaced. */
 export function mergeCatalog(entries: NodeCatalogEntry[]): void {
   for (const entry of entries) {
-    if (!catalog.some((known) => known.type === entry.type)) catalog.push(entry);
+    const at = catalog.findIndex((known) => known.type === entry.type);
+    if (at >= 0) catalog[at] = entry;
+    else catalog.push(entry);
   }
 }
 
