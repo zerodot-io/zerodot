@@ -381,6 +381,13 @@ export async function setWorkflowActive(ctx: ApiContext, workflowId: string, act
   return { active };
 }
 
+/** Removes the workflow with its versions and runs. Webhooks and schedules go first. */
+export async function deleteWorkflow(ctx: ApiContext, workflowId: string) {
+  await requireWorkflow(ctx, workflowId);
+  await setWorkflowActive(ctx, workflowId, false);
+  return { deleted: await ctx.scope.workflows.remove(workflowId) };
+}
+
 async function enqueueOrFail(ctx: ApiContext, run: RunRow, mode: "production" | "test") {
   try {
     await ctx.services.enqueue({

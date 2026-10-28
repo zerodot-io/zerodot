@@ -4,6 +4,11 @@ import { createFileRoute, Link, redirect, useRouter } from "@tanstack/react-rout
 import {
   Badge,
   Button,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
   Input,
   Select,
   SelectContent,
@@ -14,10 +19,19 @@ import {
   toast,
 } from "@zerodot/ui";
 import { Bar, BarChart, BarXAxis, ChartTooltip, Grid, LineSparkline } from "@zerodot/ui/charts";
+import { Copy, Download, EllipsisVertical, ExternalLink, History, Trash2 } from "lucide-react";
 import { type ChangeEvent, type FormEvent, type ReactNode, useRef, useState } from "react";
 import { formatAge } from "../lib/admin-format";
 import { formatMs, formatPercent } from "../lib/insights";
-import { createWorkflowFn, importWorkflowFn, listWorkflowsFn, setActiveFn } from "../server/fns";
+import {
+  createWorkflowFn,
+  deleteWorkflowFn,
+  duplicateWorkflowFn,
+  exportWorkflowFn,
+  importWorkflowFn,
+  listWorkflowsFn,
+  setActiveFn,
+} from "../server/fns";
 import { getInsightsFn } from "../server/insights-fns";
 
 export const Route = createFileRoute("/p/$projectSlug/workflows/")({
@@ -158,6 +172,43 @@ function Workflows() {
     }
   }
 
+  async function onDuplicate(id: string, name: string) {
+    try {
+      await duplicateWorkflowFn({
+        data: { projectSlug, workflowId: id, name: `${name} copy`.slice(0, 120) },
+      });
+      await router.invalidate();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not duplicate the workflow");
+    }
+  }
+
+  async function onExport(id: string, name: string) {
+    try {
+      const file = await exportWorkflowFn({ data: { projectSlug, workflowId: id } });
+      const url = URL.createObjectURL(
+        new Blob([JSON.stringify(file, null, 2)], { type: "application/json" }),
+      );
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${name.replace(/[^\w-]+/g, "-")}.zerodot.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not export the workflow");
+    }
+  }
+
+  async function onDelete(id: string, name: string) {
+    if (!window.confirm(`Delete "${name}" and its runs? This cannot be undone.`)) return;
+    try {
+      await deleteWorkflowFn({ data: { projectSlug, workflowId: id } });
+      await router.invalidate();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not delete the workflow");
+    }
+  }
+
   const kpis = insights?.kpis.current;
   const rows = new Map((insights?.table ?? []).map((r) => [r.workflowId, r]));
   const activeCount = workflows.filter(isActive).length;
@@ -196,6 +247,8 @@ function Workflows() {
     });
 
   const series = insights?.series ?? [];
+  // A flat line for a workflow that did not run, so the rows stay aligned.
+  const idleTrend = series.length > 1 ? series.map(() => 0) : [0, 0];
   const chartData = series.map((p) => ({
     name: hourLabel(p.bucket),
     succeeded: p.succeeded,
@@ -300,7 +353,7 @@ function Workflows() {
         </Glance>
       )}
 
-      {chartData.length > 1 && (
+      {chartData.length > 1 && (kpis?.runs ?? 0) > 0 && (
         <div className="grid gap-3 lg:grid-cols-2">
           <ChartCard
             title="Runs per hour"
@@ -447,14 +500,18 @@ function Workflows() {
           {visible.map((w) => {
             const row = rows.get(w.id);
             const on = isActive(w);
+            const trend = row?.trend ?? idleTrend;
             return (
-              <li key={w.id} className="flex items-center transition-colors hover:bg-muted/50">
+              <li
+                key={w.id}
+                className="group flex items-center transition-colors hover:bg-muted/50"
+              >
                 <Link
                   to="/p/$projectSlug/workflows/$workflowId"
                   params={{ projectSlug, workflowId: w.id }}
-                  className="flex min-w-0 flex-1 items-center justify-between gap-4 py-3 pl-4"
+                  className="flex min-w-0 flex-1 items-center justify-between gap-6 py-5 pl-5"
                 >
-                  <span className="flex min-w-0 flex-col gap-0.5">
+                  <span className="flex min-w-0 flex-col gap-1.5">
                     <span className="flex items-center gap-2">
                       <span
                         role="img"
@@ -468,39 +525,37 @@ function Workflows() {
                         </Badge>
                       ))}
                     </span>
-                    <span className="truncate text-muted-foreground">
-                      {w.description || (on ? "Active" : "Inactive")}
-                    </span>
-                  </span>
-                  <span className="flex shrink-0 items-center gap-4 text-muted-foreground tabular-nums">
-                    {row ? (
-                      <>
-                        <LineSparkline
-                          data={row.trend.map((runs) => ({ runs }))}
-                          dataKey="runs"
-                          width={80}
-                          height={20}
-                          color="var(--chart-foreground-muted)"
-                          aria-label={`Runs for each hour: ${row.trend.join(", ")}`}
-                        />
-                        <span className="w-16 text-right">
-                          <span className="text-foreground">{row.runs}</span> runs
-                        </span>
-                        <span
-                          className={`w-16 text-right ${row.failed > 0 ? "text-destructive" : ""}`}
-                        >
-                          {row.failed > 0 ? `${row.failed} failed` : "no fails"}
-                        </span>
-                        <span className="w-16 text-right">
-                          {row.lastRunAt ? `${formatAge(now - row.lastRunAt.getTime())} ago` : "–"}
-                        </span>
-                      </>
-                    ) : (
-                      <span>No runs in 24h</span>
+                    {w.description && (
+                      <span className="truncate text-muted-foreground">{w.description}</span>
                     )}
                   </span>
+                  <span className="flex shrink-0 items-center gap-6 text-muted-foreground tabular-nums">
+                    <span className="w-16 text-right">
+                      {row && row.runs > 0 && (
+                        <>
+                          <span className="text-foreground">{row.runs}</span> runs
+                        </>
+                      )}
+                    </span>
+                    <span
+                      className={`w-16 text-right ${row && row.failed > 0 ? "text-destructive" : ""}`}
+                    >
+                      {row && row.failed > 0 ? `${row.failed} failed` : ""}
+                    </span>
+                    <span className="w-16 text-right">
+                      {row?.lastRunAt ? `${formatAge(now - row.lastRunAt.getTime())} ago` : ""}
+                    </span>
+                  </span>
                 </Link>
-                <div className="px-4">
+                <div className="flex items-center gap-5 px-5">
+                  <LineSparkline
+                    data={trend.map((runs) => ({ runs }))}
+                    dataKey="runs"
+                    width={80}
+                    height={20}
+                    color="var(--chart-foreground-muted)"
+                    aria-label={`Runs for each hour: ${trend.join(", ")}`}
+                  />
                   <Switch
                     aria-label={`${on ? "Turn off" : "Turn on"} ${w.name}`}
                     title={!w.published && !on ? "Publish the workflow first" : undefined}
@@ -508,6 +563,57 @@ function Workflows() {
                     disabled={!w.published && !on}
                     onCheckedChange={(next) => void onToggle(w.id, next)}
                   />
+                  <DropdownMenu>
+                    <DropdownMenuTrigger
+                      aria-label={`More actions for ${w.name}`}
+                      title="More"
+                      className="grid size-7 place-items-center rounded-md text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground"
+                    >
+                      <EllipsisVertical className="size-4" />
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem
+                        onClick={() =>
+                          void router.navigate({
+                            to: "/p/$projectSlug/workflows/$workflowId",
+                            params: { projectSlug, workflowId: w.id },
+                          })
+                        }
+                      >
+                        <ExternalLink />
+                        Open
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() =>
+                          void router.navigate({
+                            to: "/p/$projectSlug/runs",
+                            params: { projectSlug },
+                            search: { wf: w.id },
+                          })
+                        }
+                      >
+                        <History />
+                        View runs
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={() => void onDuplicate(w.id, w.name)}>
+                        <Copy />
+                        Duplicate
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => void onExport(w.id, w.name)}>
+                        <Download />
+                        Export
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        variant="destructive"
+                        onClick={() => void onDelete(w.id, w.name)}
+                      >
+                        <Trash2 />
+                        Delete
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               </li>
             );
