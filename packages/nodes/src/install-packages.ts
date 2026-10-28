@@ -24,13 +24,29 @@ import {
 
 const run = promisify(execFile);
 
-const NPM_REGISTRY = "https://registry.npmjs.org";
+const DEFAULT_NPM_REGISTRY = "https://registry.npmjs.org";
+
+/**
+ * The npm registry that packages come from. `ZERODOT_NPM_REGISTRY` sets another one, for example a
+ * private mirror. Version checks and installs both use it.
+ */
+export function npmRegistry(env: Record<string, string | undefined> = process.env): string {
+  return (env.ZERODOT_NPM_REGISTRY?.trim() || DEFAULT_NPM_REGISTRY).replace(/\/+$/, "");
+}
 const INSTALL_TIMEOUT_MS = 180_000;
 
 /** Only packages of the zerodot organization can be installed for now. */
 const OFFICIAL_PACKAGE = /^@zerodot\/[a-z0-9][a-z0-9-]*$/;
 export const isOfficialPackage = (name: string): boolean =>
   name.length <= 214 && OFFICIAL_PACKAGE.test(name);
+
+/**
+ * A valid npm package name, scoped or not. A package from a community registry can have any such
+ * name. The first character is a letter or a digit, so the name cannot be read as an npm option.
+ */
+const PACKAGE_NAME = /^(@[a-z0-9][a-z0-9._~-]*\/)?[a-z0-9][a-z0-9._~-]*$/;
+export const isPackageName = (name: string): boolean =>
+  name.length <= 214 && PACKAGE_NAME.test(name);
 
 /** The folder where installed packages live. It must survive a restart. */
 export function nodesDir(env: Record<string, string | undefined> = process.env): string {
@@ -91,10 +107,12 @@ export async function fetchPackument(
   fetchImpl: typeof fetch = fetch,
 ): Promise<Packument> {
   // The short form of the document has no custom fields, so it has no `zerodot.sdk`.
-  const response = await fetchImpl(`${NPM_REGISTRY}/${name.replace("/", "%2f")}`, {
+  const response = await fetchImpl(`${npmRegistry()}/${name.replace("/", "%2f")}`, {
     signal: AbortSignal.timeout(15_000),
   });
-  if (response.status === 404) throw new Error(`The package "${name}" does not exist on npm`);
+  if (response.status === 404) {
+    throw new Error(`The package "${name}" does not exist on ${npmRegistry()}`);
+  }
   if (!response.ok) throw new Error(`npm answered with status ${response.status}`);
   return (await response.json()) as Packument;
 }
@@ -172,7 +190,7 @@ export async function installFromNpm(
   version: string,
   runner: NpmRunner = npm,
 ): Promise<void> {
-  if (!isOfficialPackage(name)) throw new Error("Only @zerodot/* packages can be installed");
+  if (!isPackageName(name)) throw new Error(`"${name}" is not a valid package name`);
   ensureNodesDir(dir);
   await runner(
     [
@@ -181,6 +199,7 @@ export async function installFromNpm(
       "--no-audit",
       "--no-fund",
       "--save-exact",
+      `--registry=${npmRegistry()}`,
       `${name}@${version}`,
     ],
     dir,
@@ -192,7 +211,7 @@ export async function uninstallFromNpm(
   name: string,
   runner: NpmRunner = npm,
 ): Promise<void> {
-  if (!isOfficialPackage(name)) throw new Error("Only @zerodot/* packages can be removed");
+  if (!isPackageName(name)) throw new Error(`"${name}" is not a valid package name`);
   await withInstallLock(dir, async () => {
     await runner(["uninstall", "--ignore-scripts", "--no-audit", "--no-fund", name], dir);
     rmSync(join(dir, "node_modules", name), { recursive: true, force: true });
@@ -420,7 +439,7 @@ export async function syncPackages(
   const ready: string[] = [];
   for (const { name, version } of wanted) {
     try {
-      if (!isOfficialPackage(name)) throw new Error("Only @zerodot/* packages can be installed");
+      if (!isPackageName(name)) throw new Error(`"${name}" is not a valid package name`);
       const have = installedVersion(dir, name);
       if (have && (!version || version === have)) {
         versions[name] = have;
@@ -531,14 +550,22 @@ export type CatalogPackage = {
 
 const isText = (value: unknown): value is string => typeof value === "string" && value !== "";
 
-/** Reads the catalog JSON: `{ packages: [...] }`. Entries with a wrong shape or name are dropped. */
-export function parseCatalog(json: unknown): CatalogPackage[] {
+/**
+ * Reads the catalog JSON: `{ packages: [...] }`. Entries with a wrong shape or name are dropped.
+ * `allow` says which names the list can have: by default `@zerodot/*` only.
+ */
+export function parseCatalog(
+  json: unknown,
+  allow: (name: string) => boolean = isOfficialPackage,
+): CatalogPackage[] {
   const list = (json as { packages?: unknown } | null)?.packages;
   if (!Array.isArray(list)) throw new Error('The catalog has no "packages" list');
   const packages: CatalogPackage[] = [];
+  const seen = new Set<string>();
   for (const item of list as Record<string, unknown>[]) {
-    if (!isText(item?.name) || !isOfficialPackage(item.name)) continue;
-    if (!isText(item.version) || !isText(item.sdk)) continue;
+    if (!isText(item?.name) || !allow(item.name) || seen.has(item.name)) continue;
+    if (!isText(item.version) || !parseVersion(item.version) || !isText(item.sdk)) continue;
+    seen.add(item.name);
     const nodes = Array.isArray(item.nodes) ? item.nodes : [];
     packages.push({
       name: item.name,
@@ -569,7 +596,16 @@ export const DEFAULT_CATALOG_URL =
   "https://raw.githubusercontent.com/zerodot-io/zerodot-nodes/main/catalog.json";
 
 const CATALOG_TTL_MS = 10 * 60_000;
-let cachedCatalog: { url: string; at: number; packages: CatalogPackage[] } | null = null;
+/** Read lists by address. The catalog and each registry have their own entry. */
+const listCache = new Map<string, { at: number; value: unknown }>();
+
+async function cached<T>(key: string, now: number, read: () => Promise<T>): Promise<T> {
+  const hit = listCache.get(key);
+  if (hit && now - hit.at < CATALOG_TTL_MS) return hit.value as T;
+  const value = await read();
+  listCache.set(key, { at: now, value });
+  return value;
+}
 
 /** The list of packages one can install. Cached for ten minutes. Throws when the file is not reachable. */
 export async function fetchCatalog(
@@ -577,16 +613,122 @@ export async function fetchCatalog(
   fetchImpl: typeof fetch = fetch,
   now: number = Date.now(),
 ): Promise<CatalogPackage[]> {
-  if (cachedCatalog && cachedCatalog.url === url && now - cachedCatalog.at < CATALOG_TTL_MS) {
-    return cachedCatalog.packages;
-  }
-  const response = await fetchImpl(url, { signal: AbortSignal.timeout(10_000) });
-  if (!response.ok) throw new Error(`The catalog answered with status ${response.status}`);
-  const packages = parseCatalog(await response.json());
-  cachedCatalog = { url, at: now, packages };
-  return packages;
+  return cached(`catalog:${url}`, now, async () => {
+    const response = await fetchImpl(url, { signal: AbortSignal.timeout(10_000) });
+    if (!response.ok) throw new Error(`The catalog answered with status ${response.status}`);
+    return parseCatalog(await response.json());
+  });
 }
 
 export const clearCatalogCache = (): void => {
-  cachedCatalog = null;
+  listCache.clear();
 };
+
+// ---- Community registries ----
+
+/**
+ * A community registry is a `registry.json` file that anybody can host. It lists node packages on
+ * npm that other people wrote. zerodot does not check these packages.
+ */
+export type Registry = {
+  name: string;
+  homepage: string | null;
+  packages: CatalogPackage[];
+};
+
+/**
+ * A package that a community registry can list. The name without the scope starts with
+ * `zerodot-`, for example `zerodot-slack` or `@acme/zerodot-slack`. `@zerodot/*` names belong to
+ * the official catalog.
+ */
+export const isCommunityPackage = (name: string): boolean =>
+  isPackageName(name) &&
+  !name.startsWith("@zerodot/") &&
+  /^zerodot-[a-z0-9]/.test(name.slice(name.indexOf("/") + 1));
+
+/** The address of a registry file: https only, with no user name or password in it. */
+export function checkRegistryUrl(value: string): string {
+  let url: URL;
+  try {
+    url = new URL(value.trim());
+  } catch {
+    throw new Error("The registry address is not a valid URL");
+  }
+  if (url.protocol !== "https:") throw new Error("The registry address must start with https://");
+  if (url.username || url.password) {
+    throw new Error("The registry address cannot have a user name or a password");
+  }
+  url.hash = "";
+  if (url.href.length > 2048) throw new Error("The registry address is too long");
+  return url.href;
+}
+
+const isHttpsUrl = (value: unknown): value is string => {
+  if (!isText(value)) return false;
+  try {
+    return new URL(value).protocol === "https:";
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Reads the registry JSON: `{ name, homepage?, packages: [...] }`. The entries have the shape of
+ * catalog entries. Entries with a wrong shape, and `@zerodot/*` names, are dropped.
+ */
+export function parseRegistry(json: unknown): Registry {
+  const root = json as { name?: unknown; homepage?: unknown } | null;
+  if (!isText(root?.name)) throw new Error('The registry has no "name"');
+  return {
+    name: root.name.slice(0, 80),
+    homepage: isHttpsUrl(root.homepage) ? root.homepage : null,
+    packages: parseCatalog(json, isCommunityPackage),
+  };
+}
+
+const REGISTRY_MAX_BYTES = 1_000_000;
+
+/** The body of a response as text. Throws when it is larger than `max` bytes. */
+async function readLimited(response: Response, max: number): Promise<string> {
+  const reader = response.body?.getReader();
+  if (!reader) return "";
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > max) {
+      await reader.cancel();
+      throw new Error("The registry file is larger than 1 MB");
+    }
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks).toString("utf8");
+}
+
+/** Reads a community registry. Cached for ten minutes. Throws when the file is not reachable or not valid. */
+export async function fetchRegistry(
+  url: string,
+  fetchImpl: typeof fetch = fetch,
+  now: number = Date.now(),
+): Promise<Registry> {
+  const address = checkRegistryUrl(url);
+  return cached(`registry:${address}`, now, async () => {
+    // A redirect could go to an address that was not checked.
+    const response = await fetchImpl(address, {
+      signal: AbortSignal.timeout(10_000),
+      redirect: "error",
+      headers: { accept: "application/json" },
+    });
+    if (!response.ok) throw new Error(`The registry answered with status ${response.status}`);
+    let json: unknown;
+    try {
+      json = JSON.parse(await readLimited(response, REGISTRY_MAX_BYTES));
+    } catch (error) {
+      if (error instanceof SyntaxError) throw new Error("The registry file is not valid JSON");
+      throw error;
+    }
+    return parseRegistry(json);
+  });
+}

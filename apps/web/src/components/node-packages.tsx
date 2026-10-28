@@ -19,14 +19,16 @@ import {
   Spinner,
   toast,
 } from "@zerodot/ui";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { addServerCatalog } from "../lib/flow";
 import {
+  addNodeRegistryFn,
   getAvailableNodePackagesFn,
   getExtraCatalogFn,
   getNodePackagesFn,
   getNodePackageVersionsFn,
   installNodePackageFn,
+  removeNodeRegistryFn,
   uninstallNodePackageFn,
   updateNodePackageFn,
 } from "../server/fns";
@@ -66,6 +68,185 @@ function InstallConfirm({
       onCancel={onCancel}
       onConfirm={onConfirm}
     />
+  );
+}
+
+/** What a community package can do on this server. Shown before each step that adds such code. */
+function RiskWarning({ title, lead }: { title: string; lead: string }) {
+  return (
+    <div role="alert" className="flex flex-col gap-2 rounded-lg bg-destructive/10 p-3">
+      <p className="font-medium text-destructive">{title}</p>
+      <p className="text-pretty">{lead}</p>
+      <ul className="flex list-disc flex-col gap-1 pl-5 text-pretty">
+        <li>The code runs on your server with all the rights of zerodot.</li>
+        <li>It can read every credential, variable, table, and workflow in every project.</li>
+        <li>It can read your database and your environment variables, with your secret keys.</li>
+        <li>It can send your data to other servers, and change or delete it.</li>
+        <li>zerodot does not check this code. A new version can add bad code at any time.</li>
+      </ul>
+      <p className="text-pretty font-medium">
+        Continue only when you know and trust the author. If you are not sure, stop.
+      </p>
+    </div>
+  );
+}
+
+/** A box that the admin must tick to accept the risk. */
+function AcceptRisk({
+  checked,
+  disabled,
+  onChange,
+  children,
+}: {
+  checked: boolean;
+  disabled: boolean;
+  onChange: (checked: boolean) => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className="flex items-start gap-2 text-pretty">
+      <input
+        type="checkbox"
+        checked={checked}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.checked)}
+        className="mt-1 size-4 shrink-0 accent-destructive"
+      />
+      <span>{children}</span>
+    </label>
+  );
+}
+
+/**
+ * Asks before a community package is installed. The admin ticks a box and types the package name,
+ * so the install cannot happen by one fast click.
+ */
+export function CommunityInstallConfirm({
+  item,
+  busy,
+  onCancel,
+  onConfirm,
+}: {
+  item: { name: string; label: string; version: string; registry: { name: string; url: string } };
+  busy: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const [accepted, setAccepted] = useState(false);
+  const [typed, setTyped] = useState("");
+  const typedId = useId();
+  const ready = accepted && typed.trim() === item.name;
+  return (
+    <Dialog open onOpenChange={(open) => !open && !busy && onCancel()}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Install community package {item.label}?</DialogTitle>
+          <DialogDescription>
+            <span className="font-mono">
+              {item.name}@{item.version}
+            </span>{" "}
+            from the registry {item.registry.name} (
+            <span className="break-all font-mono">{item.registry.url}</span>).
+          </DialogDescription>
+        </DialogHeader>
+        <RiskWarning
+          title="zerodot did not check this package"
+          lead="Somebody outside zerodot wrote this package. If it has bad code, an attacker can take full control of this instance and all its data."
+        />
+        <AcceptRisk checked={accepted} disabled={busy} onChange={setAccepted}>
+          I know who wrote this package, I trust them, and I accept the risk for this instance.
+        </AcceptRisk>
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor={typedId}>
+            Type <span className="font-mono">{item.name}</span> to continue
+          </label>
+          <Input
+            id={typedId}
+            value={typed}
+            disabled={busy}
+            autoComplete="off"
+            spellCheck={false}
+            onChange={(event) => setTyped(event.target.value)}
+          />
+        </div>
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="outline" disabled={busy} onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button type="button" variant="destructive" disabled={busy || !ready} onClick={onConfirm}>
+            {busy && <Spinner />}
+            {busy ? "Installing" : "Install anyway"}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** Adds a community registry, after the admin reads what it means. */
+function AddRegistryDialog({
+  busy,
+  onCancel,
+  onConfirm,
+}: {
+  busy: boolean;
+  onCancel: () => void;
+  onConfirm: (url: string) => void;
+}) {
+  const [url, setUrl] = useState("");
+  const [accepted, setAccepted] = useState(false);
+  const urlId = useId();
+  const ready = accepted && url.trim().startsWith("https://");
+  return (
+    <Dialog open onOpenChange={(open) => !open && !busy && onCancel()}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Add a community registry</DialogTitle>
+          <DialogDescription>
+            A registry is a <span className="font-mono">registry.json</span> file that lists node
+            packages on npm. Its packages show on this page. Nothing is installed until you install
+            a package.
+          </DialogDescription>
+        </DialogHeader>
+        <form
+          className="flex flex-col gap-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (ready && !busy) onConfirm(url.trim());
+          }}
+        >
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor={urlId}>Registry address</label>
+            <Input
+              id={urlId}
+              type="url"
+              value={url}
+              disabled={busy}
+              placeholder="https://example.com/registry.json"
+              autoComplete="off"
+              spellCheck={false}
+              onChange={(event) => setUrl(event.target.value)}
+            />
+          </div>
+          <RiskWarning
+            title="Anybody can make a registry"
+            lead="zerodot does not check registries or the packages in them. A registry can list packages with bad code, or packages with names that look like ones you know. Each package that you install from it can do all of this:"
+          />
+          <AcceptRisk checked={accepted} disabled={busy} onChange={setAccepted}>
+            I trust the owner of this registry, and I accept the risk for this instance.
+          </AcceptRisk>
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="outline" disabled={busy} onClick={onCancel}>
+              Cancel
+            </Button>
+            <Button type="submit" variant="destructive" disabled={busy || !ready}>
+              {busy && <Spinner />}
+              {busy ? "Adding" : "Add registry"}
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -115,17 +296,21 @@ function isNewer(latest: string | null, installed: string | null): boolean {
 /** Picks another version of an installed package, newer or older. The change needs no restart. */
 function VersionDialog({
   item,
+  community,
   busy,
   onCancel,
   onConfirm,
 }: {
   item: { name: string; label: string; version: string };
+  /** True for a package from a community registry: the admin must accept the risk again. */
+  community: boolean;
   busy: boolean;
   onCancel: () => void;
   onConfirm: (version: string) => void;
 }) {
   const [versions, setVersions] = useState<string[] | null>(null);
   const [target, setTarget] = useState<string | null>(null);
+  const [accepted, setAccepted] = useState(false);
   const close = useRef(onCancel);
   close.current = onCancel;
 
@@ -183,13 +368,25 @@ function VersionDialog({
             </Select>
           </div>
         )}
+        {community && (
+          <>
+            <RiskWarning
+              title="This version was not checked"
+              lead="This is a community package. zerodot did not check this version, or any other one."
+            />
+            <AcceptRisk checked={accepted} disabled={busy} onChange={setAccepted}>
+              I trust the author of this version, and I accept the risk for this instance.
+            </AcceptRisk>
+          </>
+        )}
         <div className="flex justify-end gap-2">
           <Button type="button" variant="outline" disabled={busy} onClick={onCancel}>
             Cancel
           </Button>
           <Button
             type="button"
-            disabled={busy || target === null}
+            variant={community ? "destructive" : "default"}
+            disabled={busy || target === null || (community && !accepted)}
             onClick={() => target && onConfirm(target)}
           >
             {busy ? "Changing" : action}
@@ -253,6 +450,11 @@ function PackageRow({
           </span>
           {hasUpdate && <Badge variant="secondary">Update {item.latest}</Badge>}
           {item.source === "env" && <Badge variant="outline">ZERODOT_NODE_PACKAGES</Badge>}
+          {item.registry && (
+            <Badge variant="outline" title={item.registry.url}>
+              <span className="text-destructive">Community</span> · {item.registry.name}
+            </Badge>
+          )}
         </div>
         {summary && <p className="text-pretty">{summary}</p>}
         <div className="flex items-center gap-3 text-muted-foreground">
@@ -336,6 +538,65 @@ function PackageGroup({
   );
 }
 
+type RegistryView = Overview["registries"][number];
+
+/** The community registries of this instance, and a way to add or remove one. */
+function RegistryList({
+  registries,
+  enabled,
+  onAdd,
+  onRemove,
+}: {
+  registries: RegistryView[];
+  enabled: boolean;
+  onAdd: () => void;
+  onRemove: (registry: RegistryView) => void;
+}) {
+  return (
+    <section aria-label="Community registries" className="flex flex-col gap-2">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="flex items-baseline gap-2 font-medium">
+          Community registries
+          <span className="tabular-nums text-muted-foreground">{registries.length}</span>
+        </h2>
+        {enabled && (
+          <Button variant="outline" onClick={onAdd}>
+            Add registry
+          </Button>
+        )}
+      </div>
+      <p className="max-w-prose text-pretty text-muted-foreground">
+        Other people make these packages. zerodot does not check them, and their code can do
+        anything on this server.
+        {!enabled && " Community packages are off on this instance (ZERODOT_COMMUNITY_NODES)."}
+      </p>
+      {registries.length > 0 && (
+        <ul className="divide-y overflow-hidden rounded-xl border">
+          {registries.map((registry) => (
+            <li key={registry.url} className="flex items-start gap-4 px-4 py-3">
+              <div className="flex min-w-0 flex-1 flex-col gap-1">
+                <span className="flex flex-wrap items-baseline gap-x-2">
+                  <span className="font-medium">{registry.name}</span>
+                  {!registry.error && (
+                    <span className="tabular-nums text-muted-foreground">
+                      {registry.count} {registry.count === 1 ? "package" : "packages"}
+                    </span>
+                  )}
+                </span>
+                <span className="break-all font-mono text-muted-foreground">{registry.url}</span>
+                {registry.error && <span className="text-destructive">{registry.error}</span>}
+              </div>
+              <Button variant="outline" onClick={() => onRemove(registry)}>
+                Remove
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 type Filter = "all" | "installed" | "available";
 
 const FILTERS: { value: Filter; label: string }[] = [
@@ -353,6 +614,8 @@ export function NodePackagesSection() {
   const [confirm, setConfirm] = useState<PackageView | null>(null);
   const [versionOf, setVersionOf] = useState<PackageView | null>(null);
   const [removing, setRemoving] = useState<PackageView | null>(null);
+  const [addingRegistry, setAddingRegistry] = useState(false);
+  const [removingRegistry, setRemovingRegistry] = useState<RegistryView | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -383,6 +646,21 @@ export function NodePackagesSection() {
     }
   }
 
+  async function changeRegistry(work: () => Promise<unknown>, done: string) {
+    setBusy("registry");
+    try {
+      await work();
+      toast.success(done);
+      await load();
+      setAddingRegistry(false);
+      setRemovingRegistry(null);
+    } catch (error) {
+      toast.error(errorText(error));
+    } finally {
+      setBusy(null);
+    }
+  }
+
   if (!overview) {
     return (
       <p className="flex items-center gap-2 text-muted-foreground">
@@ -394,20 +672,25 @@ export function NodePackagesSection() {
   const text = query.trim().toLowerCase();
   const found = overview.packages.filter((item) => !text || matchesPackage(item, text));
   const installed = found.filter((item) => item.version !== null);
-  const available = found.filter((item) => item.version === null);
+  const available = found.filter((item) => item.version === null && !item.registry);
+  const community = found.filter((item) => item.version === null && item.registry);
   const counts: Record<Filter, number> = {
     all: found.length,
     installed: installed.length,
-    available: available.length,
+    available: available.length + community.length,
   };
   const showInstalled = filter !== "available" && installed.length > 0;
   const showAvailable = filter !== "installed" && available.length > 0;
+  const showCommunity = filter !== "installed" && community.length > 0;
 
   const row = (item: PackageView) => (
     <PackageRow
       key={item.name}
       item={item}
-      canChange={overview.installEnabled}
+      canChange={
+        overview.installEnabled &&
+        (!item.registry || item.version !== null || overview.communityEnabled)
+      }
       busy={busy === item.name}
       onInstall={() => setConfirm(item)}
       onVersion={() => setVersionOf(item)}
@@ -462,7 +745,12 @@ export function NodePackagesSection() {
           {available.map(row)}
         </PackageGroup>
       )}
-      {!showInstalled && !showAvailable && (
+      {showCommunity && (
+        <PackageGroup title="Community" count={community.length}>
+          {community.map(row)}
+        </PackageGroup>
+      )}
+      {!showInstalled && !showAvailable && !showCommunity && (
         <Empty>
           <EmptyHeader>
             <EmptyDescription>
@@ -481,15 +769,61 @@ export function NodePackagesSection() {
         </p>
       )}
 
+      {(overview.communityEnabled || overview.registries.length > 0) && (
+        <RegistryList
+          registries={overview.registries}
+          enabled={overview.communityEnabled}
+          onAdd={() => setAddingRegistry(true)}
+          onRemove={setRemovingRegistry}
+        />
+      )}
+      {addingRegistry && (
+        <AddRegistryDialog
+          busy={busy === "registry"}
+          onCancel={() => setAddingRegistry(false)}
+          onConfirm={(url) =>
+            void changeRegistry(
+              () => addNodeRegistryFn({ data: { url, acceptRisk: true } }),
+              "Registry added",
+            )
+          }
+        />
+      )}
+      {removingRegistry && (
+        <ConfirmDialog
+          title={`Remove ${removingRegistry.name}?`}
+          description="Its packages no longer show here. Packages that you installed from it stay installed. Remove them one by one."
+          action={busy === "registry" ? "Removing" : "Remove"}
+          cancel="Keep"
+          destructive
+          busy={busy === "registry"}
+          onCancel={() => setRemovingRegistry(null)}
+          onConfirm={() =>
+            void changeRegistry(
+              () => removeNodeRegistryFn({ data: { url: removingRegistry.url } }),
+              `${removingRegistry.name} removed`,
+            )
+          }
+        />
+      )}
+
       {versionOf?.version && (
         <VersionDialog
           item={{ name: versionOf.name, label: versionOf.label, version: versionOf.version }}
+          community={versionOf.registry !== null}
           busy={busy === versionOf.name}
           onCancel={() => setVersionOf(null)}
           onConfirm={(version) =>
             void change(
               versionOf.name,
-              () => updateNodePackageFn({ data: { name: versionOf.name, version } }),
+              () =>
+                updateNodePackageFn({
+                  data: {
+                    name: versionOf.name,
+                    version,
+                    acceptRisk: versionOf.registry !== null,
+                  },
+                }),
               `${versionOf.label} is now ${version}`,
             )
           }
@@ -509,7 +843,34 @@ export function NodePackagesSection() {
           }
         />
       )}
-      {confirm && (
+      {confirm?.registry && confirm.latest && (
+        <CommunityInstallConfirm
+          item={{
+            name: confirm.name,
+            label: confirm.label,
+            version: confirm.latest,
+            registry: confirm.registry,
+          }}
+          busy={busy === confirm.name}
+          onCancel={() => setConfirm(null)}
+          onConfirm={() =>
+            void change(
+              confirm.name,
+              () =>
+                installNodePackageFn({
+                  data: {
+                    name: confirm.name,
+                    registry: confirm.registry?.url,
+                    version: confirm.latest ?? undefined,
+                    acceptRisk: true,
+                  },
+                }),
+              `${confirm.label} installed`,
+            )
+          }
+        />
+      )}
+      {confirm && !confirm.registry && (
         <InstallConfirm
           item={{ name: confirm.name, label: confirm.label, version: confirm.latest }}
           busy={busy === confirm.name}
