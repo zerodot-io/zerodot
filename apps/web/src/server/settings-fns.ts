@@ -110,14 +110,34 @@ export const startOAuth2Fn = createServerFn({ method: "POST" })
     return { url };
   });
 
-/** Tries to connect with the saved values. The result has no credential value. */
+/**
+ * Tries to connect. The result has no credential value.
+ * With `id`, it uses the saved values. Non-empty `fields` replace them, and nothing is saved.
+ * Without `id`, it tests `fields` of `type`.
+ */
 export const testCredentialFn = createServerFn({ method: "POST" })
-  .validator(slugInput.extend({ id: z.string().uuid() }))
+  .validator(
+    slugInput.extend({
+      id: z.string().uuid().optional(),
+      type: z.string().min(1).optional(),
+      fields: z.record(z.string(), z.string()).optional(),
+    }),
+  )
   .handler(async ({ data }) => {
     const ctx = await projectFor(data.projectSlug, { admin: true });
-    const opened = await ctx.scope.credentials.open(data.id);
-    if (!opened) throw new Error("Not found");
-    return testCredential({ type: opened.type, data: opened.data });
+    const patch = Object.fromEntries(Object.entries(data.fields ?? {}).filter(([, v]) => v !== ""));
+    if (data.id) {
+      const opened = await ctx.scope.credentials.open(data.id);
+      if (!opened) throw new Error("Not found");
+      const merged = { ...opened.data, ...patch };
+      const problem = validateCredentialData(opened.type, merged);
+      if (problem) throw new Error(problem);
+      return testCredential({ type: opened.type, data: merged });
+    }
+    if (!data.type) throw new Error("Type is required");
+    const problem = validateCredentialData(data.type, patch);
+    if (problem) throw new Error(problem);
+    return testCredential({ type: data.type, data: patch });
   });
 
 export const credentialUsageFn = createServerFn({ method: "GET" })
