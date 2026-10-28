@@ -36,9 +36,6 @@ import logicIf from "./logic-if";
 import logicSwitch from "./logic-switch";
 import mcpCallTool from "./mcp-call-tool";
 import mongodb from "./mongodb";
-import postgres from "./postgres";
-import postgresListen from "./postgres-listen";
-import postgresTrigger from "./postgres-trigger";
 import rssRead from "./rss-read";
 import s3 from "./s3";
 import sftp from "./sftp";
@@ -105,9 +102,6 @@ export const nodes: NodeDefinition[] = [
   sftp,
   mongodb,
   triggerEmailImap,
-  postgres,
-  postgresTrigger,
-  postgresListen,
   s3,
   tableInsert,
   tableQuery,

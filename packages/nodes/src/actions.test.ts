@@ -25,9 +25,8 @@ describe("node actions", () => {
     });
   }
 
-  it("covers every operation of the Postgres, GitHub and Telegram nodes", () => {
+  it("covers every operation of the GitHub and Telegram nodes", () => {
     const count = (type: string) => nodes.find((n) => n.type === type)?.actions?.length;
-    assert.equal(count("postgres.database"), 6);
     assert.equal(count("github.api"), 21);
     assert.equal(count("telegram.bot"), 24);
   });

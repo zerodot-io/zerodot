@@ -4,7 +4,6 @@ import { credentialTypeByName } from "./credentials";
 import { smtpOptions } from "./email-send";
 import { imapOptions } from "./imap";
 import { mongoSettings } from "./mongodb";
-import { postgresOptions } from "./postgres";
 import { connectSsh } from "./ssh";
 
 export type CredentialTestResult =
@@ -47,16 +46,6 @@ async function checkTelegram({ data }: ResolvedCredential): Promise<void> {
     throw new Error("Telegram did not accept the token");
   }
   if (!response.ok) throw new Error(`Telegram answered with status ${response.status}`);
-}
-
-async function checkPostgres(credential: ResolvedCredential): Promise<void> {
-  const { default: postgres } = await import("postgres");
-  const sql = postgres({ ...postgresOptions(credential), connect_timeout: 10 });
-  try {
-    await sql`select 1`;
-  } finally {
-    await sql.end({ timeout: 1 });
-  }
 }
 
 async function checkMongo(credential: ResolvedCredential): Promise<void> {
@@ -123,7 +112,6 @@ const checks: Record<string, (credential: ResolvedCredential) => Promise<void>> 
   "github.token": checkGithub,
   "github.oauth2": checkGithub,
   "telegram.bot": checkTelegram,
-  postgres: checkPostgres,
   mongodb: checkMongo,
   ssh: checkSsh,
   ftp: checkFtp,

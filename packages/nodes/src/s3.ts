@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-import { defineNode, resolveTemplate } from "@zerodot/engine";
+import { defineNode, resolveTemplate, toItems } from "@zerodot/engine";
 import { XMLParser } from "fast-xml-parser";
 import { z } from "zod";
 import { readBinary, toBinary } from "./binary";
-import { toItems } from "./postgres-sql";
 import {
   buildUrl,
   presignUrl,
