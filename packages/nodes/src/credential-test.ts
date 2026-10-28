@@ -3,7 +3,6 @@ import type { ResolvedCredential } from "@zerodot/engine";
 import { credentialTypeByName } from "./credentials";
 import { smtpOptions } from "./email-send";
 import { imapOptions } from "./imap";
-import { mongoSettings } from "./mongodb";
 import { connectSsh } from "./ssh";
 
 export type CredentialTestResult =
@@ -46,21 +45,6 @@ async function checkTelegram({ data }: ResolvedCredential): Promise<void> {
     throw new Error("Telegram did not accept the token");
   }
   if (!response.ok) throw new Error(`Telegram answered with status ${response.status}`);
-}
-
-async function checkMongo(credential: ResolvedCredential): Promise<void> {
-  const { connectionString } = mongoSettings(credential);
-  const mongo = await import("mongodb");
-  const client = new mongo.MongoClient(connectionString, {
-    serverSelectionTimeoutMS: TIMEOUT_MS,
-    appName: "zerodot",
-  });
-  try {
-    await client.connect();
-    await client.db("admin").command({ ping: 1 });
-  } finally {
-    await client.close();
-  }
 }
 
 async function checkSsh(credential: ResolvedCredential): Promise<void> {
@@ -112,7 +96,6 @@ const checks: Record<string, (credential: ResolvedCredential) => Promise<void>> 
   "github.token": checkGithub,
   "github.oauth2": checkGithub,
   "telegram.bot": checkTelegram,
-  mongodb: checkMongo,
   ssh: checkSsh,
   ftp: checkFtp,
   smtp: checkSmtp,

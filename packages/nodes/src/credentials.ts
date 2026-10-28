@@ -249,21 +249,6 @@ export const credentialTypes: CredentialTypeDefinition[] = [
     icon: "FolderOpen",
   },
   {
-    type: "mongodb",
-    label: "MongoDB",
-    fields: z.object({
-      /** For example `mongodb://user:pass@host:27017` or a `mongodb+srv://` address. */
-      connectionString: z
-        .string()
-        .regex(/^mongodb(\+srv)?:\/\//, "Must start with mongodb:// or mongodb+srv://")
-        .meta({ placeholder: "mongodb://user:password@host:27017" }),
-      /** The database to use. */
-      database: z.string().min(1).meta({ placeholder: "mydb" }),
-    }),
-    secretFields: ["connectionString"],
-    icon: "Database",
-  },
-  {
     type: "s3",
     label: "S3",
     // For Amazon S3 and for S3-compatible services (MinIO, Cloudflare R2, Backblaze B2, and so

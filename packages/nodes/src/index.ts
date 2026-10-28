@@ -35,7 +35,6 @@ import httpRequest from "./http-request";
 import logicIf from "./logic-if";
 import logicSwitch from "./logic-switch";
 import mcpCallTool from "./mcp-call-tool";
-import mongodb from "./mongodb";
 import rssRead from "./rss-read";
 import s3 from "./s3";
 import sftp from "./sftp";
@@ -100,7 +99,6 @@ export const nodes: NodeDefinition[] = [
   sshNode,
   ftp,
   sftp,
-  mongodb,
   triggerEmailImap,
   s3,
   tableInsert,
