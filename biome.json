@@ -10,7 +10,8 @@
       "!packages/ui/src/styles.css",
       "!packages/ui/src/components/charts",
       "!**/node_modules",
-      "!pnpm-lock.yaml"
+      "!pnpm-lock.yaml",
+      "!packages/db/drizzle/meta"
     ]
   },
   "formatter": {

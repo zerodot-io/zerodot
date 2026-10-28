@@ -1,12 +1,14 @@
 {
   "name": "zerodot",
   "private": true,
+  "version": "0.1.0",
   "license": "AGPL-3.0-only",
   "packageManager": "pnpm@12.15.0",
   "engines": {
     "node": ">=22"
   },
   "scripts": {
+    "prepare": "git config core.hooksPath .githooks || true",
     "dev": "turbo run dev",
     "build": "turbo run build",
     "check-types": "turbo run check-types",

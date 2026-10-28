@@ -7,6 +7,7 @@ import { TableDialog } from "../components/table-dialog";
 import { listTablesFn } from "../server/table-fns";
 
 export const Route = createFileRoute("/p/$projectSlug/tables/")({
+  head: () => ({ meta: [{ title: "Data tables · zerodot" }] }),
   loader: ({ params }) => listTablesFn({ data: { projectSlug: params.projectSlug } }),
   component: Tables,
 });

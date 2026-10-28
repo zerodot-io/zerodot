@@ -18,6 +18,7 @@ import { useRefreshOnEvents } from "../lib/use-event-source";
 import { getRunFn, retryRunFn } from "../server/fns";
 
 export const Route = createFileRoute("/p/$projectSlug/runs/$runId")({
+  head: () => ({ meta: [{ title: "Run · zerodot" }] }),
   loader: ({ params }) =>
     getRunFn({ data: { projectSlug: params.projectSlug, runId: params.runId } }),
   component: RunDetail,

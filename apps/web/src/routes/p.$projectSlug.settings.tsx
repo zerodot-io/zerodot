@@ -7,6 +7,7 @@ import { TimezoneSelect } from "../components/timezone-select";
 import { getSettingsFn, setSettingsFn } from "../server/settings-fns";
 
 export const Route = createFileRoute("/p/$projectSlug/settings")({
+  head: () => ({ meta: [{ title: "Project settings · zerodot" }] }),
   loader: async ({ params }) => {
     const data = { projectSlug: params.projectSlug };
     const settings = await getSettingsFn({ data });
@@ -50,7 +51,7 @@ function Settings() {
 
   return (
     <main className="mx-auto flex w-full max-w-2xl flex-col gap-8 px-6 py-8">
-      <h1 className="text-xl font-semibold tracking-tight">Settings</h1>
+      <h1 className="text-xl font-semibold tracking-tight">Project settings</h1>
       <form onSubmit={onSubmit} className="flex flex-col gap-4">
         <Field>
           <FieldLabel htmlFor="run-retention">Keep production runs (days)</FieldLabel>

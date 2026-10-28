@@ -1,0 +1,5 @@
+#!/bin/sh
+# Runs the same checks as CI. A failure stops the commit.
+set -e
+pnpm run lint
+pnpm run check-types

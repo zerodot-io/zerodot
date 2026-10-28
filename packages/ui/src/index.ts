@@ -17,6 +17,7 @@ export const PROJECT_LABEL = "project";
 export * from "./components/ui/badge";
 export * from "./components/ui/dialog";
 export * from "./components/ui/input-group";
+export * from "./components/ui/item";
 export * from "./components/ui/select";
 export * from "./components/ui/sheet";
 export * from "./components/ui/sonner";

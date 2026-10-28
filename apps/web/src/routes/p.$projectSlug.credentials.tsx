@@ -12,6 +12,7 @@ import { getExtraCatalogFn } from "../server/fns";
 import { credentialUsageFn, deleteCredentialFn, listCredentialsFn } from "../server/settings-fns";
 
 export const Route = createFileRoute("/p/$projectSlug/credentials")({
+  head: () => ({ meta: [{ title: "Credentials · zerodot" }] }),
   loader: async ({ params }) => {
     const [credentials, extra] = await Promise.all([
       listCredentialsFn({ data: { projectSlug: params.projectSlug } }),

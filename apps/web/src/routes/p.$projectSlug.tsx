@@ -17,11 +17,11 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  LogoMark,
   PROJECT_LABEL,
 } from "@zerodot/ui";
 import {
   Activity,
-  ArrowLeft,
   CircleUser,
   Database,
   KeyRound,
@@ -29,15 +29,15 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Play,
-  Plus,
   Settings,
   SquareFunction,
   Variable,
   Workflow,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
+import { AboutDialog } from "../components/about-dialog";
 import { ProjectDialog } from "../components/project-dialog";
-import { createWorkflowFn, getIsInstanceAdmin, getProjectFn, listWorkflowsFn } from "../server/fns";
+import { getIsInstanceAdmin, getProjectFn } from "../server/fns";
 
 export const Route = createFileRoute("/p/$projectSlug")({
   beforeLoad: async ({ params }) => {
@@ -66,7 +66,7 @@ const navItems: { to: NavTo; label: string; icon: LucideIcon }[] = [
   { to: "/p/$projectSlug/variables", label: "Variables", icon: Variable },
   { to: "/p/$projectSlug/tables", label: "Data tables", icon: Database },
   { to: "/p/$projectSlug/api-keys", label: "API keys", icon: SquareFunction },
-  { to: "/p/$projectSlug/settings", label: "Settings", icon: Settings },
+  { to: "/p/$projectSlug/settings", label: "Project settings", icon: Settings },
 ];
 
 const railItem =
@@ -77,18 +77,14 @@ const railLabel =
 
 const HIDDEN_KEY = "zerodot:sidebar-hidden";
 
-type WorkflowItem = { id: string; name: string; active: boolean };
-
 function ProjectLayout() {
   const { user, project, projects } = Route.useRouteContext();
   const navigate = useNavigate();
-  const [open, setOpen] = useState(false);
   const [newProject, setNewProject] = useState(false);
+  const [about, setAbout] = useState(false);
   const [hidden, setHiddenState] = useState(false);
   const [animate, setAnimate] = useState(false);
-  const [workflows, setWorkflows] = useState<WorkflowItem[]>([]);
   const [instanceAdmin, setInstanceAdmin] = useState(false);
-  const dock = useRef<HTMLDivElement>(null);
   const slug = project.slug;
 
   // Once per layout mount. The layout stays mounted while you move between pages.
@@ -116,35 +112,6 @@ function ProjectLayout() {
     }
   }
 
-  useEffect(() => {
-    if (!open) return;
-    let stale = false;
-    listWorkflowsFn({ data: { projectSlug: slug } }).then((rows) => {
-      if (!stale) setWorkflows(rows);
-    });
-    const onPointerDown = (event: PointerEvent) => {
-      if (event.target instanceof Node && !dock.current?.contains(event.target)) setOpen(false);
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("pointerdown", onPointerDown);
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      stale = true;
-      document.removeEventListener("pointerdown", onPointerDown);
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [open, slug]);
-
-  async function createWorkflow() {
-    const created = await createWorkflowFn({ data: { projectSlug: slug, name: "Untitled" } });
-    setOpen(false);
-    await navigate({
-      to: "/p/$projectSlug/workflows/$workflowId",
-      params: { projectSlug: slug, workflowId: created.id },
-    });
-  }
   // The canvas goes edge to edge. The rail floats over it. Other pages leave room for it.
   const onCanvas = useMatchRoute()({ to: "/p/$projectSlug/workflows/$workflowId" });
   return (
@@ -159,25 +126,32 @@ function ProjectLayout() {
         <PanelLeftOpen className="size-4" />
       </button>
       <div
-        ref={dock}
         inert={hidden}
         className={`fixed top-1/2 left-3 z-20 flex -translate-y-1/2 items-stretch rounded-xl border bg-card shadow-md motion-reduce:transition-none ${animate ? "transition-[translate,opacity] duration-150 ease-out" : ""} ${hidden ? "pointer-events-none -translate-x-2 opacity-0" : ""}`}
       >
         <nav aria-label="Project" className="flex flex-col items-center gap-1 p-1.5">
+          <button
+            type="button"
+            aria-label="About zerodot"
+            onClick={() => setAbout(true)}
+            className="flex size-9 items-center justify-center border-b pb-0.5 text-xs"
+          >
+            <LogoMark />
+          </button>
           {navItems.map(({ to, label, icon: Icon }) =>
             to === "/p/$projectSlug/workflows" ? (
-              <button
+              <Link
                 key={to}
-                type="button"
+                to={to}
+                params={{ projectSlug: slug }}
+                search={{ all: true }}
                 aria-label={label}
-                aria-expanded={open}
-                aria-controls="workflow-panel"
-                onClick={() => setOpen((v) => !v)}
-                className={open ? `${railItem} bg-muted text-foreground` : railItem}
+                className={railItem}
+                activeProps={{ className: `${railItem} bg-muted text-foreground` }}
               >
                 <Icon className="size-4" />
-                {!open && <span className={railLabel}>{label}</span>}
-              </button>
+                <span className={railLabel}>{label}</span>
+              </Link>
             ) : (
               <Link
                 key={to}
@@ -240,7 +214,6 @@ function ProjectLayout() {
             type="button"
             aria-label="Hide sidebar"
             onClick={() => {
-              setOpen(false);
               setHidden(true);
             }}
             className={railItem}
@@ -249,64 +222,8 @@ function ProjectLayout() {
             <span className={railLabel}>Hide</span>
           </button>
         </nav>
-        <div
-          id="workflow-panel"
-          inert={!open}
-          className={`overflow-hidden transition-[width] duration-200 ease-out motion-reduce:transition-none ${open ? "w-60 border-l" : "w-0"}`}
-        >
-          <div className="flex max-h-[70svh] w-60 flex-col gap-1 p-1.5">
-            <div className="flex items-center justify-between px-2 py-1">
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  aria-label="Back"
-                  onClick={() => setOpen(false)}
-                  className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
-                >
-                  <ArrowLeft className="size-4" />
-                </button>
-                <span className="font-medium">Workflows</span>
-              </div>
-              <button
-                type="button"
-                aria-label="New workflow"
-                onClick={createWorkflow}
-                className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
-              >
-                <Plus className="size-4" />
-              </button>
-            </div>
-            <ul className="flex flex-col gap-0.5 overflow-y-auto">
-              {workflows.map((w) => (
-                <li key={w.id}>
-                  <Link
-                    to="/p/$projectSlug/workflows/$workflowId"
-                    params={{ projectSlug: slug, workflowId: w.id }}
-                    onClick={() => setOpen(false)}
-                    className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 hover:bg-muted"
-                    activeProps={{ className: "bg-muted" }}
-                  >
-                    <span className="truncate">{w.name}</span>
-                    {w.active && <span className="text-muted-foreground">Active</span>}
-                  </Link>
-                </li>
-              ))}
-              {workflows.length === 0 && (
-                <li className="px-2 py-1.5 text-muted-foreground">No workflows yet.</li>
-              )}
-            </ul>
-            <Link
-              to="/p/$projectSlug/workflows"
-              params={{ projectSlug: slug }}
-              search={{ all: true }}
-              onClick={() => setOpen(false)}
-              className="rounded-lg px-2 py-1.5 text-muted-foreground hover:bg-muted"
-            >
-              Manage and import
-            </Link>
-          </div>
-        </div>
       </div>
+      {about && <AboutDialog project={project.name} onClose={() => setAbout(false)} />}
       {newProject && (
         <ProjectDialog
           onClose={() => setNewProject(false)}

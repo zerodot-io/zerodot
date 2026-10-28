@@ -16,6 +16,7 @@ import { VariableDialog, type VariableItem } from "../components/variable-dialog
 import { deleteVariableFn, listVariablesFn, variableUsageFn } from "../server/settings-fns";
 
 export const Route = createFileRoute("/p/$projectSlug/variables")({
+  head: () => ({ meta: [{ title: "Variables · zerodot" }] }),
   loader: ({ params }) => listVariablesFn({ data: { projectSlug: params.projectSlug } }),
   component: Variables,
 });

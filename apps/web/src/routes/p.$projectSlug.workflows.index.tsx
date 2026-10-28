@@ -21,6 +21,7 @@ import {
 import { Bar, BarChart, BarXAxis, ChartTooltip, Grid, LineSparkline } from "@zerodot/ui/charts";
 import { Copy, Download, EllipsisVertical, ExternalLink, History, Trash2 } from "lucide-react";
 import { type ChangeEvent, type FormEvent, type ReactNode, useRef, useState } from "react";
+import { FEED_TOOLTIP, TooltipPanel } from "../components/tooltip-panel";
 import { formatAge } from "../lib/admin-format";
 import { formatMs, formatPercent } from "../lib/insights";
 import {
@@ -35,6 +36,7 @@ import {
 import { getInsightsFn } from "../server/insights-fns";
 
 export const Route = createFileRoute("/p/$projectSlug/workflows/")({
+  head: () => ({ meta: [{ title: "Workflows · zerodot" }] }),
   validateSearch: (raw: Record<string, unknown>): { all?: true } => ({
     all: raw.all === true || raw.all === "true" ? true : undefined,
   }),
@@ -157,7 +159,11 @@ function Workflows() {
   const [override, setOverride] = useState<Record<string, boolean>>({});
   const isActive = (w: { id: string; active: boolean }) => override[w.id] ?? w.active;
 
-  async function onToggle(id: string, next: boolean) {
+  async function onToggle(id: string, next: boolean, published: boolean) {
+    if (next && !published) {
+      toast.warning("Publish the workflow before you activate it");
+      return;
+    }
     setOverride((prev) => ({ ...prev, [id]: next }));
     try {
       await setActiveFn({ data: { projectSlug, workflowId: id, active: next } });
@@ -254,7 +260,8 @@ function Workflows() {
     succeeded: p.succeeded,
     failed: p.failed,
     other: Math.max(0, p.runs - p.succeeded - p.failed),
-    seconds: p.avgMs === null ? 0 : Math.round(p.avgMs / 100) / 10,
+    seconds: p.avgMs === null ? 0 : Math.round(p.avgMs / 1000),
+    ms: p.avgMs ?? 0,
   }));
 
   async function onImport(event: ChangeEvent<HTMLInputElement>) {
@@ -375,7 +382,34 @@ function Workflows() {
               <Bar dataKey="failed" fill="var(--chart-negative)" />
               <Bar dataKey="other" fill="var(--chart-foreground-muted)" />
               <BarXAxis maxLabels={6} />
-              <ChartTooltip showDots={false} />
+              <ChartTooltip
+                {...FEED_TOOLTIP}
+                content={({ point }) => (
+                  <TooltipPanel
+                    title={String(point.name)}
+                    rows={[
+                      {
+                        key: "ok",
+                        label: "Succeeded",
+                        value: String(point.succeeded),
+                        color: "var(--chart-positive)",
+                      },
+                      {
+                        key: "bad",
+                        label: "Failed",
+                        value: String(point.failed),
+                        color: "var(--chart-negative)",
+                      },
+                      {
+                        key: "other",
+                        label: "Other",
+                        value: String(point.other),
+                        color: "var(--chart-foreground-muted)",
+                      },
+                    ]}
+                  />
+                )}
+              />
             </BarChart>
           </ChartCard>
           <ChartCard
@@ -391,7 +425,22 @@ function Workflows() {
               <Grid horizontal />
               <Bar dataKey="seconds" fill="var(--chart-foreground-muted)" />
               <BarXAxis maxLabels={6} />
-              <ChartTooltip showDots={false} />
+              <ChartTooltip
+                {...FEED_TOOLTIP}
+                content={({ point }) => (
+                  <TooltipPanel
+                    title={String(point.name)}
+                    rows={[
+                      {
+                        key: "s",
+                        label: "Average",
+                        value: formatMs(Number(point.ms)),
+                        color: "var(--chart-foreground-muted)",
+                      },
+                    ]}
+                  />
+                )}
+              />
             </BarChart>
           </ChartCard>
         </div>
@@ -501,6 +550,7 @@ function Workflows() {
             const row = rows.get(w.id);
             const on = isActive(w);
             const trend = row?.trend ?? idleTrend;
+            const ran = (row?.runs ?? 0) > 0;
             return (
               <li
                 key={w.id}
@@ -509,7 +559,7 @@ function Workflows() {
                 <Link
                   to="/p/$projectSlug/workflows/$workflowId"
                   params={{ projectSlug, workflowId: w.id }}
-                  className="flex min-w-0 flex-1 items-center justify-between gap-6 py-5 pl-5"
+                  className="flex min-w-0 flex-1 items-center justify-between gap-6 py-4 pl-5"
                 >
                   <span className="flex min-w-0 flex-col gap-1.5">
                     <span className="flex items-center gap-2">
@@ -518,7 +568,9 @@ function Workflows() {
                         aria-label={on ? "Active" : "Inactive"}
                         className={`size-1.5 shrink-0 rounded-full ${on ? "bg-emerald-500" : "bg-muted-foreground/40"}`}
                       />
-                      <span className="truncate font-medium">{w.name}</span>
+                      <span className={`truncate font-medium ${on ? "" : "text-muted-foreground"}`}>
+                        {w.name}
+                      </span>
                       {w.tags.map((tag) => (
                         <Badge key={tag} variant="outline">
                           {tag}
@@ -529,39 +581,31 @@ function Workflows() {
                       <span className="truncate text-muted-foreground">{w.description}</span>
                     )}
                   </span>
-                  <span className="flex shrink-0 items-center gap-6 text-muted-foreground tabular-nums">
-                    <span className="w-16 text-right">
-                      {row && row.runs > 0 && (
-                        <>
-                          <span className="text-foreground">{row.runs}</span> runs
-                        </>
-                      )}
-                    </span>
-                    <span
-                      className={`w-16 text-right ${row && row.failed > 0 ? "text-destructive" : ""}`}
-                    >
-                      {row && row.failed > 0 ? `${row.failed} failed` : ""}
-                    </span>
-                    <span className="w-16 text-right">
-                      {row?.lastRunAt ? `${formatAge(now - row.lastRunAt.getTime())} ago` : ""}
-                    </span>
+                  <span
+                    className="w-20 shrink-0"
+                    title={
+                      row?.lastRunAt
+                        ? `${row.runs} runs, ${row.failed} failed, last ${formatAge(now - row.lastRunAt.getTime())} ago`
+                        : undefined
+                    }
+                  >
+                    {ran && (
+                      <LineSparkline
+                        data={trend.map((runs) => ({ runs }))}
+                        dataKey="runs"
+                        width={80}
+                        height={20}
+                        color="var(--chart-positive)"
+                        aria-label={`Runs for each hour: ${trend.join(", ")}`}
+                      />
+                    )}
                   </span>
                 </Link>
-                <div className="flex items-center gap-5 px-5">
-                  <LineSparkline
-                    data={trend.map((runs) => ({ runs }))}
-                    dataKey="runs"
-                    width={80}
-                    height={20}
-                    color="var(--chart-foreground)"
-                    aria-label={`Runs for each hour: ${trend.join(", ")}`}
-                  />
+                <div className="flex items-center gap-4 px-5">
                   <Switch
                     aria-label={`${on ? "Turn off" : "Turn on"} ${w.name}`}
-                    title={!w.published && !on ? "Publish the workflow first" : undefined}
                     checked={on}
-                    disabled={!w.published && !on}
-                    onCheckedChange={(next) => void onToggle(w.id, next)}
+                    onCheckedChange={(next) => void onToggle(w.id, next, w.published)}
                   />
                   <DropdownMenu>
                     <DropdownMenuTrigger

@@ -26,6 +26,9 @@ export const Route = createFileRoute("/p/$projectSlug/workflows/$workflowId")({
       workflows,
     };
   },
+  head: ({ loaderData }) => ({
+    meta: [{ title: `${loaderData?.workflow.name ?? "Workflow"} · zerodot` }],
+  }),
   component: EditorPage,
 });
 
