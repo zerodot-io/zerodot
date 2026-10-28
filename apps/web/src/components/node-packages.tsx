@@ -78,13 +78,17 @@ function RiskWarning({ title, lead }: { title: string; lead: string }) {
       <p className="font-medium text-destructive">{title}</p>
       <p className="text-pretty">{lead}</p>
       <ul className="flex list-disc flex-col gap-1 pl-5 text-pretty">
-        <li>The code runs on your server with all the rights of zerodot.</li>
-        <li>It can read every credential, variable, table, and workflow in every project.</li>
-        <li>It can read your database and your environment variables, with your secret keys.</li>
-        <li>With those keys it can open every saved credential and sign in as any user.</li>
-        <li>It runs as soon as it is installed, also when no workflow uses its nodes.</li>
-        <li>It can send your data to other servers, and change or delete it.</li>
         <li>zerodot does not check this code. A new version can add bad code at any time.</li>
+        <li>
+          The code runs on your server, in its own process. It cannot read the secret keys, the
+          database, or the files of zerodot.
+        </li>
+        <li>
+          It gets the credentials and the data that your workflows give to its nodes. It can send
+          them to any server on the internet.
+        </li>
+        <li>It can use the network of your server, also to reach services inside your network.</li>
+        <li>It runs as soon as it is installed, also when no workflow uses its nodes.</li>
       </ul>
       <p className="text-pretty font-medium">
         Continue only when you know and trust the author. If you are not sure, stop.
@@ -153,7 +157,7 @@ export function CommunityInstallConfirm({
         </DialogHeader>
         <RiskWarning
           title="zerodot did not check this package"
-          lead="Somebody outside zerodot wrote this package. If it has bad code, an attacker can take full control of this instance and all its data."
+          lead="Somebody outside zerodot wrote this package. If it has bad code, it can steal the credentials and the data that your workflows give to its nodes."
         />
         <AcceptRisk checked={accepted} disabled={busy} onChange={setAccepted}>
           I know who wrote this package, I trust them, and I accept the risk for this instance.

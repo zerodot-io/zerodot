@@ -6,6 +6,7 @@ import type {
   OAuth2Resolver,
 } from "@zerodot/engine";
 import { z } from "zod";
+import { sentSchemas } from "./schema-copies";
 
 export type { CredentialTypeDefinition, OAuth2Authentication, OAuth2Config, OAuth2Resolver };
 
@@ -133,7 +134,7 @@ const catalogEntry = (t: CredentialTypeDefinition): CredentialTypeCatalogEntry =
   oauth2: t.oauth2 !== undefined,
   icon: t.icon,
   iconUrl: t.iconUrl,
-  fieldsSchema: z.toJSONSchema(t.fields),
+  fieldsSchema: sentSchemas.get(t.fields) ?? z.toJSONSchema(t.fields),
 });
 
 export const credentialTypeCatalog: CredentialTypeCatalogEntry[] =

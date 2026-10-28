@@ -31,6 +31,7 @@ import httpRequest from "./http-request";
 import logicIf from "./logic-if";
 import logicSwitch from "./logic-switch";
 import rssRead from "./rss-read";
+import { sentSchemas } from "./schema-copies";
 import tableDelete from "./table-delete";
 import tableGet from "./table-get";
 import tableGetAll from "./table-get-all";
@@ -139,7 +140,9 @@ const catalogEntry = (node: NodeDefinition): NodeCatalogEntry => ({
   defaultConfig: node.defaultConfig,
   credentialTypes: node.credentialTypes ?? [],
   credentialRules: node.credentialRules ?? {},
-  configSchema: z.toJSONSchema(node.config, { io: "input", unrepresentable: "any" }),
+  configSchema:
+    sentSchemas.get(node.config) ??
+    z.toJSONSchema(node.config, { io: "input", unrepresentable: "any" }),
 });
 
 /** Plain data about the nodes. Safe to send to the browser. */
