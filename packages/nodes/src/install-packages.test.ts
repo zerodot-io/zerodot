@@ -176,6 +176,7 @@ describe("catalog", () => {
         {
           name: "@zerodot/redis",
           label: "Redis",
+          summary: "s",
           description: "d",
           version: "1.0.0",
           sdk: "^1.0",
@@ -197,6 +198,8 @@ describe("catalog", () => {
       packages.map((p) => p.name),
       ["@zerodot/redis", "@zerodot/icons", "@zerodot/remote"],
     );
+    assert.equal(packages[0]?.summary, "s");
+    assert.equal(packages[1]?.summary, "");
     assert.equal(packages[1]?.icon, "Database");
     assert.match(packages[1]?.iconUrl ?? "", /^data:image\/svg\+xml/);
     assert.equal(packages[2]?.iconUrl, undefined);

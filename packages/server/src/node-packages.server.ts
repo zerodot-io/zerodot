@@ -55,6 +55,7 @@ export async function startNodePackages(db: Db, subscriber: Redis, log: SyncLog)
 export type NodePackageView = {
   name: string;
   label: string;
+  summary: string;
   description: string;
   /** The installed version, or null. */
   version: string | null;
@@ -97,6 +98,7 @@ export async function nodePackagesOverview(headers: Headers): Promise<NodePackag
     byName.set(item.name, {
       name: item.name,
       label: item.label,
+      summary: item.summary,
       description: item.description,
       version: null,
       source: null,
@@ -112,6 +114,7 @@ export async function nodePackagesOverview(headers: Headers): Promise<NodePackag
     const view = byName.get(name) ?? {
       name,
       label: name,
+      summary: "",
       description: "",
       version: null,
       source: null,
@@ -207,6 +210,7 @@ export async function uninstallNodePackage(
 export type AvailableNodePackage = {
   name: string;
   label: string;
+  summary: string;
   description: string;
   version: string;
   icon: string | null;
@@ -237,6 +241,7 @@ export async function availableNodePackages(headers: Headers): Promise<Available
       .map((item) => ({
         name: item.name,
         label: item.label,
+        summary: item.summary,
         description: item.description,
         version: item.version,
         icon: item.icon ?? null,

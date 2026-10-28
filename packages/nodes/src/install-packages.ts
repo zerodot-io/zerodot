@@ -352,6 +352,9 @@ export function createPackageSyncer(
 export type CatalogPackage = {
   name: string;
   label: string;
+  /** One short line for lists. */
+  summary: string;
+  /** The long text: what the package does and what it is for. */
   description: string;
   version: string;
   /** The node contract range of `version`. */
@@ -377,6 +380,7 @@ export function parseCatalog(json: unknown): CatalogPackage[] {
     packages.push({
       name: item.name,
       label: isText(item.label) ? item.label : item.name,
+      summary: isText(item.summary) ? item.summary : "",
       description: isText(item.description) ? item.description : "",
       version: item.version,
       sdk: item.sdk,

@@ -1805,9 +1805,10 @@ export function Editor({
                       <AvailableNodePackages
                         query={addQuery}
                         onInstalled={() => setCatalogTick((tick) => tick + 1)}
+                        showEmpty={addGroups.length === 0}
                       />
                     )}
-                    {addGroups.length === 0 && (
+                    {addGroups.length === 0 && addApp && (
                       <p className="px-2 text-muted-foreground">No nodes found</p>
                     )}
                   </div>

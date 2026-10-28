@@ -117,6 +117,9 @@ function PackageRow({
 }) {
   const installed = item.version !== null;
   const status = STATUS[item.status];
+  const [open, setOpen] = useState(false);
+  const summary = item.summary || item.description;
+  const hasDetails = item.description !== "" || item.nodes.length > 0;
   return (
     <li className="flex items-start gap-4 px-4 py-4">
       <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted">
@@ -135,8 +138,37 @@ function PackageRow({
           )}
           {item.source === "env" && <Badge variant="outline">ZERODOT_NODE_PACKAGES</Badge>}
         </div>
-        {item.description && <p className="text-pretty">{item.description}</p>}
-        <span className="font-mono text-muted-foreground">{item.name}</span>
+        {summary && <p className="text-pretty">{summary}</p>}
+        <div className="flex items-center gap-3 text-muted-foreground">
+          <span className="font-mono">{item.name}</span>
+          {hasDetails && (
+            <button
+              type="button"
+              aria-expanded={open}
+              onClick={() => setOpen((value) => !value)}
+              className="rounded-md px-1 transition-colors duration-150 ease-out hover:text-foreground"
+            >
+              {open ? "Hide details" : "Details"}
+            </button>
+          )}
+        </div>
+        {open && (
+          <div className="mt-1 flex flex-col gap-3 rounded-lg bg-muted/50 p-3">
+            {item.description && <p className="text-pretty">{item.description}</p>}
+            {item.nodes.length > 0 && (
+              <ul className="flex flex-col gap-1">
+                {item.nodes.map((node) => (
+                  <li key={node.type} className="flex flex-col">
+                    <span className="font-medium">{node.label}</span>
+                    {node.description && (
+                      <span className="text-pretty text-muted-foreground">{node.description}</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
         {item.error && <span className="text-destructive">{item.error}</span>}
       </div>
       {canChange &&
@@ -347,9 +379,12 @@ const matches = (item: Available["packages"][number], query: string): boolean =>
 export function AvailableNodePackages({
   query,
   onInstalled,
+  showEmpty = false,
 }: {
   query: string;
   onInstalled: () => void;
+  /** Say "No nodes found" when this list has no match too. The caller has no node match. */
+  showEmpty?: boolean;
 }) {
   const [available, setAvailable] = useState<Available | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -382,7 +417,9 @@ export function AvailableNodePackages({
   const text = query.trim().toLowerCase();
   if (!available) return null;
   const found = available.packages.filter((item) => matches(item, text));
-  if (found.length === 0) return null;
+  if (found.length === 0) {
+    return showEmpty ? <p className="px-2 text-muted-foreground">No nodes found</p> : null;
+  }
   return (
     <div className="flex flex-col">
       <span className="px-2 py-1.5 font-medium">Not installed ({found.length})</span>
@@ -392,9 +429,7 @@ export function AvailableNodePackages({
           <span className="flex min-w-0 flex-1 flex-col">
             <span>{item.label}</span>
             <span className="text-muted-foreground">
-              {item.compatible
-                ? item.description || item.nodes.map((node) => node.label).join(", ")
-                : "Needs a newer zerodot"}
+              {item.compatible ? item.summary || item.description : "Needs a newer zerodot"}
             </span>
           </span>
           {item.compatible &&
