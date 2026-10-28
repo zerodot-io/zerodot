@@ -17,6 +17,7 @@ import { formatTime } from "../lib/format";
 import { deleteApiKeyFn, listApiKeysFn } from "../server/api-key-fns";
 
 export const Route = createFileRoute("/p/$projectSlug/api-keys")({
+  head: () => ({ meta: [{ title: "API keys · zerodot" }] }),
   loader: async ({ params, context }) => {
     const isAdmin = context.project.role.split(",").some((r) => r === "owner" || r === "admin");
     return isAdmin ? listApiKeysFn({ data: { projectSlug: params.projectSlug } }) : null;

@@ -129,6 +129,7 @@ const AGE_ITEMS = [
 ];
 
 export const Route = createFileRoute("/system")({
+  head: () => ({ meta: [{ title: "System · zerodot" }] }),
   beforeLoad: async () => {
     const home = await getHomeFn();
     if (!home.signedIn) throw redirect({ to: "/sign-in" });

@@ -4,6 +4,7 @@ import { NodePackagesSection } from "../components/node-packages";
 import { getHomeFn, getIsInstanceAdmin } from "../server/fns";
 
 export const Route = createFileRoute("/system_/nodes")({
+  head: () => ({ meta: [{ title: "Node packages · zerodot" }] }),
   beforeLoad: async () => {
     const home = await getHomeFn();
     if (!home.signedIn) throw redirect({ to: "/sign-in" });

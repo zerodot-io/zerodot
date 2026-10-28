@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
+import { readFileSync } from "node:fs";
 import tailwindcss from "@tailwindcss/vite";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import viteReact from "@vitejs/plugin-react";
@@ -50,6 +51,11 @@ const browserServerOnly: Plugin = {
   },
 };
 
+// The About dialog shows the version.
+const appVersion = String(
+  JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8")).version,
+);
+
 // The API app serves these paths. In dev, Vite sends them there so the browser keeps one origin.
 // In production a reverse proxy does the same (see Caddyfile).
 const apiTarget = `http://localhost:${process.env.ZERODOT_API_PORT ?? 3003}`;
@@ -78,6 +84,9 @@ const previewHosts = [
 });
 
 export default defineConfig({
+  define: {
+    __APP_VERSION__: JSON.stringify(appVersion),
+  },
   preview: { allowedHosts: previewHosts },
   server: {
     port: 3000,

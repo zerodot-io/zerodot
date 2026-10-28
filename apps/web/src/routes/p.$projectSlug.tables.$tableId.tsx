@@ -16,6 +16,7 @@ import {
 } from "../server/table-fns";
 
 export const Route = createFileRoute("/p/$projectSlug/tables/$tableId")({
+  head: () => ({ meta: [{ title: "Data table · zerodot" }] }),
   loader: ({ params }) =>
     getTableFn({ data: { projectSlug: params.projectSlug, tableId: params.tableId } }),
   component: TablePage,

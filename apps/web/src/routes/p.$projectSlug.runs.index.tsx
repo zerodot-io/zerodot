@@ -32,6 +32,7 @@ type Search = {
 };
 
 export const Route = createFileRoute("/p/$projectSlug/runs/")({
+  head: () => ({ meta: [{ title: "Runs · zerodot" }] }),
   validateSearch: (raw: Record<string, unknown>): Search => ({
     wf: typeof raw.wf === "string" ? raw.wf : undefined,
     status: STATUSES.find((s) => s === raw.status),

@@ -64,6 +64,7 @@ const withDefaults = (s: SearchInput): Search => ({
 });
 
 export const Route = createFileRoute("/p/$projectSlug/insights")({
+  head: () => ({ meta: [{ title: "Insights · zerodot" }] }),
   validateSearch: (raw: Record<string, unknown>): SearchInput => ({
     range:
       typeof raw.range === "string" && raw.range in RANGES ? (raw.range as RangeKey) : undefined,
