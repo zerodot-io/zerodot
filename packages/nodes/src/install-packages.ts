@@ -24,7 +24,15 @@ import {
 
 const run = promisify(execFile);
 
-const NPM_REGISTRY = "https://registry.npmjs.org";
+const DEFAULT_NPM_REGISTRY = "https://registry.npmjs.org";
+
+/**
+ * The npm registry that packages come from. `ZERODOT_NPM_REGISTRY` sets another one, for example a
+ * private mirror. Version checks and installs both use it.
+ */
+export function npmRegistry(env: Record<string, string | undefined> = process.env): string {
+  return (env.ZERODOT_NPM_REGISTRY?.trim() || DEFAULT_NPM_REGISTRY).replace(/\/+$/, "");
+}
 const INSTALL_TIMEOUT_MS = 180_000;
 
 /** Only packages of the zerodot organization can be installed for now. */
@@ -99,10 +107,12 @@ export async function fetchPackument(
   fetchImpl: typeof fetch = fetch,
 ): Promise<Packument> {
   // The short form of the document has no custom fields, so it has no `zerodot.sdk`.
-  const response = await fetchImpl(`${NPM_REGISTRY}/${name.replace("/", "%2f")}`, {
+  const response = await fetchImpl(`${npmRegistry()}/${name.replace("/", "%2f")}`, {
     signal: AbortSignal.timeout(15_000),
   });
-  if (response.status === 404) throw new Error(`The package "${name}" does not exist on npm`);
+  if (response.status === 404) {
+    throw new Error(`The package "${name}" does not exist on ${npmRegistry()}`);
+  }
   if (!response.ok) throw new Error(`npm answered with status ${response.status}`);
   return (await response.json()) as Packument;
 }
@@ -189,6 +199,7 @@ export async function installFromNpm(
       "--no-audit",
       "--no-fund",
       "--save-exact",
+      `--registry=${npmRegistry()}`,
       `${name}@${version}`,
     ],
     dir,

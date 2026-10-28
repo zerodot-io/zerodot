@@ -20,6 +20,7 @@ import {
   loadedVersion,
   loadInstalled,
   mergeWanted,
+  npmRegistry,
   onPackageUnload,
   packageEntry,
   parseCatalog,
@@ -564,5 +565,15 @@ describe("community registry", () => {
     await assert.rejects(fetchRegistry("https://b.dev/r.json", big), /larger than 1 MB/);
     const bad = (async () => new Response("{")) as typeof fetch;
     await assert.rejects(fetchRegistry("https://c.dev/r.json", bad), /not valid JSON/);
+  });
+});
+
+describe("npmRegistry", () => {
+  it("uses npm, or the address in ZERODOT_NPM_REGISTRY", () => {
+    assert.equal(npmRegistry({}), "https://registry.npmjs.org");
+    assert.equal(
+      npmRegistry({ ZERODOT_NPM_REGISTRY: " http://localhost:4873/ " }),
+      "http://localhost:4873",
+    );
   });
 });

@@ -28,6 +28,7 @@ Official packages: `@zerodot/redis`, `@zerodot/mysql`, `@zerodot/postgres`, `@ze
 
 - Packages live in `ZERODOT_NODES_DIR` (default `./.zerodot/nodes`; `/nodes` in the Docker image, on the `node-packages` volume). web, API, and worker share it.
 - `ZERODOT_NODES_INSTALL=false` turns off installing and removing in the app.
+- `ZERODOT_NPM_REGISTRY` sets the npm registry that packages come from (default `https://registry.npmjs.org`), for example a private mirror.
 - `ZERODOT_NODE_CATALOG_URL` sets where the app reads the list of packages (default: the `catalog.json` of zerodot-nodes).
 - The official catalog lists only `@zerodot/*` packages. Other packages come from community registries (see below).
 - Install scripts of packages do not run.
