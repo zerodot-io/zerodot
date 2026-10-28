@@ -183,7 +183,10 @@ const npm: NpmRunner = async (args, cwd) => {
   );
 };
 
-/** Install scripts do not run: package code runs only when a workflow runs it. */
+/**
+ * Install scripts do not run. The code of the package still runs when zerodot loads it: at install
+ * and at each start, also when no workflow uses its nodes.
+ */
 export async function installFromNpm(
   dir: string,
   name: string,

@@ -51,9 +51,12 @@ const envPackages = (env: Record<string, string | undefined> = process.env): str
 export const installEnabled = (env: Record<string, string | undefined> = process.env): boolean =>
   (env.ZERODOT_NODES_INSTALL ?? "true").trim().toLowerCase() !== "false";
 
-/** False when `ZERODOT_COMMUNITY_NODES=false`: nobody adds a registry or installs a community package. */
+/**
+ * True only when `ZERODOT_COMMUNITY_NODES=true`. Off by default: a community package runs inside
+ * zerodot and can read all its secrets, so the operator must turn this on.
+ */
 export const communityEnabled = (env: Record<string, string | undefined> = process.env): boolean =>
-  installEnabled(env) && (env.ZERODOT_COMMUNITY_NODES ?? "true").trim().toLowerCase() !== "false";
+  installEnabled(env) && (env.ZERODOT_COMMUNITY_NODES ?? "").trim().toLowerCase() === "true";
 
 /** The most registries one instance can have. Each one is read when the Nodes page opens. */
 const MAX_REGISTRIES = 20;
@@ -106,7 +109,7 @@ export type NodeRegistryView = NodeRegistry & {
 
 export type NodePackagesOverview = {
   installEnabled: boolean;
-  /** False when `ZERODOT_COMMUNITY_NODES=false` or installing is off. */
+  /** True only when `ZERODOT_COMMUNITY_NODES=true` and installing is on. */
   communityEnabled: boolean;
   catalogUrl: string;
   /** Why the catalog could not be read. The installed packages still show. */
@@ -231,7 +234,9 @@ async function communityVersion(
   input: { name: string; registry: string; version?: string; acceptRisk?: boolean },
 ): Promise<string> {
   if (!communityEnabled()) {
-    throw conflict("Community packages are turned off on this instance (ZERODOT_COMMUNITY_NODES)");
+    throw conflict(
+      "Community packages are off on this instance. The operator sets ZERODOT_COMMUNITY_NODES=true to turn them on",
+    );
   }
   if (input.acceptRisk !== true) throw badRequest(RISK_NOT_ACCEPTED);
   if (isOfficialPackage(input.name))
@@ -356,7 +361,9 @@ export async function updateNodePackage(
   if (!current) throw notFound("Package");
   // Another version of a community package is new code that nobody checked.
   if (current.registry && !communityEnabled()) {
-    throw conflict("Community packages are turned off on this instance (ZERODOT_COMMUNITY_NODES)");
+    throw conflict(
+      "Community packages are off on this instance. The operator sets ZERODOT_COMMUNITY_NODES=true to turn them on",
+    );
   }
   if (current.registry && input.acceptRisk !== true) throw badRequest(RISK_NOT_ACCEPTED);
   const dir = nodesDir();
@@ -396,7 +403,9 @@ export async function addNodeRegistry(
 ): Promise<NodeRegistry> {
   const actor = await requireInstanceAdmin(headers);
   if (!communityEnabled()) {
-    throw conflict("Community packages are turned off on this instance (ZERODOT_COMMUNITY_NODES)");
+    throw conflict(
+      "Community packages are off on this instance. The operator sets ZERODOT_COMMUNITY_NODES=true to turn them on",
+    );
   }
   if (input.acceptRisk !== true) {
     throw badRequest("A registry lists code that nobody checked. Accept the risk to continue");
