@@ -1,0 +1,187 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+
+import { cva, type VariantProps } from "class-variance-authority";
+import type * as React from "react";
+
+import { cn } from "../../lib/utils";
+import { Button } from "./button";
+import { Input } from "./input";
+import { Textarea } from "./textarea";
+
+const inputGroupVariants = cva(
+  [
+    "group/input-group relative flex w-full min-w-0 items-center overflow-hidden outline-none",
+    // disabled
+    "has-disabled:pointer-events-none has-disabled:cursor-not-allowed has-disabled:text-popover-foreground",
+    // focus-within
+    "has-[[data-slot=input-group-control]:focus-visible]:shadow-[0px_1px_1px_rgba(0,0,0,0.12),0px_0px_0px_1px_rgba(0,0,0,0.1)]! has-[[data-slot=input-group-control]:focus-visible]:ring-2 has-[[data-slot=input-group-control]:focus-visible]:ring-[rgba(201,201,201,0.9)]",
+    // invalid
+    "has-[[data-slot][aria-invalid=true]]:ring-3 has-[[data-slot][aria-invalid=true]]:ring-destructive/20 dark:has-[[data-slot][aria-invalid=true]]:ring-destructive/40",
+    // block/textarea layout
+    "has-[>[data-align=block-end]]:h-auto! has-[>[data-align=block-end]]:flex-col has-[>[data-align=block-start]]:h-auto! has-[>[data-align=block-start]]:flex-col has-[>textarea]:h-auto!",
+  ],
+  {
+    variants: {
+      variant: {
+        outline:
+          "bg-transparent shadow-default transition-shadow duration-150 group-data-[invalid=true]/field:shadow-[0px_1px_1px_#0000000f,0px_0px_0px_1px_var(--error-outline)]! not-has-disabled:hover:shadow-raised has-disabled:bg-transparent data-[filled=true]:shadow-[0px_1px_1px_#0000000f,0px_0px_0px_1px_var(--border)] data-[invalid=true]:shadow-[0px_1px_1px_#0000000f,0px_0px_0px_1px_var(--error-outline)] data-[valid=true]:shadow-[0px_1px_1px_#0000000f,0px_0px_0px_1px_var(--success-outline)]",
+        subtle:
+          "bg-secondary group-data-[invalid=true]/field:bg-error! not-has-disabled:hover:bg-[color-mix(in_oklch,var(--secondary),black_2%)] has-disabled:bg-input has-[[data-slot=input-group-control]:focus-visible]:bg-background data-[filled=true]:bg-secondary data-[invalid=true]:bg-error! data-[valid=true]:bg-success! dark:not-has-disabled:hover:bg-[color-mix(in_oklch,var(--secondary),white_5%)]",
+        ghost:
+          "bg-transparent group-data-[invalid=true]/field:bg-error! not-has-disabled:hover:bg-[color-mix(in_oklch,var(--secondary),black_2%)] has-disabled:bg-transparent has-[[data-slot=input-group-control]:focus-visible]:bg-background data-[filled=true]:bg-secondary data-[invalid=true]:bg-error! data-[valid=true]:bg-success! dark:not-has-disabled:hover:bg-[color-mix(in_oklch,var(--secondary),white_5%)]",
+      },
+      size: {
+        xs: "h-6 rounded-sm [&_svg:not([class*='size-'])]:size-4",
+        sm: "h-7 rounded-md [&_svg:not([class*='size-'])]:size-4",
+        md: "h-8 rounded-md [&_svg:not([class*='size-'])]:size-4",
+        lg: "h-10 rounded-lg [&_svg:not([class*='size-'])]:size-4",
+      },
+    },
+    defaultVariants: {
+      variant: "outline",
+      size: "md",
+    },
+  },
+);
+
+function InputGroup({
+  className,
+  variant,
+  size,
+  ...props
+}: React.ComponentProps<"div"> & VariantProps<typeof inputGroupVariants>) {
+  return (
+    <div
+      data-slot="input-group"
+      data-variant={variant ?? "outline"}
+      data-size={size ?? "md"}
+      role="group"
+      className={cn(inputGroupVariants({ variant, size }), className)}
+      {...props}
+    />
+  );
+}
+
+const inputGroupAddonVariants = cva(
+  "flex h-auto cursor-text items-center justify-center gap-2 py-1.5 text-sm font-medium text-muted-foreground select-none group-data-[disabled=true]/input-group:opacity-50 [&>kbd]:rounded-[calc(var(--radius)-5px)] [&>svg:not([class*='size-'])]:size-4",
+  {
+    variants: {
+      align: {
+        "inline-start": "order-first pl-2 has-[>button]:ml-[-0.3rem] has-[>kbd]:ml-[-0.15rem]",
+        "inline-end": "order-last pr-2 has-[>button]:mr-[-0.3rem] has-[>kbd]:mr-[-0.15rem]",
+        "block-start":
+          "order-first w-full justify-start px-2.5 pt-2 group-has-[>input]/input-group:pt-2 [.border-b]:pb-2",
+        "block-end":
+          "order-last w-full justify-start px-2.5 pb-2 group-has-[>input]/input-group:pb-2 [.border-t]:pt-2",
+      },
+    },
+    defaultVariants: {
+      align: "inline-start",
+    },
+  },
+);
+
+function InputGroupAddon({
+  className,
+  align = "inline-start",
+  ...props
+}: React.ComponentProps<"div"> & VariantProps<typeof inputGroupAddonVariants>) {
+  return (
+    <div
+      role="group"
+      data-slot="input-group-addon"
+      data-align={align}
+      className={cn(inputGroupAddonVariants({ align }), className)}
+      onClick={(e) => {
+        if ((e.target as HTMLElement).closest("button")) {
+          return;
+        }
+        e.currentTarget.parentElement?.querySelector("input")?.focus();
+      }}
+      {...props}
+    />
+  );
+}
+
+const inputGroupButtonVariants = cva("flex items-center gap-2 text-sm shadow-none", {
+  variants: {
+    size: {
+      xs: "h-6 gap-1 rounded-[calc(var(--radius)-3px)] px-1.5 [&>svg:not([class*='size-'])]:size-3.5",
+      sm: "",
+      "icon-xs": "size-6 rounded-[calc(var(--radius)-3px)] p-0 has-[>svg]:p-0",
+      "icon-sm": "size-8 p-0 has-[>svg]:p-0",
+    },
+  },
+  defaultVariants: {
+    size: "xs",
+  },
+});
+
+function InputGroupButton({
+  className,
+  type = "button",
+  variant = "ghost",
+  size = "xs",
+  ...props
+}: Omit<React.ComponentProps<typeof Button>, "size" | "type"> &
+  VariantProps<typeof inputGroupButtonVariants> & {
+    type?: "button" | "submit" | "reset";
+  }) {
+  return (
+    <Button
+      type={type}
+      data-size={size}
+      variant={variant}
+      className={cn(inputGroupButtonVariants({ size }), className)}
+      {...props}
+    />
+  );
+}
+
+function InputGroupText({ className, ...props }: React.ComponentProps<"span">) {
+  return (
+    <span
+      className={cn(
+        "flex items-center gap-2 text-sm text-muted-foreground [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
+function InputGroupInput({ className, ...props }: Omit<React.ComponentProps<"input">, "size">) {
+  return (
+    <Input
+      data-slot="input-group-control"
+      className={cn(
+        "flex-1 rounded-none border-0 bg-transparent ring-0 [--shadow-default:none] [--shadow-raised:none] group-data-[invalid=true]/field:shadow-none! group-data-[size=lg]/input-group:h-10 group-data-[size=lg]/input-group:px-3 group-data-[size=lg]/input-group:text-lg group-data-[size=md]/input-group:h-8 group-data-[size=md]/input-group:px-2.5 group-data-[size=md]/input-group:text-base group-data-[size=sm]/input-group:h-7 group-data-[size=sm]/input-group:px-2 group-data-[size=sm]/input-group:text-base group-data-[size=xs]/input-group:h-6 group-data-[size=xs]/input-group:px-2 group-data-[size=xs]/input-group:text-sm not-data-disabled:hover:border-0 not-data-disabled:focus:border-0 not-data-disabled:focus:ring-0 not-data-disabled:focus-visible:ring-0 not-data-disabled:active:border-0 not-data-disabled:active:ring-0 disabled:bg-transparent aria-invalid:ring-0 data-filled:shadow-none! data-invalid:shadow-none! data-valid:shadow-none! dark:bg-transparent dark:disabled:bg-transparent",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
+function InputGroupTextarea({ className, ...props }: React.ComponentProps<"textarea">) {
+  return (
+    <Textarea
+      data-slot="input-group-control"
+      className={cn(
+        "flex-1 resize-none rounded-none border-0 bg-transparent py-2 ring-0 [--shadow-default:none] [--shadow-raised:none] hover:bg-transparent! focus:border-0 focus:bg-transparent! focus:ring-0 focus-visible:ring-0 active:border-0 active:bg-transparent! active:ring-0 disabled:bg-transparent aria-invalid:ring-0 dark:bg-transparent dark:disabled:bg-transparent",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
+export {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+  InputGroupText,
+  InputGroupTextarea,
+  inputGroupVariants,
+};

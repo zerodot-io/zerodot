@@ -1,0 +1,26 @@
+{
+  "name": "@zerodot/auth",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./client": "./src/client.ts"
+  },
+  "scripts": {
+    "check-types": "tsc -p tsconfig.json",
+    "test": "tsx --test src/*.test.ts",
+    "db:schema": "better-auth generate --config auth.cli.ts --output ../db/src/schema/auth.ts -y"
+  },
+  "devDependencies": {
+    "@better-auth/cli": "1.4.21",
+    "@zerodot/config": "workspace:*",
+    "@types/node": "26.6.5",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2"
+  },
+  "dependencies": {
+    "@zerodot/db": "workspace:*",
+    "better-auth": "1.7.12"
+  }
+}

@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Dev override. It publishes Postgres and Valkey so `pnpm dev` on the host can reach them.
+# docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d postgres valkey
+services:
+  postgres:
+    ports: ["5432:5432"]
+  valkey:
+    ports: ["6379:6379"]

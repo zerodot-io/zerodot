@@ -1,0 +1,22 @@
+node_modules
+dist
+.output
+.turbo
+.env
+.env.*
+!.env.example
+*.tsbuildinfo
+apps/web/.tanstack/
+apps/worker/drizzle
+apps/api/drizzle
+
+# Local plans
+plans/
+.zerodot
+
+# Local spec
+SPEC.md
+.claude/worktrees/
+
+# Local load test tool
+apps/worker/loadtest/

@@ -1,0 +1,1 @@
+CREATE INDEX "run_unfinished_idx" ON "run" USING btree ("status","created_at") WHERE "run"."status" in ('queued', 'running');

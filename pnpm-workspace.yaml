@@ -1,0 +1,24 @@
+packages:
+  - apps/*
+  - packages/*
+minimumReleaseAgeExclude:
+  - "@biomejs/biome@2.6.3"
+  - "@biomejs/cli-android-arm64@2.6.3"
+  - "@biomejs/cli-android-x64@2.6.3"
+  - "@biomejs/cli-darwin-arm64@2.6.3"
+  - "@biomejs/cli-darwin-x64@2.6.3"
+  - "@biomejs/cli-linux-arm64-musl@2.6.3"
+  - "@biomejs/cli-linux-arm64@2.6.3"
+  - "@biomejs/cli-linux-x64-musl@2.6.3"
+  - "@biomejs/cli-linux-x64@2.6.3"
+  - "@biomejs/cli-win32-arm64@2.6.3"
+  - "@biomejs/cli-win32-x64@2.6.3"
+  - bullmq@6.4.1
+allowBuilds:
+  esbuild: true
+  isolated-vm: true
+  "@prisma/client": false
+  better-sqlite3: false
+  msgpackr-extract: false
+  ssh2: false
+  cpu-features: false

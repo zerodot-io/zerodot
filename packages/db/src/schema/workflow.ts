@@ -1,0 +1,65 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+import { sql } from "drizzle-orm";
+import {
+  boolean,
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  unique,
+  uuid,
+} from "drizzle-orm/pg-core";
+import { organization, user } from "./auth";
+
+export const workflow = pgTable(
+  "workflow",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    active: boolean("active").notNull().default(false),
+    draftGraph: jsonb("draft_graph")
+      .notNull()
+      .default(sql`'{"schema":1,"nodes":[],"edges":[]}'::jsonb`),
+    publishedVersionId: uuid("published_version_id"),
+    errorWorkflowId: uuid("error_workflow_id"),
+    maxConcurrency: integer("max_concurrency"),
+    minutesSavedPerRun: integer("minutes_saved_per_run"),
+    /** IANA time zone for the cron triggers of the workflow. Null uses the project time zone. */
+    timezone: text("timezone"),
+    description: text("description"),
+    tags: text("tags").array().notNull().default(sql`'{}'::text[]`),
+    /** Longest time one pass of a run may take, in seconds. Null uses the worker default. */
+    timeoutSeconds: integer("timeout_seconds"),
+    /** Keep the node data of production runs that succeed. */
+    saveSuccessData: boolean("save_success_data").notNull().default(true),
+    /** Keep the node data of production runs that fail. */
+    saveFailureData: boolean("save_failure_data").notNull().default(true),
+    /** Most automatic retries of a failed production run. 0 turns auto retry off. */
+    autoRetryMax: integer("auto_retry_max").notNull().default(0),
+    /** Wait before each automatic retry, in milliseconds. */
+    autoRetryBackoffMs: integer("auto_retry_backoff_ms").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("workflow_org_created_idx").on(t.organizationId, t.createdAt.desc(), t.id.desc())],
+);
+
+export const workflowVersion = pgTable(
+  "workflow_version",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workflowId: uuid("workflow_id")
+      .notNull()
+      .references(() => workflow.id, { onDelete: "cascade" }),
+    version: integer("version").notNull(),
+    graph: jsonb("graph").notNull(),
+    createdBy: text("created_by").references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [unique("workflow_version_unique").on(t.workflowId, t.version)],
+);

@@ -1,0 +1,279 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+import assert from "node:assert/strict";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { describe, it } from "node:test";
+import { registry } from "./index";
+import {
+  clearCatalogCache,
+  createPackageSyncer,
+  fetchCatalog,
+  installedVersion,
+  isLoaded,
+  isOfficialPackage,
+  loadInstalled,
+  mergeWanted,
+  packageEntry,
+  parseCatalog,
+  pickVersion,
+  type SyncLog,
+  syncPackages,
+  unloadPackage,
+  withInstallLock,
+} from "./install-packages";
+
+// A package finds zod in its own folder. The fixture imports the zod of this test instead.
+const ZOD = import.meta.resolve("zod");
+
+/** Writes a package like npm does into `<dir>/node_modules/<name>`. */
+function writePackage(dir: string, name: string, version: string, sdk: string, type: string) {
+  const root = join(dir, "node_modules", name);
+  mkdirSync(join(root, "dist"), { recursive: true });
+  writeFileSync(
+    join(root, "package.json"),
+    JSON.stringify({
+      name,
+      version,
+      type: "module",
+      exports: { ".": "./dist/index.mjs" },
+      zerodot: { sdk },
+    }),
+  );
+  writeFileSync(
+    join(root, "dist", "index.mjs"),
+    `import { z } from ${JSON.stringify(ZOD)};
+    export const nodes = [{
+      type: ${JSON.stringify(type)}, label: "X", category: "integration", icon: "Plug",
+      config: z.object({}),
+      defaultConfig: {}, ports: { in: ["in"], out: ["out"] },
+      run: () => ({ port: "out", data: null }),
+    }];`,
+  );
+}
+
+describe("pickVersion", () => {
+  it("takes the newest version that fits, and skips pre-releases", () => {
+    const packument = {
+      versions: {
+        "1.0.0": { zerodot: { sdk: "^1.0" } },
+        "1.2.0": { zerodot: { sdk: "^1.0" } },
+        "1.10.0": { zerodot: { sdk: "^1.0" } },
+        "2.0.0": { zerodot: { sdk: "^2.0" } },
+        "1.11.0-beta.1": { zerodot: { sdk: "^1.0" } },
+        "0.9.0": {},
+      },
+    };
+    assert.equal(pickVersion(packument, "1.0.0"), "1.10.0");
+    assert.equal(pickVersion(packument, "2.0.0"), "2.0.0");
+    assert.equal(pickVersion(packument, "3.0.0"), null);
+    assert.equal(pickVersion({}, "1.0.0"), null);
+  });
+});
+
+describe("isOfficialPackage", () => {
+  it("allows @zerodot/* only", () => {
+    assert.equal(isOfficialPackage("@zerodot/redis"), true);
+    assert.equal(isOfficialPackage("@zerodot/redis/../x"), false);
+    assert.equal(isOfficialPackage("@evil/redis"), false);
+    assert.equal(isOfficialPackage("redis"), false);
+    assert.equal(isOfficialPackage("@zerodot/"), false);
+  });
+});
+
+describe("packages in the nodes folder", () => {
+  it("finds the entry file and the version", () => {
+    const dir = mkdtempSync(join(tmpdir(), "zerodot-nodes-"));
+    try {
+      writePackage(dir, "@zerodot/demo", "1.2.3", "^1.0", "demo.one");
+      assert.equal(installedVersion(dir, "@zerodot/demo"), "1.2.3");
+      assert.equal(installedVersion(dir, "@zerodot/none"), null);
+      assert.equal(
+        packageEntry(dir, "@zerodot/demo"),
+        join(dir, "node_modules", "@zerodot/demo", "dist", "index.mjs"),
+      );
+      assert.throws(() => packageEntry(dir, "@zerodot/none"), /not installed/);
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+
+  it("loads once, and unloads", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "zerodot-nodes-"));
+    try {
+      writePackage(dir, "@zerodot/demo-load", "1.0.0", "^1.0", "demo.load");
+      const [first] = await loadInstalled(dir, ["@zerodot/demo-load"]);
+      assert.deepEqual(first?.added, ["demo.load"]);
+      assert.equal(registry.has("demo.load"), true);
+      assert.equal(isLoaded("@zerodot/demo-load"), true);
+      assert.deepEqual(await loadInstalled(dir, ["@zerodot/demo-load"]), []);
+      await unloadPackage("@zerodot/demo-load");
+      assert.equal(registry.has("demo.load"), false);
+      assert.equal(isLoaded("@zerodot/demo-load"), false);
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+
+  it("refuses a package that needs another contract", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "zerodot-nodes-"));
+    try {
+      writePackage(dir, "@zerodot/demo-new", "1.0.0", "^9.0", "demo.new");
+      const [report] = await loadInstalled(dir, ["@zerodot/demo-new"]);
+      assert.match(report?.error ?? "", /needs node contract \^9\.0/);
+      assert.equal(registry.has("demo.new"), false);
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+});
+
+describe("syncPackages", () => {
+  it("installs what is missing, keeps what is there, and reports failures", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "zerodot-nodes-"));
+    const installed: string[] = [];
+    try {
+      writePackage(dir, "@zerodot/demo-have", "1.0.0", "^1.0", "demo.have");
+      const result = await syncPackages(
+        dir,
+        [
+          { name: "@zerodot/demo-have" },
+          { name: "@zerodot/demo-get" },
+          { name: "@zerodot/demo-fail", version: "1.0.0" },
+          { name: "left-pad" },
+        ],
+        {
+          resolve: async () => "1.4.0",
+          install: async (folder, name, version) => {
+            installed.push(`${name}@${version}`);
+            if (name === "@zerodot/demo-fail") throw new Error("npm failed: offline");
+            writePackage(folder, name, version, "^1.0", "demo.get");
+          },
+        },
+      );
+      assert.deepEqual(installed, ["@zerodot/demo-get@1.4.0", "@zerodot/demo-fail@1.0.0"]);
+      assert.deepEqual(result.versions, {
+        "@zerodot/demo-have": "1.0.0",
+        "@zerodot/demo-get": "1.4.0",
+      });
+      const byName = Object.fromEntries(result.reports.map((r) => [r.name, r]));
+      assert.match(byName["@zerodot/demo-fail"]?.error ?? "", /offline/);
+      assert.match(byName["left-pad"]?.error ?? "", /Only @zerodot/);
+      assert.deepEqual(byName["@zerodot/demo-have"]?.added, ["demo.have"]);
+      assert.deepEqual(byName["@zerodot/demo-get"]?.added, ["demo.get"]);
+    } finally {
+      await unloadPackage("@zerodot/demo-have");
+      await unloadPackage("@zerodot/demo-get");
+      rmSync(dir, { recursive: true });
+    }
+  });
+});
+
+describe("catalog", () => {
+  it("keeps good entries and drops the rest", () => {
+    const packages = parseCatalog({
+      packages: [
+        {
+          name: "@zerodot/redis",
+          label: "Redis",
+          description: "d",
+          version: "1.0.0",
+          sdk: "^1.0",
+          nodes: [{ type: "redis.database", label: "Redis" }, { label: "no type" }],
+        },
+        { name: "@evil/x", version: "1.0.0", sdk: "^1.0" },
+        { name: "@zerodot/nover", sdk: "^1.0" },
+      ],
+    });
+    assert.deepEqual(
+      packages.map((p) => p.name),
+      ["@zerodot/redis"],
+    );
+    assert.deepEqual(packages[0]?.nodes, [{ type: "redis.database", label: "Redis" }]);
+    assert.throws(() => parseCatalog({}), /no "packages"/);
+  });
+
+  it("is cached, and reports a bad answer", async () => {
+    clearCatalogCache();
+    let calls = 0;
+    const ok = (async () => {
+      calls++;
+      return new Response(JSON.stringify({ packages: [] }));
+    }) as typeof fetch;
+    await fetchCatalog("https://x/c.json", ok, 1000);
+    await fetchCatalog("https://x/c.json", ok, 2000);
+    assert.equal(calls, 1);
+    await fetchCatalog("https://x/c.json", ok, 1000 + 11 * 60_000);
+    assert.equal(calls, 2);
+    clearCatalogCache();
+    const bad = (async () => new Response("no", { status: 404 })) as typeof fetch;
+    await assert.rejects(() => fetchCatalog("https://x/c.json", bad), /status 404/);
+  });
+
+  it("merges the env list and the installed list", () => {
+    assert.deepEqual(
+      mergeWanted(
+        ["@zerodot/a"],
+        [
+          { name: "@zerodot/a", version: "1.0.0" },
+          { name: "@zerodot/b", version: "2.0.0" },
+        ],
+      ),
+      [{ name: "@zerodot/a" }, { name: "@zerodot/b", version: "2.0.0" }],
+    );
+  });
+});
+
+describe("withInstallLock", () => {
+  it("runs one job at a time, and takes over a stale lock", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "zerodot-lock-"));
+    try {
+      const order: string[] = [];
+      const job = (name: string) =>
+        withInstallLock(
+          dir,
+          async () => {
+            order.push(`${name}:start`);
+            await new Promise((done) => setTimeout(done, 40));
+            order.push(`${name}:end`);
+          },
+          { pollMs: 5 },
+        );
+      await Promise.all([job("a"), job("b")]);
+      assert.deepEqual(order, ["a:start", "a:end", "b:start", "b:end"]);
+
+      mkdirSync(join(dir, ".install-lock"));
+      await assert.rejects(
+        () => withInstallLock(dir, async () => undefined, { waitMs: 30, pollMs: 5 }),
+        /Another install/,
+      );
+      assert.equal(await withInstallLock(dir, async () => "ok", { staleMs: -1 }), "ok");
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+});
+
+describe("createPackageSyncer", () => {
+  it("logs each report and never throws", async () => {
+    const logs: string[] = [];
+    const log: SyncLog = (level, message) => logs.push(`${level}:${message}`);
+    const dir = mkdtempSync(join(tmpdir(), "zerodot-sync-"));
+    try {
+      const sync = createPackageSyncer(async () => [{ name: "left-pad" }], log, dir);
+      await sync();
+      assert.deepEqual(logs, ["error:nodes.package"]);
+      const broken = createPackageSyncer(
+        async () => {
+          throw new Error("db down");
+        },
+        log,
+        dir,
+      );
+      await broken();
+      assert.equal(logs.at(-1), "error:nodes.sync_failed");
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+});

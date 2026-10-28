@@ -1,0 +1,44 @@
+{
+  "name": "@zerodot/nodes",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./load": "./src/load-packages.ts",
+    "./s3": "./src/s3.ts",
+    "./s3-sign": "./src/s3-sign.ts",
+    "./install": "./src/install-packages.ts"
+  },
+  "scripts": {
+    "check-types": "tsc -p tsconfig.json",
+    "test": "tsx --test src/*.test.ts src/**/*.test.ts"
+  },
+  "devDependencies": {
+    "@zerodot/config": "workspace:*",
+    "@types/mailparser": "3.9.0",
+    "@types/node": "26.6.5",
+    "@types/nodemailer": "8.0.2",
+    "@types/ssh2": "1.15.6",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "@zerodot/engine": "workspace:*",
+    "@zerodot/node-sdk": "workspace:*",
+    "basic-ftp": "6.2.3",
+    "cron-parser": "5.10.2",
+    "fast-xml-parser": "5.11.2",
+    "imapflow": "2.9.1",
+    "mailparser": "3.12.4",
+    "mongodb": "7.7.0",
+    "mysql2": "3.24.6",
+    "node-html-parser": "9.0.5",
+    "nodemailer": "10.2.1",
+    "postgres": "3.4.9",
+    "sharp": "0.35.5",
+    "ssh2": "1.17.0",
+    "zod": "4.6.7"
+  }
+}

@@ -1,0 +1,7 @@
+@import "@fontsource-variable/inter";
+
+/* The espresso theme reads --font-sans. Next.js sets it with next/font. We set it here. */
+:root {
+  --font-sans: "Inter Variable", Inter, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+}

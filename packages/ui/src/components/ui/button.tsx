@@ -1,0 +1,86 @@
+import { Button as ButtonPrimitive } from "@base-ui/react/button";
+import { cva, type VariantProps } from "class-variance-authority";
+
+import { cn } from "../../lib/utils";
+
+const buttonVariants = cva(
+  "group/button inline-flex shrink-0 transform-gpu items-center justify-center bg-clip-padding text-sm whitespace-nowrap outline-none select-none focus-visible:shadow-3xs disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  {
+    variants: {
+      variant: {
+        default:
+          "bg-primary text-primary-foreground hover:bg-primary/86 disabled:bg-secondary disabled:text-card-foreground in-[[data-slot=button-group]:not([data-detached])]:active:bg-primary/75 [@media(hover:none)]:active:bg-primary/75",
+        outline:
+          "bg-transparent text-secondary-foreground shadow-default [transition-duration:0.25s,0.1s,150ms]! hover:shadow-raised focus-visible:shadow-3xs! disabled:text-card-foreground in-[[data-slot=button-group]:not([data-detached])]:active:bg-secondary [@media(hover:none)]:active:bg-secondary",
+        secondary: [
+          // bg/hover/active derive from --btn-bg so the elevation overrides
+          // below shift every state together
+          "[--btn-bg:var(--secondary)] bg-(--btn-bg) text-secondary-foreground hover:bg-[color-mix(in_oklch,var(--btn-bg),black_2%)] disabled:bg-secondary disabled:text-card-foreground in-[[data-slot=button-group]:not([data-detached])]:active:bg-[color-mix(in_oklch,var(--btn-bg),black_5%)] dark:hover:bg-[color-mix(in_oklch,var(--btn-bg),white_5%)] dark:in-[[data-slot=button-group]:not([data-detached])]:active:bg-[color-mix(in_oklch,var(--btn-bg),white_13%)] [@media(hover:none)]:active:bg-[color-mix(in_oklch,var(--btn-bg),black_5%)] dark:[@media(hover:none)]:active:bg-[color-mix(in_oklch,var(--btn-bg),white_13%)]",
+          // elevation ladder (dark only — light surfaces stay white): dark
+          // --secondary is card + white 5.5%, so on elevated surfaces the
+          // button steps to 5.5% + the surface's contents level (3/9.5/14%)
+          // to stay visible; ! breaks ties for the deeper chains
+          "dark:in-data-[slot=card]:[--btn-bg:color-mix(in_oklch,var(--card),white_8.5%)] dark:in-data-[slot=command]:[--btn-bg:color-mix(in_oklch,var(--card),white_8.5%)] dark:in-data-[slot=dialog-content]:[--btn-bg:color-mix(in_oklch,var(--card),white_8.5%)] dark:in-data-[slot=popover-content]:[--btn-bg:color-mix(in_oklch,var(--card),white_8.5%)]",
+          "dark:in-data-[slot=dialog-content]:in-data-[slot=card]:[--btn-bg:color-mix(in_oklch,var(--card),white_15%)]! dark:in-data-[slot=dialog-portal]:in-data-[slot=popover-content]:[--btn-bg:color-mix(in_oklch,var(--card),white_15%)]! dark:in-data-[slot=popover-content]:in-data-[slot=card]:[--btn-bg:color-mix(in_oklch,var(--card),white_15%)]! dark:in-data-[slot=command]:in-data-[slot=card]:[--btn-bg:color-mix(in_oklch,var(--card),white_15%)]!",
+          // popovers portal out of their trigger's surface, so command→popover
+          // chains check where the open trigger sits via body:has()
+          "dark:[body:has([data-slot=command]_[data-slot=popover-trigger][data-popup-open])_[data-slot=popover-content]_&]:[--btn-bg:color-mix(in_oklch,var(--card),white_15%)]! dark:[body:has([data-slot=command]_[data-slot=card]_[data-slot=popover-trigger][data-popup-open])_[data-slot=popover-content]_&]:[--btn-bg:color-mix(in_oklch,var(--card),white_19.5%)]!",
+        ].join(" "),
+        ghost:
+          "bg-transparent text-secondary-foreground hover:bg-[color-mix(in_oklch,var(--secondary),black_2%)] disabled:text-card-foreground in-[[data-slot=button-group]:not([data-detached])]:active:bg-[color-mix(in_oklch,var(--secondary),black_5%)] dark:hover:bg-[color-mix(in_oklch,var(--secondary),white_5%)] dark:in-[[data-slot=button-group]:not([data-detached])]:active:bg-[color-mix(in_oklch,var(--secondary),white_13%)] [@media(hover:none)]:active:bg-[color-mix(in_oklch,var(--secondary),black_5%)] dark:[@media(hover:none)]:active:bg-[color-mix(in_oklch,var(--secondary),white_13%)]",
+        destructive:
+          "bg-destructive text-destructive-foreground hover:bg-[color-mix(in_oklch,var(--destructive),black_11%)] focus-visible:shadow-none focus-visible:ring-2 focus-visible:ring-destructive/50 disabled:bg-destructive-disabled disabled:text-destructive-disabled-foreground in-[[data-slot=button-group]:not([data-detached])]:active:bg-[color-mix(in_oklch,var(--destructive),black_27%)] dark:hover:bg-[color-mix(in_oklch,var(--destructive),white_17%)] dark:in-[[data-slot=button-group]:not([data-detached])]:active:bg-[color-mix(in_oklch,var(--destructive),black_16%)] [@media(hover:none)]:active:bg-[color-mix(in_oklch,var(--destructive),black_27%)] dark:[@media(hover:none)]:active:bg-[color-mix(in_oklch,var(--destructive),black_16%)]",
+        link: "text-secondary-foreground underline-offset-4 hover:underline disabled:text-card-foreground in-[[data-slot=button-group]:not([data-detached])]:active:bg-secondary [@media(hover:none)]:active:bg-secondary",
+        inverted:
+          "bg-[var(--btn-inverted-bg,#fff)] text-[var(--btn-inverted-fg,#171717)] shadow-default hover:bg-[color-mix(in_oklch,var(--btn-inverted-bg,#fff),black_2%)] hover:shadow-raised in-[[data-slot=button-group]:not([data-detached])]:active:bg-[color-mix(in_oklch,var(--btn-inverted-bg,#fff),black_3%)] dark:hover:bg-[color-mix(in_oklch,var(--btn-inverted-bg,#fff),white_5%)] dark:in-[[data-slot=button-group]:not([data-detached])]:active:bg-[color-mix(in_oklch,var(--btn-inverted-bg,#fff),white_12%)] [@media(hover:none)]:active:bg-[color-mix(in_oklch,var(--btn-inverted-bg,#fff),black_3%)] dark:[@media(hover:none)]:active:bg-[color-mix(in_oklch,var(--btn-inverted-bg,#fff),white_12%)]",
+        "inverted-ghost":
+          "bg-[var(--btn-inverted-ghost-bg,transparent)] text-secondary-foreground hover:bg-muted in-[[data-slot=button-group]:not([data-detached])]:active:bg-accent dark:hover:bg-[color-mix(in_oklch,var(--btn-inverted-ghost-fg,#383838)_15%,transparent)] dark:in-[[data-slot=button-group]:not([data-detached])]:active:bg-[color-mix(in_oklch,var(--btn-inverted-ghost-fg,#383838)_25%,transparent)] [@media(hover:none)]:active:bg-accent dark:[@media(hover:none)]:active:bg-[color-mix(in_oklch,var(--btn-inverted-ghost-fg,#383838)_25%,transparent)]",
+      },
+      size: {
+        xs: "h-6 gap-2 rounded-md px-1.5 text-sm leading-base font-normal tracking-normal in-data-[slot=button-group]:rounded-lg [&_svg:not([class*='size-'])]:size-3.5 [&_svg:not([class*='size-'])]:max-h-3.5 [&_svg:not([class*='size-'])]:max-w-3.5",
+
+        sm: "h-7 gap-2 rounded-md px-2 text-base leading-base font-normal tracking-normal in-data-[slot=button-group]:rounded-lg [&_svg:not([class*='size-'])]:size-4 [&_svg:not([class*='size-'])]:max-h-4 [&_svg:not([class*='size-'])]:max-w-4",
+        default:
+          "h-8 gap-2 rounded-md px-2 text-base leading-base font-medium tracking-normal [&_svg:not([class*='size-'])]:size-4.5 [&_svg:not([class*='size-'])]:max-h-4.5 [&_svg:not([class*='size-'])]:max-w-4.5", // md
+        lg: "h-10 gap-2 rounded-lg px-3 text-lg leading-base font-medium tracking-normal [&_svg:not([class*='size-'])]:size-5 [&_svg:not([class*='size-'])]:max-h-5 [&_svg:not([class*='size-'])]:max-w-5",
+        xl: "h-11.5 gap-2 rounded-xl px-3.5 text-xl leading-base font-medium tracking-normal [&_svg:not([class*='size-'])]:size-6 [&_svg:not([class*='size-'])]:max-h-6 [&_svg:not([class*='size-'])]:max-w-6",
+        "2xl":
+          "h-13 gap-2 rounded-2xl px-4 text-2xl leading-base font-medium tracking-normal [&_svg:not([class*='size-'])]:size-6 [&_svg:not([class*='size-'])]:max-h-6 [&_svg:not([class*='size-'])]:max-w-6",
+
+        "icon-xs":
+          "size-6 rounded-[var(--radius-btn-icon,var(--radius-md))] in-data-[slot=button-group]:rounded-lg [&_svg:not([class*='size-'])]:size-3.5 [&_svg:not([class*='size-'])]:max-h-3.5 [&_svg:not([class*='size-'])]:max-w-3.5",
+        "icon-sm":
+          "size-7 rounded-[var(--radius-btn-icon,var(--radius-md))] in-data-[slot=button-group]:rounded-lg [&_svg:not([class*='size-'])]:size-4 [&_svg:not([class*='size-'])]:max-h-4 [&_svg:not([class*='size-'])]:max-w-4",
+        icon: "size-8 rounded-[var(--radius-btn-icon,var(--radius-md))] [&_svg:not([class*='size-'])]:size-4.5 [&_svg:not([class*='size-'])]:max-h-4.5 [&_svg:not([class*='size-'])]:max-w-4.5",
+        "icon-lg":
+          "size-10 rounded-[var(--radius-btn-icon,var(--radius-lg))] [&_svg:not([class*='size-'])]:size-5 [&_svg:not([class*='size-'])]:max-h-5 [&_svg:not([class*='size-'])]:max-w-5",
+        "icon-xl":
+          "size-11.5 rounded-[var(--radius-btn-icon,var(--radius-xl))] [&_svg:not([class*='size-'])]:size-6 [&_svg:not([class*='size-'])]:max-h-6 [&_svg:not([class*='size-'])]:max-w-6",
+        "icon-2xl":
+          "size-13 rounded-[var(--radius-btn-icon,var(--radius-2xl))] [&_svg:not([class*='size-'])]:size-6 [&_svg:not([class*='size-'])]:max-h-6 [&_svg:not([class*='size-'])]:max-w-6",
+      },
+    },
+    defaultVariants: {
+      variant: "default",
+      size: "default",
+    },
+  },
+);
+
+function Button({
+  className,
+  variant = "default",
+  size = "default",
+  ...props
+}: ButtonPrimitive.Props & VariantProps<typeof buttonVariants>) {
+  return (
+    <ButtonPrimitive
+      data-slot="button"
+      data-variant={variant}
+      className={cn(buttonVariants({ variant, size, className }))}
+      {...props}
+    />
+  );
+}
+
+export { Button, buttonVariants };

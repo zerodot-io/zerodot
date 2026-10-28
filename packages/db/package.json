@@ -1,0 +1,31 @@
+{
+  "name": "@zerodot/db",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./testing": "./src/testing.ts",
+    "./stats-math": "./src/stats-math.ts"
+  },
+  "scripts": {
+    "check-types": "tsc -p tsconfig.json",
+    "db:generate": "drizzle-kit generate",
+    "test": "tsx --test --test-concurrency=1 src/*.test.ts",
+    "rotate-key": "tsx src/rotate-key.ts",
+    "stats:rebuild": "tsx src/rebuild-stats.ts"
+  },
+  "devDependencies": {
+    "@zerodot/config": "workspace:*",
+    "@types/node": "26.6.5",
+    "drizzle-kit": "0.31.11",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2"
+  },
+  "dependencies": {
+    "@zerodot/engine": "workspace:*",
+    "drizzle-orm": "0.45.4",
+    "postgres": "3.4.9",
+    "zod": "4.6.7"
+  }
+}

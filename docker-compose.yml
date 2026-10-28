@@ -1,0 +1,147 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+services:
+  # Public entry point. /api, /hooks, /resume, /mcp and /oauth2 go to api. The rest goes to web.
+  proxy:
+    image: caddy:2
+    ports: ["3000:3000"]
+    volumes: [./Caddyfile:/etc/caddy/Caddyfile:ro]
+    depends_on: [web, api]
+
+  # UI only. The sign-in session is read from the database, so web needs the same secrets as api.
+  web:
+    build: { context: ., target: web }
+    environment:
+      DATABASE_URL: postgres://zerodot:zerodot@postgres:5432/zerodot
+      VALKEY_URL: redis://valkey:6379
+      ZERODOT_SECRET_KEY: ${ZERODOT_SECRET_KEY:?set ZERODOT_SECRET_KEY}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?set BETTER_AUTH_SECRET}
+      ZERODOT_BASE_URL: ${ZERODOT_BASE_URL:-http://localhost:3000}
+      ZERODOT_TRUSTED_ORIGINS: ${ZERODOT_TRUSTED_ORIGINS:-}
+      ZERODOT_SIGNUP_DISABLED: ${ZERODOT_SIGNUP_DISABLED:-false}
+      ZERODOT_BLOB_DIR: ${ZERODOT_BLOB_DIR:-}
+      ZERODOT_BLOB_S3_BUCKET: ${ZERODOT_BLOB_S3_BUCKET:-}
+      ZERODOT_BLOB_S3_ENDPOINT: ${ZERODOT_BLOB_S3_ENDPOINT:-}
+      ZERODOT_BLOB_S3_REGION: ${ZERODOT_BLOB_S3_REGION:-}
+      ZERODOT_BLOB_S3_ACCESS_KEY_ID: ${ZERODOT_BLOB_S3_ACCESS_KEY_ID:-}
+      ZERODOT_BLOB_S3_SECRET_ACCESS_KEY: ${ZERODOT_BLOB_S3_SECRET_ACCESS_KEY:-}
+    # Set ZERODOT_BLOB_DIR=/blobs to keep files and large outputs on disk. web, api and worker share it.
+    volumes: [blob-data:/blobs, node-packages:/nodes]
+    depends_on:
+      postgres: { condition: service_healthy }
+      valkey: { condition: service_healthy }
+
+  # Public API, webhooks, auth and live event streams. It keeps working when web is down.
+  api:
+    build: { context: ., target: api }
+    environment:
+      DATABASE_URL: postgres://zerodot:zerodot@postgres:5432/zerodot
+      VALKEY_URL: redis://valkey:6379
+      ZERODOT_SECRET_KEY: ${ZERODOT_SECRET_KEY:?set ZERODOT_SECRET_KEY}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?set BETTER_AUTH_SECRET}
+      ZERODOT_BASE_URL: ${ZERODOT_BASE_URL:-http://localhost:3000}
+      ZERODOT_TRUSTED_ORIGINS: ${ZERODOT_TRUSTED_ORIGINS:-}
+      ZERODOT_SIGNUP_DISABLED: ${ZERODOT_SIGNUP_DISABLED:-false}
+      ZERODOT_TRUST_PROXY: "true"
+      ZERODOT_BLOB_DIR: ${ZERODOT_BLOB_DIR:-}
+      ZERODOT_BLOB_S3_BUCKET: ${ZERODOT_BLOB_S3_BUCKET:-}
+      ZERODOT_BLOB_S3_ENDPOINT: ${ZERODOT_BLOB_S3_ENDPOINT:-}
+      ZERODOT_BLOB_S3_REGION: ${ZERODOT_BLOB_S3_REGION:-}
+      ZERODOT_BLOB_S3_ACCESS_KEY_ID: ${ZERODOT_BLOB_S3_ACCESS_KEY_ID:-}
+      ZERODOT_BLOB_S3_SECRET_ACCESS_KEY: ${ZERODOT_BLOB_S3_SECRET_ACCESS_KEY:-}
+    # Set ZERODOT_BLOB_DIR=/blobs to keep files and large outputs on disk. web, api and worker share it.
+    volumes: [blob-data:/blobs, node-packages:/nodes]
+    depends_on:
+      postgres: { condition: service_healthy }
+      valkey: { condition: service_healthy }
+
+  worker:
+    build: { context: ., target: worker }
+    environment:
+      DATABASE_URL: postgres://zerodot:zerodot@postgres:5432/zerodot
+      VALKEY_URL: redis://valkey:6379
+      ZERODOT_SECRET_KEY: ${ZERODOT_SECRET_KEY:?set ZERODOT_SECRET_KEY}
+      ZERODOT_BASE_URL: ${ZERODOT_BASE_URL:-http://localhost:3000}
+      SANDBOX_URL: http://sandbox:3002
+      ZERODOT_STATS_RETENTION_DAYS: ${ZERODOT_STATS_RETENTION_DAYS:-365}
+      ZERODOT_ENABLE_EXECUTE_COMMAND: ${ZERODOT_ENABLE_EXECUTE_COMMAND:-false}
+      ZERODOT_FILES_DIR: ${ZERODOT_FILES_DIR:-}
+      ZERODOT_BLOB_DIR: ${ZERODOT_BLOB_DIR:-}
+      ZERODOT_BLOB_S3_BUCKET: ${ZERODOT_BLOB_S3_BUCKET:-}
+      ZERODOT_BLOB_S3_ENDPOINT: ${ZERODOT_BLOB_S3_ENDPOINT:-}
+      ZERODOT_BLOB_S3_REGION: ${ZERODOT_BLOB_S3_REGION:-}
+      ZERODOT_BLOB_S3_ACCESS_KEY_ID: ${ZERODOT_BLOB_S3_ACCESS_KEY_ID:-}
+      ZERODOT_BLOB_S3_SECRET_ACCESS_KEY: ${ZERODOT_BLOB_S3_SECRET_ACCESS_KEY:-}
+      ZERODOT_DB_POOL_MAX: ${ZERODOT_DB_POOL_MAX:-}
+      ZERODOT_SYSTEM_CONCURRENCY: ${ZERODOT_SYSTEM_CONCURRENCY:-5}
+      ZERODOT_ORG_MAX_CONCURRENT_RUNS: ${ZERODOT_ORG_MAX_CONCURRENT_RUNS:-0}
+      ZERODOT_WORKFLOW_MAX_CONCURRENT_RUNS: ${ZERODOT_WORKFLOW_MAX_CONCURRENT_RUNS:-0}
+      ZERODOT_MAX_LISTEN_TRIGGERS: ${ZERODOT_MAX_LISTEN_TRIGGERS:-100}
+      ZERODOT_SAVE_SUCCESS_NODE_DATA: ${ZERODOT_SAVE_SUCCESS_NODE_DATA:-true}
+    # Set ZERODOT_BLOB_DIR=/blobs to keep files and large outputs on disk. web, api and worker share it.
+    volumes: [blob-data:/blobs, node-packages:/nodes]
+    # default: Postgres and Valkey. internal: the sandbox.
+    networks: [default, internal]
+    depends_on:
+      postgres: { condition: service_healthy }
+      valkey: { condition: service_healthy }
+      sandbox: { condition: service_started }
+
+  sandbox:
+    build: { context: ., target: sandbox }
+    # Only the internal network, and it has no way out. No published port.
+    networks: [internal]
+    read_only: true
+    user: node
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 512m
+    pids_limit: 128
+    cpus: 1
+    tmpfs: [/tmp]
+    # No volumes and no Docker socket.
+    # More replicas = more parallel code. Docker DNS gives the worker all the addresses of
+    # "sandbox", and the worker spreads the runs over them. Or run:
+    #   docker compose up -d --scale sandbox=3
+    deploy:
+      replicas: ${SANDBOX_REPLICAS:-1}
+    environment:
+      SANDBOX_MAX_CONCURRENCY: ${SANDBOX_MAX_CONCURRENCY:-4}
+      SANDBOX_MAX_WAIT_MS: ${SANDBOX_MAX_WAIT_MS:-250}
+      SANDBOX_MAX_QUEUE: ${SANDBOX_MAX_QUEUE:-4}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3002/healthz').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: zerodot
+      POSTGRES_PASSWORD: zerodot
+      POSTGRES_DB: zerodot
+    volumes: [postgres-data:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U zerodot"]
+      interval: 2s
+      retries: 30
+
+  valkey:
+    image: valkey/valkey:8
+    command: ["valkey-server", "--appendonly", "yes"]
+    volumes: [valkey-data:/data]
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 2s
+      retries: 30
+
+networks:
+  internal:
+    internal: true
+
+volumes:
+  blob-data:
+  # Node packages that an admin installed. web, api and worker share it.
+  node-packages:
+  postgres-data:
+  valkey-data:

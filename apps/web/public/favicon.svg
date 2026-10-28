@@ -1,0 +1,8 @@
+<svg width="400" height="400" viewBox="0 0 400 400" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <style>
+    .dash { fill: #0F0E0E; }
+    @media (prefers-color-scheme: dark) { .dash { fill: #fff; } }
+  </style>
+  <circle cx="151.25" cy="200.25" r="71.25" fill="#FD5F00"/>
+  <rect class="dash" x="240.5" y="190.125" width="78.75" height="20.25" rx="10.125"/>
+</svg>

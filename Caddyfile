@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# One origin for the browser. The API app serves the paths below. The web app serves the rest.
+:3000 {
+	@api path /api/v1/* /api/auth/* /api/p/* /hooks/* /hooks-test/* /resume/* /mcp /mcp/* /oauth2/*
+	handle @api {
+		reverse_proxy api:3003 {
+			# Server-sent events must not wait for a full buffer.
+			flush_interval -1
+		}
+	}
+	handle {
+		reverse_proxy web:3000
+	}
+}

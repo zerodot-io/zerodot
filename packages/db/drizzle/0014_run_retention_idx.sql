@@ -1,0 +1,1 @@
+CREATE INDEX "run_finished_retention_idx" ON "run" USING btree ("mode","created_at") WHERE "run"."status" in ('succeeded', 'failed', 'cancelled');

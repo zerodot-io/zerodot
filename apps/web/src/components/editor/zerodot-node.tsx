@@ -1,0 +1,380 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+
+import {
+  Handle,
+  type NodeProps,
+  Position,
+  useConnection,
+  useNodeConnections,
+  useReactFlow,
+  useUpdateNodeInternals,
+} from "@xyflow/react";
+import { inputPortsOf, outputPortsOf } from "@zerodot/engine";
+import { registry } from "@zerodot/nodes";
+import {
+  cn,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@zerodot/ui";
+import {
+  Copy,
+  ExternalLink,
+  MoreHorizontal,
+  Pin,
+  Play,
+  Plus,
+  Power,
+  Trash2,
+  Zap,
+} from "lucide-react";
+import { createContext, useContext, useEffect, useState } from "react";
+import {
+  catalogByType,
+  type NodeRunStatus,
+  uniqueName,
+  type ZerodotFlowNode,
+} from "../../lib/flow";
+import { NodeIcon } from "../node-icon";
+
+/** Run status for each node. Kept outside the node data so a run does not rewrite the graph. */
+export const NodeStatusContext = createContext<Record<string, NodeRunStatus>>({});
+
+/** Item count that flows out of each node, by edge id. Set after a node runs. */
+export const EdgeCountContext = createContext<Record<string, number>>({});
+
+/** Lets a node ask the editor to add a node after one of its output ports. */
+export const EditorActionsContext = createContext<{
+  /** Open the add sheet. The new node goes after this output port. */
+  addAfter: (nodeId: string, port: string) => void;
+  /** Open the add sheet. The new node goes in the middle of this edge. */
+  insertOnEdge?: (edgeId: string) => void;
+  /** Run this node alone, with the last known input. */
+  executeNode?: (nodeId: string) => void;
+  /** Open the node dialog. */
+  openNode?: (nodeId: string) => void;
+  /** A run view shows the graph and has no add buttons. */
+  readOnly?: boolean;
+}>({ addAfter: () => {} });
+
+const BORDER: Record<NodeRunStatus, string> = {
+  idle: "border-border",
+  running: "border-amber-500",
+  waiting: "border-sky-500",
+  succeeded: "border-emerald-500",
+  failed: "border-red-500",
+  skipped: "border-dashed border-border opacity-60",
+};
+
+function ToolbarButton({
+  label,
+  onClick,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+      className="grid size-5 place-items-center rounded text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground"
+    >
+      {children}
+    </button>
+  );
+}
+
+export function ZerodotNode({ id, data, selected }: NodeProps<ZerodotFlowNode>) {
+  const status = useContext(NodeStatusContext)[id] ?? "idle";
+  const { addAfter, executeNode, openNode, readOnly } = useContext(EditorActionsContext);
+  const { deleteElements, getNodes, setNodes } = useReactFlow<ZerodotFlowNode>();
+  const duplicate = () => {
+    const all = getNodes();
+    const source = all.find((n) => n.id === id);
+    if (!source) return;
+    const copyId = `n_${crypto.randomUUID().slice(0, 8)}`;
+    const name = uniqueName(
+      source.data.graphNode.name,
+      all.map((n) => n.data.graphNode.name),
+    );
+    const position = { x: source.position.x + 40, y: source.position.y + 40 };
+    const graphNode = structuredClone(source.data.graphNode);
+    setNodes([
+      ...all.map((n) => ({ ...n, selected: false })),
+      {
+        ...source,
+        id: copyId,
+        position,
+        selected: true,
+        data: { ...source.data, graphNode: { ...graphNode, id: copyId, name, position } },
+      },
+    ]);
+  };
+  // The first click on the trash icon asks. The second click deletes.
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  useEffect(() => {
+    if (!confirmDelete) return;
+    const timer = setTimeout(() => setConfirmDelete(false), 3000);
+    return () => clearTimeout(timer);
+  }, [confirmDelete]);
+  const toggleDisabled = () =>
+    setNodes((all) =>
+      all.map((n) =>
+        n.id === id
+          ? {
+              ...n,
+              data: {
+                ...n.data,
+                graphNode: { ...n.data.graphNode, disabled: !n.data.graphNode.disabled },
+              },
+            }
+          : n,
+      ),
+    );
+  const connections = useNodeConnections({ handleType: "source" });
+  // The plus button turns into an arrow while the user drags a connection from it.
+  const connection = useConnection();
+  const draggingFrom =
+    connection.inProgress && connection.fromNode.id === id ? connection.fromHandle.id : null;
+  const isConnected = (port: string) => connections.some((c) => (c.sourceHandle ?? "out") === port);
+  const { graphNode } = data;
+  const entry = catalogByType.get(graphNode.type);
+  const definition = registry.get(graphNode.type);
+  const portSource = definition ?? entry;
+  const outPorts = portSource ? outputPortsOf(portSource, graphNode.config) : ["out"];
+  const inPorts = portSource ? inputPortsOf(portSource, graphNode.config) : (entry?.ports.in ?? []);
+  const isTrigger = entry?.category === "trigger";
+  const subtitle = definition?.subtitle?.(graphNode.config);
+  // A port with an edge swaps its plus-button handle for a handle on the node edge.
+  // React Flow must measure the new handle, or the edge starts at the old spot.
+  const updateNodeInternals = useUpdateNodeInternals();
+  const connectedPorts = outPorts.filter(isConnected).join(",");
+  const inPortsKey = inPorts.join(",");
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the ports strings are the trigger.
+  useEffect(() => updateNodeInternals(id), [id, connectedPorts, inPortsKey, updateNodeInternals]);
+  const inTopFor = (index: number) => `${((index + 1) / (inPorts.length + 1)) * 100}%`;
+  const topFor = (index: number) => `${((index + 1) / (outPorts.length + 1)) * 100}%`;
+
+  return (
+    <div className="group relative">
+      {!readOnly && !isTrigger && (
+        // The padding keeps the hover while the pointer moves from the node to the buttons.
+        <div className="nodrag nopan absolute bottom-full left-1/2 flex -translate-x-1/2 gap-1 pb-2 opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100">
+          <ToolbarButton label="Execute step" onClick={() => executeNode?.(id)}>
+            <Play className="size-3" />
+          </ToolbarButton>
+          <ToolbarButton
+            label={data.graphNode.disabled ? "Activate" : "Deactivate"}
+            onClick={toggleDisabled}
+          >
+            <Power className="size-3" />
+          </ToolbarButton>
+          {confirmDelete ? (
+            <button
+              type="button"
+              aria-label="Confirm delete"
+              onClick={() => deleteElements({ nodes: [{ id }] })}
+              onBlur={() => setConfirmDelete(false)}
+              // biome-ignore lint/a11y/noAutofocus: the click that opened the confirm moves focus here.
+              autoFocus
+              className="h-5 rounded bg-destructive px-1.5 text-2xs font-medium text-white"
+            >
+              Delete?
+            </button>
+          ) : (
+            <ToolbarButton label="Delete" onClick={() => setConfirmDelete(true)}>
+              <Trash2 className="size-3" />
+            </ToolbarButton>
+          )}
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              aria-label="More"
+              title="More"
+              className="grid size-5 place-items-center rounded text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground"
+            >
+              <MoreHorizontal className="size-3" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              <DropdownMenuItem onClick={() => openNode?.(id)}>
+                <ExternalLink />
+                Open
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => executeNode?.(id)}>
+                <Play />
+                Execute step
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={toggleDisabled}>
+                <Power />
+                {data.graphNode.disabled ? "Activate" : "Deactivate"}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={duplicate}>
+                <Copy />
+                Duplicate
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                variant="destructive"
+                onClick={() => deleteElements({ nodes: [{ id }] })}
+              >
+                <Trash2 />
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      )}
+      <div
+        className={cn(
+          "relative grid min-h-16 w-16 place-items-center rounded-xl border-2 bg-card transition-[border-color,opacity] duration-150 ease-out",
+          isTrigger && "rounded-l-[2rem]",
+          BORDER[status],
+          // Pinned data survives a reload, a run status does not. Keep the pinned look until a run sets one.
+          graphNode.pinned && status === "idle" && "border-emerald-500",
+          selected && "ring-2 ring-foreground/20",
+          graphNode.disabled && "border-dashed opacity-50",
+        )}
+        style={{ minHeight: `${Math.max(4, Math.max(outPorts.length, inPorts.length) * 1.5)}rem` }}
+      >
+        {graphNode.pinned && (
+          <Pin
+            aria-label="Pinned data"
+            className="absolute -top-2 -right-2 size-4 rounded-full bg-card p-0.5 text-emerald-600"
+          />
+        )}
+        {isTrigger && (
+          <Zap
+            aria-hidden
+            className="absolute top-1/2 -left-6 size-4 -translate-y-1/2 fill-amber-500 text-amber-500"
+          />
+        )}
+        {inPorts.map((port, index) => (
+          <Handle
+            key={port}
+            type="target"
+            position={Position.Left}
+            id={port}
+            style={inPorts.length > 1 ? { top: inTopFor(index) } : undefined}
+            className="size-3! rounded-full! border-2! border-card! bg-muted-foreground/70!"
+          />
+        ))}
+        <NodeIcon
+          name={entry?.icon ?? "Circle"}
+          src={entry?.iconUrl}
+          variant="tile"
+          category={entry?.category}
+        />
+        {outPorts.map((port, index) =>
+          // A port with no edge has its handle in the plus button.
+          isConnected(port) ? (
+            <Handle
+              key={port}
+              type="source"
+              position={Position.Right}
+              id={port}
+              style={{ top: topFor(index) }}
+              className="size-3! rounded-full! border-2! border-card! bg-muted-foreground/70!"
+            />
+          ) : null,
+        )}
+      </div>
+
+      {outPorts.map((port, index) => {
+        const connected = connections.some((c) => (c.sourceHandle ?? "out") === port);
+        return (
+          <div
+            key={port}
+            className="absolute left-full flex -translate-y-1/2 items-center"
+            style={{ top: topFor(index) }}
+          >
+            {outPorts.length > 1 && (
+              <span
+                className={cn(
+                  "pointer-events-none absolute left-2 text-2xs text-muted-foreground",
+                  // The edge leaves on the line. The name sits above it.
+                  connected && "bottom-1",
+                )}
+              >
+                {port}
+              </span>
+            )}
+            {!connected && (
+              <div
+                className={cn(
+                  "group/stub flex items-center",
+                  outPorts.length > 1 ? "ml-9" : "ml-1",
+                )}
+              >
+                <span
+                  aria-hidden
+                  className="w-6 border-muted-foreground/40 border-t border-dashed transition-colors duration-150 group-hover/stub:border-foreground/50"
+                />
+                {/* A click on the button opens the sheet. A drag from it makes an edge. */}
+                <button
+                  type="button"
+                  disabled={readOnly}
+                  aria-label={`Add a node after ${graphNode.name}`}
+                  className="nodrag nopan relative"
+                  onClick={() => addAfter(id, port)}
+                >
+                  <div
+                    aria-hidden
+                    className={cn(
+                      "grid size-5 place-items-center transition-colors duration-150",
+                      "text-muted-foreground group-hover/stub:text-foreground",
+                    )}
+                  >
+                    <Plus
+                      className={cn(
+                        "size-3 transition-opacity",
+                        draggingFrom === port && "opacity-0",
+                      )}
+                      strokeWidth={2.5}
+                    />
+                  </div>
+                  <Handle
+                    type="source"
+                    position={Position.Right}
+                    id={port}
+                    isConnectable={!readOnly}
+                    style={{
+                      top: 0,
+                      left: 0,
+                      right: "auto",
+                      bottom: "auto",
+                      width: "100%",
+                      height: "100%",
+                      transform: "none",
+                      opacity: 0,
+                      border: 0,
+                      borderRadius: 0,
+                      cursor: readOnly ? "default" : "crosshair",
+                    }}
+                  />
+                </button>
+              </div>
+            )}
+          </div>
+        );
+      })}
+
+      <div className="pointer-events-none absolute top-full left-1/2 mt-1.5 w-40 -translate-x-1/2 text-center text-xs">
+        <div className="font-semibold leading-tight">{graphNode.name}</div>
+        {subtitle && (
+          <div className="truncate text-[9px] font-normal text-muted-foreground/70">{subtitle}</div>
+        )}
+        {graphNode.notesInFlow && graphNode.notes && (
+          <div className="mt-0.5 line-clamp-3 whitespace-pre-wrap font-normal text-muted-foreground">
+            {graphNode.notes}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

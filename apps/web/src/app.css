@@ -1,0 +1,7 @@
+@import "@zerodot/ui/font.css";
+@import "@zerodot/ui/styles.css";
+@source "../../../packages/ui/src";
+
+body {
+  @apply bg-background text-foreground text-sm antialiased;
+}

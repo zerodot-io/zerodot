@@ -1,0 +1,1 @@
+ALTER TABLE "credential" ADD COLUMN "status" text DEFAULT 'ok' NOT NULL;

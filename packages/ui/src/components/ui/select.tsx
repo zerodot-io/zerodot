@@ -1,0 +1,270 @@
+import { Select as SelectPrimitive } from "@base-ui/react/select";
+import { cva, type VariantProps } from "class-variance-authority";
+import { CheckIcon, ChevronDownIcon, ChevronUpIcon } from "lucide-react";
+import * as React from "react";
+import { cn } from "../../lib/utils";
+
+type SelectOption = {
+  label: string;
+  value: string | null;
+  icon?: React.ComponentType<{ className?: string }>;
+};
+
+type SelectContextValue = {
+  items?: SelectOption[];
+};
+
+const SelectContext = React.createContext<SelectContextValue>({});
+
+function Select({
+  items,
+  ...props
+}: SelectPrimitive.Root.Props<string> & {
+  items?: SelectOption[];
+}) {
+  const contextValue = React.useMemo(() => ({ items }), [items]);
+  return (
+    <SelectContext.Provider value={contextValue}>
+      <SelectPrimitive.Root items={items} {...props} />
+    </SelectContext.Provider>
+  );
+}
+
+function SelectGroup({ className, ...props }: SelectPrimitive.Group.Props) {
+  return (
+    <SelectPrimitive.Group
+      data-slot="select-group"
+      className={cn("scroll-my-1", className)}
+      {...props}
+    />
+  );
+}
+
+function SelectValue({ className, children, ...props }: SelectPrimitive.Value.Props) {
+  const { items } = React.useContext(SelectContext);
+  return (
+    <SelectPrimitive.Value
+      data-slot="select-value"
+      className={cn("flex flex-1 items-center gap-2 text-left", className)}
+      {...props}
+    >
+      {children ??
+        (items
+          ? (value: string | null) => {
+              const item = items.find((i) => i.value === value);
+              if (!item) return null;
+              const Icon = item.icon;
+              return (
+                <>
+                  {Icon && <Icon className="size-4" />}
+                  {item.label}
+                </>
+              );
+            }
+          : undefined)}
+    </SelectPrimitive.Value>
+  );
+}
+
+const selectTriggerVariants = cva(
+  "flex w-fit items-center justify-between gap-2 rounded-md p-2 text-base leading-base font-normal tracking-normal whitespace-nowrap text-secondary-foreground transition-colors outline-none select-none focus-visible:bg-secondary focus-visible:text-secondary-foreground focus-visible:shadow-3xs data-placeholder:text-card-foreground data-[size=lg]:h-10 data-[size=lg]:rounded-lg data-[size=lg]:px-3 data-[size=lg]:text-lg data-[size=md]:h-8 data-[size=sm]:h-7 data-[size=xs]:h-6 data-[size=xs]:rounded-sm data-[size=xs]:text-sm *:data-[slot=select-value]:line-clamp-1 *:data-[slot=select-value]:flex *:data-[slot=select-value]:items-center *:data-[slot=select-value]:gap-2 data-disabled:pointer-events-none data-disabled:cursor-not-allowed data-disabled:text-popover-foreground! [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  {
+    variants: {
+      variant: {
+        outline:
+          "border border-transparent bg-transparent shadow-default transition-shadow duration-150 group-data-[invalid=true]/field:shadow-[0px_1px_1px_#0000000f,0px_0px_0px_1px_var(--error-outline)]! hover:shadow-raised focus-visible:bg-background! data-invalid:shadow-[0px_1px_1px_#0000000f,0px_0px_0px_1px_var(--error-outline)] data-valid:shadow-[0px_1px_1px_#0000000f,0px_0px_0px_1px_var(--success-outline)] data-disabled:bg-transparent data-disabled:shadow-default",
+        subtle:
+          "border border-transparent bg-secondary group-data-[invalid=true]/field:bg-error! not-data-disabled:hover:bg-[color-mix(in_oklch,var(--secondary),black_2%)] not-data-disabled:active:bg-[color-mix(in_oklch,var(--secondary),black_5%)] data-invalid:bg-error data-valid:bg-success dark:not-data-disabled:hover:bg-[color-mix(in_oklch,var(--secondary),white_5%)] dark:not-data-disabled:active:bg-[color-mix(in_oklch,var(--secondary),white_13%)] data-disabled:bg-secondary",
+        ghost:
+          "border border-transparent bg-transparent group-data-[invalid=true]/field:bg-error! not-data-disabled:hover:bg-[color-mix(in_oklch,var(--secondary),black_2%)] focus-visible:bg-transparent! not-data-disabled:active:bg-[color-mix(in_oklch,var(--secondary),black_5%)] data-invalid:bg-error data-valid:bg-success dark:not-data-disabled:hover:bg-[color-mix(in_oklch,var(--secondary),white_5%)] dark:not-data-disabled:active:bg-[color-mix(in_oklch,var(--secondary),white_13%)] data-disabled:bg-transparent",
+      },
+    },
+    defaultVariants: {
+      variant: "outline",
+    },
+  },
+);
+
+function SelectTrigger({
+  className,
+  variant,
+  size = "md",
+  suffix,
+  children,
+  ...props
+}: SelectPrimitive.Trigger.Props &
+  VariantProps<typeof selectTriggerVariants> & {
+    size?: "xs" | "sm" | "md" | "lg";
+    suffix?: React.ReactElement;
+  }) {
+  return (
+    <SelectPrimitive.Trigger
+      data-slot="select-trigger"
+      data-variant={variant ?? "outline"}
+      data-size={size}
+      className={cn(selectTriggerVariants({ variant }), className)}
+      {...props}
+    >
+      {children}
+      <SelectPrimitive.Icon
+        render={suffix ?? <ChevronDownIcon className="pointer-events-none size-4" />}
+      />
+    </SelectPrimitive.Trigger>
+  );
+}
+
+function SelectContent({
+  className,
+  children,
+  side = "bottom",
+  sideOffset = 4,
+  align = "center",
+  alignOffset = 0,
+  alignItemWithTrigger = true,
+  ...props
+}: SelectPrimitive.Popup.Props &
+  Pick<
+    SelectPrimitive.Positioner.Props,
+    "align" | "alignOffset" | "side" | "sideOffset" | "alignItemWithTrigger"
+  >) {
+  return (
+    <SelectPrimitive.Portal>
+      <SelectPrimitive.Positioner
+        side={side}
+        sideOffset={sideOffset}
+        align={align}
+        alignOffset={alignOffset}
+        alignItemWithTrigger={alignItemWithTrigger}
+        className="isolate z-50"
+      >
+        <SelectPrimitive.Popup
+          data-slot="select-content"
+          data-align-trigger={alignItemWithTrigger}
+          className={cn(
+            // elevation ladder: body:has() rules set --elevation-mix from
+            // where the open trigger sits (0% base, 3% = --popover, then
+            // 9.5% and 14% for layers 2 and 3; all no-ops in light mode
+            // since --card is white). The background and the item
+            // highlight colors are both computed from it; ! makes deeper
+            // chains win the cascade.
+            "relative isolate z-50 flex max-h-fit w-auto min-w-(--anchor-width) origin-(--transform-origin) flex-col overflow-hidden rounded-xl bg-[color-mix(in_oklch,var(--card),white_var(--elevation-mix,0%))] text-muted-foreground shadow-elevation-xl transition-none duration-100 data-[align-trigger=true]:animate-none data-[side=bottom]:slide-in-from-top-2 data-[side=inline-end]:slide-in-from-left-2 data-[side=inline-start]:slide-in-from-right-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 [body:has([data-slot=card]_[data-slot=popover-trigger][data-popup-open]):has([data-slot=popover-content]_[data-slot=select-trigger][data-popup-open])_&]:[--elevation-mix:9.5%]! [body:has([data-slot=card]_[data-slot=select-trigger][data-popup-open])_&]:[--elevation-mix:3%] [body:has([data-slot=command]_[data-slot=card]_[data-slot=popover-trigger][data-popup-open]):has([data-slot=popover-content]_[data-slot=select-trigger][data-popup-open])_&]:[--elevation-mix:14%]! [body:has([data-slot=command]_[data-slot=card]_[data-slot=select-trigger][data-popup-open])_&]:[--elevation-mix:9.5%]! [body:has([data-slot=command]_[data-slot=popover-trigger][data-popup-open]):has([data-slot=popover-content]_[data-slot=select-trigger][data-popup-open])_&]:[--elevation-mix:9.5%]! [body:has([data-slot=command]_[data-slot=select-trigger][data-popup-open])_&]:[--elevation-mix:3%] [body:has([data-slot=dialog-content]_[data-slot=card]_[data-slot=popover-trigger][data-popup-open]):has([data-slot=popover-content]_[data-slot=select-trigger][data-popup-open])_&]:[--elevation-mix:14%]! [body:has([data-slot=dialog-content]_[data-slot=card]_[data-slot=select-trigger][data-popup-open])_&]:[--elevation-mix:9.5%]! [body:has([data-slot=dialog-content]_[data-slot=select-trigger][data-popup-open])_&]:[--elevation-mix:3%] [body:has([data-slot=dialog-portal]_[data-slot=popover-content]_[data-slot=card]_[data-slot=select-trigger][data-popup-open])_&]:[--elevation-mix:14%]! [body:has([data-slot=dialog-portal]_[data-slot=popover-content]_[data-slot=select-trigger][data-popup-open])_&]:[--elevation-mix:9.5%]! [body:has([data-slot=popover-content]_[data-slot=card]_[data-slot=select-trigger][data-popup-open])_&]:[--elevation-mix:9.5%]! [body:has([data-slot=popover-content]_[data-slot=select-trigger][data-popup-open])_&]:[--elevation-mix:3%]",
+            className,
+          )}
+          {...props}
+        >
+          <SelectScrollUpButton />
+          <SelectPrimitive.List className="scroll-fade scroll-fade-5 min-h-0 flex-auto overflow-x-hidden overflow-y-auto p-1">
+            {children}
+          </SelectPrimitive.List>
+          <SelectScrollDownButton />
+        </SelectPrimitive.Popup>
+      </SelectPrimitive.Positioner>
+    </SelectPrimitive.Portal>
+  );
+}
+
+function SelectLabel({ className, ...props }: SelectPrimitive.GroupLabel.Props) {
+  return (
+    <SelectPrimitive.GroupLabel
+      data-slot="select-label"
+      className={cn(
+        "px-2 py-1.5 text-sm leading-base font-medium tracking-normal text-accent-foreground",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
+function SelectItem({ className, children, value, ...props }: SelectPrimitive.Item.Props) {
+  const { items } = React.useContext(SelectContext);
+  const item = items?.find((i) => i.value === value);
+  const Icon = item?.icon;
+  return (
+    <SelectPrimitive.Item
+      data-slot="select-item"
+      value={value}
+      className={cn(
+        // highlight colors follow the popup's elevation: light mode is a
+        // constant card+black 3.5% (= --secondary on white); dark mode adds
+        // the popup's --elevation-mix on top of the base 5.5% (= --secondary
+        // on card) so the highlight stays visible on elevated surfaces
+        "relative mb-px flex w-full cursor-default items-center gap-2 rounded-md py-1.5 pr-8 pl-1.5 text-base text-secondary-foreground outline-hidden select-none last:mb-0 focus:bg-[color-mix(in_oklch,var(--card),black_3.5%)] focus:text-secondary-foreground not-data-[variant=destructive]:focus:**:text-secondary-foreground aria-selected:bg-[color-mix(in_oklch,var(--card),black_3.5%)]! data-highlighted:bg-[color-mix(in_oklch,var(--card),black_3.5%)] data-highlighted:text-secondary-foreground data-highlighted:active:bg-[color-mix(in_oklch,var(--card),black_4.5%)] data-highlighted:active:text-secondary-foreground data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 *:[span]:last:flex *:[span]:last:items-center *:[span]:last:gap-2",
+        "dark:focus:bg-[color-mix(in_oklch,var(--card),white_calc(5.5%_+_var(--elevation-mix,0%)))] dark:aria-selected:bg-[color-mix(in_oklch,var(--card),white_calc(5.5%_+_var(--elevation-mix,0%)))]! dark:data-highlighted:bg-[color-mix(in_oklch,var(--card),white_calc(5.5%_+_var(--elevation-mix,0%)))] dark:data-highlighted:active:bg-[color-mix(in_oklch,var(--card),white_calc(8.5%_+_var(--elevation-mix,0%)))]",
+        className,
+      )}
+      {...props}
+    >
+      <SelectPrimitive.ItemText className="flex flex-1 shrink-0 items-center gap-2 whitespace-nowrap">
+        {Icon && <Icon className="size-4" />}
+        {children}
+      </SelectPrimitive.ItemText>
+      <SelectPrimitive.ItemIndicator
+        render={
+          <span className="pointer-events-none absolute right-2 flex size-4 items-center justify-center" />
+        }
+      >
+        <CheckIcon className="pointer-events-none" />
+      </SelectPrimitive.ItemIndicator>
+    </SelectPrimitive.Item>
+  );
+}
+
+function SelectSeparator({ className, ...props }: SelectPrimitive.Separator.Props) {
+  return (
+    <SelectPrimitive.Separator
+      data-slot="select-separator"
+      className={cn("pointer-events-none -mx-1 my-1 h-px bg-border", className)}
+      {...props}
+    />
+  );
+}
+
+function SelectScrollUpButton({
+  className,
+  ...props
+}: React.ComponentProps<typeof SelectPrimitive.ScrollUpArrow>) {
+  return (
+    <SelectPrimitive.ScrollUpArrow
+      data-slot="select-scroll-up-button"
+      className={cn(
+        "sticky top-0 z-10 flex h-5 w-full cursor-default items-center justify-center [&_svg]:hidden",
+        className,
+      )}
+      {...props}
+    >
+      <ChevronUpIcon />
+    </SelectPrimitive.ScrollUpArrow>
+  );
+}
+
+function SelectScrollDownButton({
+  className,
+  ...props
+}: React.ComponentProps<typeof SelectPrimitive.ScrollDownArrow>) {
+  return (
+    <SelectPrimitive.ScrollDownArrow
+      data-slot="select-scroll-down-button"
+      className={cn(
+        "sticky bottom-0 z-10 flex h-5 w-full cursor-default items-center justify-center [&_svg]:hidden",
+        className,
+      )}
+      {...props}
+    >
+      <ChevronDownIcon />
+    </SelectPrimitive.ScrollDownArrow>
+  );
+}
+
+export {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectScrollDownButton,
+  SelectScrollUpButton,
+  SelectSeparator,
+  SelectTrigger,
+  SelectValue,
+};

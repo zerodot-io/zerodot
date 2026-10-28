@@ -1,0 +1,1 @@
+ALTER TABLE "run_node_result" ADD COLUMN "logs" jsonb;

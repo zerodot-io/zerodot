@@ -1,0 +1,31 @@
+{
+  "name": "@zerodot/api",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch --env-file=../../.env src/index.ts",
+    "build": "tsup",
+    "check-types": "tsc -p tsconfig.json",
+    "test": "tsx --test src/*.test.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "@zerodot/server": "workspace:*",
+    "better-auth": "1.7.12",
+    "bullmq": "6.4.1",
+    "cron-parser": "5.10.2",
+    "drizzle-orm": "0.45.4",
+    "fastify": "5.8.5",
+    "ioredis": "6.0.0",
+    "postgres": "3.4.9",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@zerodot/config": "workspace:*",
+    "@types/node": "26.6.5",
+    "tsup": "9.0.0",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2"
+  }
+}

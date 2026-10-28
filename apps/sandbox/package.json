@@ -1,0 +1,24 @@
+{
+  "name": "@zerodot/sandbox",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "scripts": {
+    "dev": "NODE_OPTIONS=--no-node-snapshot tsx watch src/index.ts",
+    "build": "tsup",
+    "check-types": "tsc -p tsconfig.json",
+    "test": "NODE_OPTIONS=--no-node-snapshot tsx --test src/*.test.ts"
+  },
+  "devDependencies": {
+    "@zerodot/config": "workspace:*",
+    "@types/node": "26.6.5",
+    "tsup": "9.0.0",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2"
+  },
+  "dependencies": {
+    "@zerodot/engine": "workspace:*",
+    "isolated-vm": "7.0.1",
+    "zod": "4.6.7"
+  }
+}

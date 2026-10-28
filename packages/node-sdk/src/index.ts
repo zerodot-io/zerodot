@@ -1,0 +1,39 @@
+// SPDX-License-Identifier: MIT
+// The public contract for a node package. A node package imports from here, not from the engine.
+
+export {
+  type BinaryData,
+  type CredentialTypeDefinition,
+  defineNode,
+  type FieldSpec,
+  FORM_FIELD_TYPES,
+  type Item,
+  isRecord,
+  type ListenContext,
+  type ListenHandle,
+  mimeTypeOf,
+  type NodeCategory,
+  type NodeDefinition,
+  type NodeResult,
+  type NodeRunContext,
+  type NodeWebhook,
+  type OAuth2Config,
+  POLL_MAX_ITEMS,
+  type PollContext,
+  type PollItem,
+  type PollResult,
+  type ResolvedCredential,
+  readBinary,
+  resolveConfig,
+  resolveTemplate,
+  type ShowRules,
+  toBinary,
+  toItems,
+  type WaitForm,
+  type WaitFormField,
+  type WebhookContext,
+  type WebhookRequest,
+  type WebhookVerdict,
+} from "@zerodot/engine";
+export { fileIcon } from "./icon";
+export { SDK_VERSION, satisfiesSdk } from "./version";
