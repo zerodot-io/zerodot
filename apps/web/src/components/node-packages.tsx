@@ -157,7 +157,7 @@ export function CommunityInstallConfirm({
         </DialogHeader>
         <RiskWarning
           title="zerodot did not check this package"
-          lead="Somebody outside zerodot wrote this package. If it has bad code, an attacker can take full control of this instance and all its data."
+          lead="Somebody outside zerodot wrote this package. If it has bad code, it can steal the credentials and the data that your workflows give to its nodes."
         />
         <AcceptRisk checked={accepted} disabled={busy} onChange={setAccepted}>
           I know who wrote this package, I trust them, and I accept the risk for this instance.
