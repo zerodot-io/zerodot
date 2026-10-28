@@ -29,7 +29,13 @@ const NODE_PACKAGES = "node_packages";
  * A node package that an instance admin installed. `registry` is the address of the community
  * registry it came from. An official package has none.
  */
-export type InstalledNodePackage = { name: string; version: string; registry?: string };
+export type InstalledNodePackage = {
+  name: string;
+  version: string;
+  registry?: string;
+  /** The npm checksum of a community package. A new install must have the same one. */
+  integrity?: string;
+};
 
 /** The JSON list in a setting. An empty list when the setting is missing or not valid. */
 async function readList(db: Db, key: string): Promise<unknown[]> {

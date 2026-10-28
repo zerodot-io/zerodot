@@ -678,7 +678,8 @@ NODE_REQ="${NODE_REQ:-22}"
 # Step 6: settings (.env). Existing values stay.
 # ---------------------------------------------------------------------------
 say "Writing .env"
-[[ -f .env ]] || cp .env.example .env
+FRESH_ENV=false
+[[ -f .env ]] || { cp .env.example .env; FRESH_ENV=true; }
 chmod 600 .env
 
 set_env() {
@@ -702,6 +703,16 @@ set_env ZERODOT_TRUST_PROXY "true"
 # ===========================================================================
 docker_mode() {
   set_env_once ZERODOT_BLOB_DIR "/blobs"
+  # Passwords for the database and Valkey, so that nothing else in the network can use them.
+  set_env_once ZERODOT_VALKEY_PASSWORD "$(openssl rand -hex 24)"
+  if [[ "$FRESH_ENV" == true ]]; then
+    set_env_once ZERODOT_DB_PASSWORD "$(openssl rand -hex 24)"
+  else
+    # An install from before this setting. Its database was made with the password "zerodot".
+    set_env_once ZERODOT_DB_PASSWORD "zerodot"
+    [[ "$(get_env ZERODOT_DB_PASSWORD)" != zerodot ]] \
+      || tip "The database password is still 'zerodot'. docs/deploy-vps.md tells how to change it."
+  fi
 
   if ! command -v docker >/dev/null; then
     say "Installing Docker"

@@ -16,6 +16,105 @@ export const HOST_CODE = String.raw`
 "use strict";
 const { pathToFileURL } = require("node:url");
 
+// ---- Network guard. It runs before any package code. ----
+// The package may call servers on the internet, but not addresses inside the network of the
+// server: the database, Valkey, other services, and the metadata address of a cloud. The guard
+// checks the address after the DNS lookup, so a name that points inside is refused too.
+const net = require("node:net");
+const dns = require("node:dns");
+const allowHosts = new Set(JSON.parse(process.argv[1] || "[]").map((host) => String(host).toLowerCase()));
+
+const IPV4_BLOCKED = [
+  ["0.0.0.0", 8], ["10.0.0.0", 8], ["100.64.0.0", 10], ["127.0.0.0", 8], ["169.254.0.0", 16],
+  ["172.16.0.0", 12], ["192.0.0.0", 24], ["192.168.0.0", 16], ["198.18.0.0", 15],
+  ["224.0.0.0", 4], ["240.0.0.0", 4],
+];
+const ipv4Number = (ip) => ip.split(".").reduce((sum, part) => sum * 256 + Number(part), 0);
+const inIpv4Range = (ip, base, bits) =>
+  Math.floor(ipv4Number(ip) / 2 ** (32 - bits)) === Math.floor(ipv4Number(base) / 2 ** (32 - bits));
+
+/** The 8 groups of an IPv6 address as numbers, or null. A dotted IPv4 end counts as 2 groups. */
+function ipv6Groups(address) {
+  let text = address;
+  const dotted = /((?:\d+\.){3}\d+)$/.exec(text);
+  if (dotted) {
+    if (!net.isIPv4(dotted[1])) return null;
+    const n = ipv4Number(dotted[1]);
+    text = text.slice(0, -dotted[1].length) + (Math.floor(n / 65536)).toString(16) + ":" + (n % 65536).toString(16);
+  }
+  const halves = text.split("::");
+  if (halves.length > 2) return null;
+  const head = halves[0] ? halves[0].split(":") : [];
+  const tail = halves.length === 2 && halves[1] ? halves[1].split(":") : [];
+  const fill = halves.length === 2 ? 8 - head.length - tail.length : 0;
+  const groups = [...head, ...Array(Math.max(fill, 0)).fill("0"), ...tail].map((g) => parseInt(g, 16));
+  return groups.length === 8 && groups.every((g) => g >= 0 && g <= 0xffff) ? groups : null;
+}
+
+/** True for an address inside a private, local, or special network. */
+function isBlockedIp(ip) {
+  const address = String(ip).toLowerCase().replace(/^\[|\]$/g, "").split("%")[0];
+  if (net.isIPv4(address)) return IPV4_BLOCKED.some(([base, bits]) => inIpv4Range(address, base, bits));
+  if (!net.isIPv6(address)) return true;
+  const g = ipv6Groups(address);
+  if (!g) return true;
+  const zeroPrefix = g.slice(0, 5).every((x) => x === 0);
+  // An IPv4 address inside an IPv6 address: ::ffff:a.b.c.d, ::a.b.c.d, and 64:ff9b::a.b.c.d (NAT64).
+  if ((zeroPrefix && (g[5] === 0xffff || g[5] === 0)) || (g[0] === 0x64 && g[1] === 0xff9b)) {
+    if (zeroPrefix && g[5] === 0 && g[6] === 0 && g[7] <= 1) return true; // :: and ::1
+    return isBlockedIp([g[6] >> 8, g[6] & 255, g[7] >> 8, g[7] & 255].join("."));
+  }
+  // fc00::/7 unique local, fe80::/10 link local, ff00::/8 multicast.
+  return (g[0] & 0xfe00) === 0xfc00 || (g[0] & 0xffc0) === 0xfe80 || (g[0] & 0xff00) === 0xff00;
+}
+
+const blocked = (host) =>
+  new Error("zerodot does not let a community package reach " + host + ". It is inside the network of the server");
+
+/** A DNS lookup that refuses an answer inside the network of the server. */
+function guardLookup(lookup, host) {
+  return (hostname, options, callback) => {
+    const done = typeof options === "function" ? options : callback;
+    const opts = typeof options === "function" ? {} : options;
+    lookup(hostname, opts, (error, address, family) => {
+      if (error) return done(error);
+      const list = Array.isArray(address) ? address : [{ address, family }];
+      if (list.some((item) => isBlockedIp(item.address))) return done(blocked(host));
+      done(null, address, family);
+    });
+  };
+}
+
+const connect = net.Socket.prototype.connect;
+net.Socket.prototype.connect = function (...args) {
+  // net.connect() passes [options, callback] as one array. The other forms are (options),
+  // (port, host), and (path).
+  const first = Array.isArray(args[0]) ? args[0][0] : args[0];
+  let options = first;
+  if (typeof first !== "object" || first === null) {
+    options = typeof first === "string" && Number.isNaN(Number(first))
+      ? { path: first }
+      : { port: first, host: typeof args[1] === "string" ? args[1] : undefined };
+    if (options.path === undefined) {
+      if (Array.isArray(args[0])) args[0][0] = options;
+      else args.splice(0, typeof args[1] === "string" ? 2 : 1, options);
+    }
+  }
+  if (options.path !== undefined) throw new Error("zerodot does not let a community package open a local socket");
+  const host = String(options.host || "localhost").toLowerCase();
+  if (allowHosts.has(host)) return connect.apply(this, args);
+  if (net.isIP(host.replace(/^\[|\]$/g, ""))) {
+    if (isBlockedIp(host) && !allowHosts.has(host)) throw blocked(host);
+  } else {
+    options.lookup = guardLookup(options.lookup || dns.lookup, host);
+  }
+  return connect.apply(this, args);
+};
+// UDP can reach the same addresses. Nodes do not need it.
+require("node:dgram").createSocket = () => {
+  throw new Error("zerodot does not let a community package use UDP");
+};
+
 const nodes = new Map();
 const credentialTypes = new Map();
 const controllers = new Map();

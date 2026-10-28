@@ -37,7 +37,7 @@ A package has `"zerodot": { "sdk": "^1.0" }` in its `package.json`: the range of
 
 ## Community registries
 
-> **Warning:** zerodot does not check community packages. A package runs in its own process, so it cannot read the secret keys, the database, or the files of zerodot. But it gets the credentials and the data that your workflows give to its nodes, and it can send them to any server. It can also reach services inside your network. Add a registry and install a package only when you trust the author.
+> **Warning:** zerodot does not check community packages, except verified versions. A package runs in its own process, so it cannot read the secret keys, the database, or the files of zerodot, and it cannot reach addresses inside the network of the server. But it gets the credentials and the data that your workflows give to its nodes, and it can send them to any server on the internet. Add a registry and install a package only when you trust the author.
 
 To make a community package, start from the template in [create](https://github.com/zerodot-io/create). It has example nodes and a script that writes `registry.json`.
 
@@ -61,6 +61,7 @@ The registry file:
       "description": "Nodes that send and read Slack messages.",
       "version": "1.2.0",
       "sdk": "^1.0",
+      "integrity": "sha512-...",
       "icon": "MessageSquare",
       "nodes": [{ "type": "acme.slack.send", "label": "Send message" }]
     }
@@ -68,7 +69,7 @@ The registry file:
 }
 ```
 
-- `name` and `packages` are necessary. Each package needs `name`, `version` (`x.y.z`, no pre-release), and `sdk`.
+- `name` and `packages` are necessary. Each package needs `name`, `version` (`x.y.z`, no pre-release), `sdk`, and `integrity`: the npm checksum of that version (`npm view <name>@<version> dist.integrity`). An entry with no checksum is dropped.
 - The package name without the scope must start with `zerodot-`, for example `zerodot-slack` or `@acme/zerodot-slack`. Other names are dropped. A registry cannot list `@zerodot/*` packages. When two registries list the same package, the first registry wins. An official package wins over a community package.
 - The file must be 1 MB or less. zerodot does not follow redirects. It reads each registry again after ten minutes.
 - An instance can have 20 registries. When you remove a registry, the packages that you installed from it stay installed.
@@ -83,7 +84,7 @@ The process of a community package:
 
 - has no environment variables, so it cannot read `ZERODOT_SECRET_KEY`, `BETTER_AUTH_SECRET`, or `DATABASE_URL`.
 - runs with the permission model of Node.js. It can read files in the nodes folder only. It cannot write files, start programs or worker threads, or load native addons.
-- can use the network.
+- can use the internet, but not addresses inside the network of the server: private and local addresses (`10.x`, `172.16.x` to `172.31.x`, `192.168.x`, `127.x`, `169.254.x` with the cloud metadata address, `100.64.x`, and the IPv6 forms), and local sockets. zerodot checks the address after the DNS lookup, so a name that points inside is refused too. UDP is off. `ZERODOT_COMMUNITY_NODES_ALLOW_HOSTS` lists hosts inside the network that packages may reach anyway (names or IP addresses, comma-separated), for example a database that a node must use.
 - has 256 MB of memory. When it stops, zerodot starts it again on the next call.
 - gets only what one call needs: the config, the input, and the credential of that node. It gets no expression scope (`$vars`, `$node`), no data tables, no code sandbox, and no sub-workflows.
 
@@ -94,3 +95,29 @@ A community package cannot use these parts of the node contract. A node or a cre
 - `outPorts()` and `inPorts()`: ports that depend on the config.
 - `waitForm()` and `waitsForCallback()`: nodes that wait for a person or a call.
 - An `oauth2` function in a credential type. A fixed OAuth2 config works.
+
+### Checksums
+
+zerodot installs a community package only when the files are the ones that the registry names:
+
+1. The registry entry has `integrity`, the npm checksum of the version.
+2. Before the install, zerodot checks that npm has the same checksum for that version.
+3. npm checks the downloaded files against the checksum.
+4. After the install, zerodot reads the checksum from the npm lock file of the nodes folder. When it is not the same, zerodot removes the package.
+
+zerodot saves the checksum with the installed package. When a process starts and the files on disk have another checksum, zerodot installs the package again. A community package can change only to the version that its registry lists, with that checksum.
+
+Dependencies of the package are not checked one by one. npm installs them from the ranges in the `package.json` of the package.
+
+### Verified packages
+
+The zerodot team reviews versions of community packages when the author sends the source. A reviewed version is in `verified.json` in [nodes](https://github.com/zerodot-io/nodes). It matches only when the name, the version, and the checksum are the same. System > Nodes and the import of a workflow show it as "Verified". A verified version still runs with the same limits.
+
+- `ZERODOT_UNVERIFIED_NODES=false`: only verified versions can be installed.
+- `ZERODOT_VERIFIED_NODES_URL` sets where zerodot reads the list (default: the `verified.json` of nodes). When the list is not reachable, no package counts as verified.
+
+The [create](https://github.com/zerodot-io/create) template tells authors how to ask for a review.
+
+### Limits
+
+The guards of the package process run in Node.js, not in the operating system. Node.js does not promise that its permission model stops all bad code. For more safety, run zerodot in containers, give Postgres and Valkey a password (scripts/install.sh does this), and block private addresses for outgoing traffic with a firewall.

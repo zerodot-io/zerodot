@@ -28,6 +28,17 @@ import { sentSchemas } from "./schema-copies";
  */
 
 const MEMORY_MB = 256;
+
+/**
+ * Hosts inside the network of the server that community packages may reach anyway, from
+ * `ZERODOT_COMMUNITY_NODES_ALLOW_HOSTS` (names or IP addresses, comma-separated). By default a
+ * package can reach only addresses on the internet.
+ */
+export const allowedHosts = (env: Record<string, string | undefined> = process.env): string[] =>
+  (env.ZERODOT_COMMUNITY_NODES_ALLOW_HOSTS ?? "")
+    .split(",")
+    .map((host) => host.trim().toLowerCase())
+    .filter((host) => host !== "");
 const LOAD_TIMEOUT_MS = 30_000;
 
 type NodeManifest = {
@@ -121,7 +132,14 @@ class PackageHost {
       const reads = this.readable.map((dir) => `--allow-fs-read=${realpathSync(dir)}`);
       const child = spawn(
         process.execPath,
-        [permissionFlag(), ...reads, `--max-old-space-size=${MEMORY_MB}`, "-e", HOST_CODE],
+        [
+          permissionFlag(),
+          ...reads,
+          `--max-old-space-size=${MEMORY_MB}`,
+          "-e",
+          HOST_CODE,
+          JSON.stringify(allowedHosts()),
+        ],
         {
           // No variables of zerodot. PATH is not needed: the package cannot start programs.
           env: {},

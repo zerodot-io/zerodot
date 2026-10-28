@@ -166,10 +166,28 @@ sed -i "s|^BETTER_AUTH_SECRET=.*|BETTER_AUTH_SECRET=$(openssl rand -base64 32)|"
 sed -i "s|^ZERODOT_BASE_URL=.*|ZERODOT_BASE_URL=https://zerodot.example.com|" .env
 sed -i "s|^ZERODOT_TRUST_PROXY=.*|ZERODOT_TRUST_PROXY=true|" .env
 sed -i "s|^ZERODOT_BLOB_DIR=.*|ZERODOT_BLOB_DIR=/blobs|" .env
+sed -i "s|^ZERODOT_DB_PASSWORD=.*|ZERODOT_DB_PASSWORD=$(openssl rand -hex 24)|" .env
+sed -i "s|^ZERODOT_VALKEY_PASSWORD=.*|ZERODOT_VALKEY_PASSWORD=$(openssl rand -hex 24)|" .env
 chmod 600 .env
 ```
 
 Save a copy of `ZERODOT_SECRET_KEY` in a safe place. If you lose it, nobody can open the saved credentials.
+
+`ZERODOT_DB_PASSWORD` and `ZERODOT_VALKEY_PASSWORD` protect the database and Valkey inside the Docker network. Postgres reads its password only at the first start. Set it before the first `docker compose up`.
+
+### Change the database password of an older install
+
+An install from before `ZERODOT_DB_PASSWORD` has the password `zerodot`. To change it:
+
+```sh
+NEW=$(openssl rand -hex 24)
+docker compose exec postgres psql -U zerodot -c "alter user zerodot with password '$NEW'"
+sed -i "s|^ZERODOT_DB_PASSWORD=.*|ZERODOT_DB_PASSWORD=$NEW|" .env
+grep -q '^ZERODOT_DB_PASSWORD=' .env || echo "ZERODOT_DB_PASSWORD=$NEW" >> .env
+docker compose up -d
+```
+
+To give Valkey a password, set `ZERODOT_VALKEY_PASSWORD` in `.env` and run `docker compose up -d`.
 
 ## 5. Bind the proxy to localhost
 

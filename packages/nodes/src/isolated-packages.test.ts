@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
@@ -61,6 +63,29 @@ function writeCommunityPackage(dir: string) {
         listen: async ({ emit }) => {
           await emit({ key: "a", data: { n: 1 } });
           return { close: async () => {} };
+        } },
+      { ...base, type: "iso.net",
+        run: async ({ config }) => {
+          const out = {};
+          const attempt = async (name, work) => {
+            try { out[name] = await work(); } catch (error) { out[name] = String(error.cause?.message ?? error.message); }
+          };
+          await attempt("fetchIp", async () => (await fetch("http://127.0.0.1:" + config.port)).status);
+          await attempt("fetchName", async () => (await fetch("http://localhost:" + config.port)).status);
+          await attempt("mapped", async () => (await fetch("http://[::ffff:127.0.0.1]:" + config.port)).status);
+          await attempt("rawSocket", () => new Promise((resolve, reject) => {
+            const socket = require("node:net").connect(config.port, "127.0.0.1", () => { socket.destroy(); resolve("open"); });
+            socket.on("error", reject);
+          }));
+          await attempt("unixSocket", async () => require("node:net").connect("/var/run/docker.sock") && "open");
+          for (const target of config.targets ?? []) {
+            await attempt(target, () => new Promise((resolve, reject) => {
+              const socket = require("node:net").connect(80, target, () => { socket.destroy(); resolve("open"); });
+              socket.on("error", reject);
+            }));
+          }
+          await attempt("udp", async () => require("node:dgram").createSocket("udp4") && "open");
+          return { port: "out", data: out };
         } },
       { ...base, type: "iso.ports", outPorts: () => ["x"], run: () => ({ port: "out", data: null }) },
     ];
@@ -184,6 +209,61 @@ describe("community package in its own process", () => {
     await assert.rejects(async () => node("iso.crash").run(ctx), /stopped \(code 3\)/);
     const result = await node("iso.inspect").run(ctx);
     assert.deepEqual((result.data as { env: string[] }).env, []);
+  });
+
+  it("refuses addresses inside the network of the server", async () => {
+    const server = createServer((_request, response) => response.end("ok")).listen(0, "127.0.0.1");
+    await new Promise((done) => server.once("listening", done));
+    const { port } = server.address() as AddressInfo;
+    const ctx = {
+      config: { port },
+      input: null,
+      credential: null,
+      signal,
+      scope: {},
+      sandbox: null,
+      tables: null,
+    };
+    try {
+      const result = (await node("iso.net").run(ctx)).data as Record<string, string | number>;
+      for (const key of ["fetchIp", "fetchName", "mapped", "rawSocket"]) {
+        assert.match(String(result[key]), /inside the network of the server/, key);
+      }
+      assert.match(String(result.unixSocket), /local socket/);
+      const targets = [
+        "10.1.2.3",
+        "172.20.0.5",
+        "192.168.1.1",
+        "169.254.169.254",
+        "100.64.0.1",
+        "0.0.0.0",
+        "::1",
+        "::",
+        "fd00::1",
+        "fe80::1",
+        "::ffff:a9fe:a9fe",
+        "::ffff:10.0.0.1",
+        "64:ff9b::a00:1",
+      ];
+      const many = (await node("iso.net").run({ ...ctx, config: { port, targets } }))
+        .data as Record<string, string>;
+      for (const target of targets) {
+        assert.match(String(many[target]), /inside the network of the server/, target);
+      }
+      assert.match(String(result.udp), /UDP/);
+
+      // An operator can allow a host. The process reads the list when it starts.
+      process.env.ZERODOT_COMMUNITY_NODES_ALLOW_HOSTS = "127.0.0.1";
+      await unloadPackage(NAME, dir);
+      await loadInstalled(dir, [NAME]);
+      const allowed = (await node("iso.net").run(ctx)).data as Record<string, string | number>;
+      assert.equal(allowed.fetchIp, 200);
+      assert.equal(allowed.rawSocket, "open");
+      assert.match(String(allowed.fetchName), /inside the network of the server/);
+    } finally {
+      delete process.env.ZERODOT_COMMUNITY_NODES_ALLOW_HOSTS;
+      server.close();
+    }
   });
 
   it("stops the process when the package is removed", async () => {
