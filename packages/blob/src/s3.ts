@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { type BlobRef, type BlobStore, blobId } from "@zerodot/engine";
-import { listObjects, type S3Context, s3Send } from "@zerodot/nodes/s3";
-import type { S3Keys, S3Target } from "@zerodot/nodes/s3-sign";
+import { listObjects, type S3Context, s3Send } from "./s3-client";
+import type { S3Keys, S3Target } from "./s3-sign";
 
 export type S3BlobConfig = {
   target: S3Target;

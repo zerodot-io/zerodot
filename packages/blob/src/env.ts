@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import type { BlobStore } from "@zerodot/engine";
-import { s3Settings } from "@zerodot/nodes/s3-sign";
+import { s3Settings } from "./s3-sign";
 import { diskBlobStore } from "./disk";
 import { s3BlobStore } from "./s3";
 

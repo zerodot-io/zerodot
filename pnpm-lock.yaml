@@ -444,9 +444,9 @@ importers:
       '@zerodot/engine':
         specifier: workspace:*
         version: link:../engine
-      '@zerodot/nodes':
-        specifier: workspace:*
-        version: link:../nodes
+      fast-xml-parser:
+        specifier: 5.11.2
+        version: 5.11.2
     devDependencies:
       '@types/node':
         specifier: 26.6.5

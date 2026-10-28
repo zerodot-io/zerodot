@@ -18,6 +18,6 @@
   },
   "dependencies": {
     "@zerodot/engine": "workspace:*",
-    "@zerodot/nodes": "workspace:*"
+    "fast-xml-parser": "5.11.2"
   }
 }

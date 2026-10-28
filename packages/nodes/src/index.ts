@@ -33,7 +33,6 @@ import logicIf from "./logic-if";
 import logicSwitch from "./logic-switch";
 import mcpCallTool from "./mcp-call-tool";
 import rssRead from "./rss-read";
-import s3 from "./s3";
 import tableDelete from "./table-delete";
 import tableGet from "./table-get";
 import tableGetAll from "./table-get-all";
@@ -89,7 +88,6 @@ export const nodes: NodeDefinition[] = [
   codeJs,
   mcpCallTool,
   coreExecuteCommand,
-  s3,
   tableInsert,
   tableQuery,
   tableGet,

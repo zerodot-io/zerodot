@@ -6,8 +6,6 @@
   "exports": {
     ".": "./src/index.ts",
     "./load": "./src/load-packages.ts",
-    "./s3": "./src/s3.ts",
-    "./s3-sign": "./src/s3-sign.ts",
     "./install": "./src/install-packages.ts"
   },
   "scripts": {
