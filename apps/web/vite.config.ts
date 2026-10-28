@@ -35,7 +35,7 @@ const browserCrypto: Plugin = {
 
 // Node drivers with native code or Node-only code. The nodes load them with `import()` when a node
 // runs on the server. The browser never runs them, so the browser build gets an empty module.
-const SERVER_ONLY_LIST = ["sharp"];
+const SERVER_ONLY_LIST: string[] = [];
 const SERVER_ONLY_MODULES = new Set(SERVER_ONLY_LIST);
 const browserServerOnly: Plugin = {
   name: "zerodot:browser-server-only",

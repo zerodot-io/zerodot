@@ -20,7 +20,6 @@ import dataXml from "./data-xml";
 import fileCompress from "./file-compress";
 import fileConvertTo from "./file-convert-to";
 import fileDisk from "./file-disk";
-import fileEditImage from "./file-edit-image";
 import fileExtractFrom from "./file-extract-from";
 import flowDelay from "./flow-delay";
 import flowExecuteWorkflow from "./flow-execute-workflow";
@@ -77,7 +76,6 @@ export const nodes: NodeDefinition[] = [
   fileExtractFrom,
   fileCompress,
   fileDisk,
-  fileEditImage,
   rssRead,
   flowDelay,
   flowExecuteWorkflow,
