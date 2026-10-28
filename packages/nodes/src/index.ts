@@ -17,7 +17,6 @@ import dataSet from "./data-set";
 import dataSort from "./data-sort";
 import dataSummarize from "./data-summarize";
 import dataXml from "./data-xml";
-import emailSend from "./email-send";
 import fileCompress from "./file-compress";
 import fileConvertTo from "./file-convert-to";
 import fileDisk from "./file-disk";
@@ -47,7 +46,6 @@ import tableUpdate from "./table-update";
 import tableUpsert from "./table-upsert";
 import { telegramNodes } from "./telegram";
 import triggerCron from "./trigger-cron";
-import triggerEmailImap from "./trigger-email-imap";
 import triggerError from "./trigger-error";
 import triggerHttpPoll from "./trigger-http-poll";
 import triggerManual from "./trigger-manual";
@@ -93,12 +91,10 @@ export const nodes: NodeDefinition[] = [
   flowStopError,
   codeJs,
   mcpCallTool,
-  emailSend,
   coreExecuteCommand,
   sshNode,
   ftp,
   sftp,
-  triggerEmailImap,
   s3,
   tableInsert,
   tableQuery,

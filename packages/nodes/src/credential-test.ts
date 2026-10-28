@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import type { ResolvedCredential } from "@zerodot/engine";
 import { credentialTypeByName } from "./credentials";
-import { smtpOptions } from "./email-send";
-import { imapOptions } from "./imap";
 import { connectSsh } from "./ssh";
 
 export type CredentialTestResult =
@@ -52,34 +50,10 @@ async function checkFtp({ data }: ResolvedCredential): Promise<void> {
   }
 }
 
-async function checkSmtp(credential: ResolvedCredential): Promise<void> {
-  const nodemailer = await import("nodemailer");
-  const transport = nodemailer.createTransport({
-    ...smtpOptions(credential),
-    connectionTimeout: TIMEOUT_MS,
-    greetingTimeout: TIMEOUT_MS,
-  });
-  try {
-    await transport.verify();
-  } finally {
-    transport.close();
-  }
-}
-
-async function checkImap(credential: ResolvedCredential): Promise<void> {
-  const { ImapFlow } = await import("imapflow");
-  const client = new ImapFlow({ ...imapOptions(credential), connectionTimeout: TIMEOUT_MS });
-  client.on("error", () => {});
-  await client.connect();
-  await client.logout();
-}
-
 const checks: Record<string, (credential: ResolvedCredential) => Promise<void>> = {
   "telegram.bot": checkTelegram,
   ssh: checkSsh,
   ftp: checkFtp,
-  smtp: checkSmtp,
-  imap: checkImap,
 };
 
 function secretsOf(data: unknown, found: string[] = []): string[] {
