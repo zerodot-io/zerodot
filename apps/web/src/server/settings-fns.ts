@@ -2,7 +2,7 @@
 
 import { createServerFn, createServerOnlyFn } from "@tanstack/react-start";
 import { checkVariableValue, MAX_VARIABLES, variableInputSchema } from "@zerodot/engine";
-import { listMcpTools, testCredential, validateCredentialData } from "@zerodot/nodes";
+import { testCredential, validateCredentialData } from "@zerodot/nodes";
 import { z } from "zod";
 import { asJson } from "../lib/json";
 
@@ -229,6 +229,7 @@ export const listMcpToolsFn = createServerFn({ method: "POST" })
       : null;
     if (data.credentialId && !credential) throw new Error("The credential does not exist");
     try {
+      const { listMcpTools } = await import("@zerodot/server/mcp-tools.server");
       const tools = await listMcpTools({
         url: data.url,
         credential: credential && { type: credential.type, data: credential.data },

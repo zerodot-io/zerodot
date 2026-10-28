@@ -19,7 +19,6 @@
     "typescript": "7.0.2"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "1.32.1",
     "@zerodot/engine": "workspace:*",
     "@zerodot/node-sdk": "workspace:*",
     "cron-parser": "5.10.2",

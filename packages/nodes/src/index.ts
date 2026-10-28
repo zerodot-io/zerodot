@@ -30,7 +30,6 @@ import flowStopError from "./flow-stop-error";
 import httpRequest from "./http-request";
 import logicIf from "./logic-if";
 import logicSwitch from "./logic-switch";
-import mcpCallTool from "./mcp-call-tool";
 import rssRead from "./rss-read";
 import tableDelete from "./table-delete";
 import tableGet from "./table-get";
@@ -84,7 +83,6 @@ export const nodes: NodeDefinition[] = [
   flowRespond,
   flowStopError,
   codeJs,
-  mcpCallTool,
   coreExecuteCommand,
   tableInsert,
   tableQuery,
@@ -98,7 +96,7 @@ export const nodes: NodeDefinition[] = [
 
 export * from "./credentials";
 export { validateCron } from "./cron";
-export { listMcpTools, type McpTool } from "./mcp-client";
+export { credentialHeader } from "./credential-header";
 export * from "./oauth2";
 export * from "./open-credential";
 export {
