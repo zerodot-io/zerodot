@@ -44,7 +44,7 @@ A community registry is a `registry.json` file on an https address. It lists nod
 
 To install a community package, the admin must tick a box to accept the risk and type the package name. zerodot installs the version that the registry lists, and no other one. When the registry lists a new version after the admin opened the page, the install stops. To change the version of a community package later, the admin must accept the risk again. Each step is in the audit log with `riskAccepted: true`.
 
-Community packages show only in **System > Nodes**. The Add node list of the editor shows official packages only.
+Community packages show in **System > Nodes**, and in the import of a workflow that uses their nodes. There, each community package has its own Install button with the same warning. Official packages install together. The Add node list of the editor shows official packages only. The `/workflows/import/preview` API looks in the official catalog only.
 
 The registry file:
 

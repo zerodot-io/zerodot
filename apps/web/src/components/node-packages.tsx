@@ -121,7 +121,7 @@ function AcceptRisk({
  * Asks before a community package is installed. The admin ticks a box and types the package name,
  * so the install cannot happen by one fast click.
  */
-function CommunityInstallConfirm({
+export function CommunityInstallConfirm({
   item,
   busy,
   onCancel,
