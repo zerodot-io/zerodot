@@ -60,11 +60,6 @@ function PackageRow({
         </span>
         <span className="text-muted-foreground">{item.name}</span>
         {item.description && <span className="text-muted-foreground">{item.description}</span>}
-        {item.nodes.length > 0 && (
-          <span className="text-muted-foreground">
-            {item.nodes.map((node) => node.label).join(", ")}
-          </span>
-        )}
         {item.error && <span className="text-destructive">{item.error}</span>}
       </div>
       {canChange &&
@@ -228,7 +223,7 @@ export function AvailableNodePackages({
             <span>{item.label}</span>
             <span className="text-muted-foreground">
               {item.compatible
-                ? item.nodes.map((node) => node.label).join(", ") || item.description
+                ? item.description || item.nodes.map((node) => node.label).join(", ")
                 : "Needs a newer zerodot"}
             </span>
           </span>
