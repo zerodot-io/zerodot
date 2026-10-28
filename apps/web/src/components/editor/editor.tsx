@@ -20,6 +20,11 @@ import {
   Button,
   Combobox,
   cn,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
   Field,
   FieldDescription,
   FieldLabel,
@@ -39,7 +44,9 @@ import {
   ArrowLeft,
   ChevronRight,
   Download,
+  EllipsisVertical,
   History,
+  ListChecks,
   Loader2,
   Maximize,
   Minus,
@@ -96,6 +103,7 @@ import { AvailableNodePackages } from "../node-packages";
 import type { TableHint } from "../schema-form";
 import { TimezoneSelect } from "../timezone-select";
 import { NodeDialog, type NodeIO } from "./node-dialog";
+import { RunsSheet } from "./runs-sheet";
 import { VersionHistory } from "./version-history";
 import { EDGE_COLOR, ZerodotConnectionLine, ZerodotEdge } from "./zerodot-edge";
 import {
@@ -274,6 +282,7 @@ export function Editor({
   const [addOpen, setAddOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [runsOpen, setRunsOpen] = useState(false);
   const [canvasEl, setCanvasEl] = useState<HTMLElement | null>(null);
   const [addQuery, setAddQuery] = useState("");
   /** Goes up when a package was installed, so the list reads the catalog again. */
@@ -1144,21 +1153,23 @@ export function Editor({
         <NodeOutputsContext.Provider value={nodeOutputs}>
           <InputDataContext.Provider value={selected ? inputFor(selected) : undefined}>
             <div className="flex h-svh min-w-0 flex-col overflow-hidden">
-              <div className="flex items-center gap-3 border-b px-4 py-2">
+              <div className="flex items-center gap-1.5 border-b px-4 py-2">
                 <Link
                   to="/p/$projectSlug/workflows"
                   params={{ projectSlug }}
                   search={{ all: true }}
-                  className="text-muted-foreground"
+                  className="rounded-md px-1.5 py-0.5 text-muted-foreground transition-colors duration-150 ease-out hover:text-foreground"
                 >
                   Workflows
                 </Link>
+                <ChevronRight aria-hidden="true" className="size-3.5 text-muted-foreground/60" />
                 {renaming === null ? (
                   <button
                     type="button"
                     aria-label="Rename workflow"
+                    title="Rename"
                     onClick={() => setRenaming(name)}
-                    className="rounded-md px-1.5 py-0.5 font-semibold hover:bg-muted"
+                    className="max-w-64 cursor-text truncate rounded-md px-1.5 py-0.5 font-semibold transition-colors duration-150 ease-out hover:bg-muted"
                   >
                     {name}
                   </button>
@@ -1179,7 +1190,20 @@ export function Editor({
                     className="rounded-md border bg-background px-1.5 py-0.5 font-semibold outline-none"
                   />
                 )}
-                <span className="text-muted-foreground" aria-live="polite">
+                <span
+                  aria-live="polite"
+                  className={`ml-1.5 flex items-center gap-1.5 ${saveState === "error" ? "text-destructive" : "text-muted-foreground"}`}
+                >
+                  <span
+                    aria-hidden="true"
+                    className={`size-1.5 rounded-full transition-colors duration-150 ${
+                      saveState === "saving"
+                        ? "animate-pulse bg-muted-foreground motion-reduce:animate-none"
+                        : saveState === "error"
+                          ? "bg-destructive"
+                          : "bg-muted-foreground/40"
+                    }`}
+                  />
                   {saveState === "saving"
                     ? "Saving…"
                     : saveState === "error"
@@ -1187,17 +1211,57 @@ export function Editor({
                       : "Saved"}
                 </span>
                 <div className="ml-auto flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    aria-label="Version history"
-                    onClick={() => {
-                      setSettingsOpen(false);
-                      setHistoryOpen(true);
-                    }}
-                  >
-                    <History />
-                  </Button>
+                  <DropdownMenu>
+                    <Tooltip label="More" side="bottom">
+                      <DropdownMenuTrigger render={<Button variant="ghost" size="icon" />}>
+                        <EllipsisVertical />
+                      </DropdownMenuTrigger>
+                    </Tooltip>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem
+                        onClick={() => {
+                          setSettingsOpen(false);
+                          setHistoryOpen(false);
+                          setRunsOpen(true);
+                        }}
+                      >
+                        <ListChecks />
+                        Runs
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => {
+                          setSettingsOpen(false);
+                          setRunsOpen(false);
+                          setHistoryOpen(true);
+                        }}
+                      >
+                        <History />
+                        Version history
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => {
+                          setHistoryOpen(false);
+                          setRunsOpen(false);
+                          setSettingsOpen(true);
+                        }}
+                      >
+                        <Settings />
+                        Workflow settings
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={exportFile}>
+                        <Download />
+                        Export as a file
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  <RunsSheet
+                    open={runsOpen}
+                    onOpenChange={setRunsOpen}
+                    container={canvasEl}
+                    projectSlug={projectSlug}
+                    workflowId={workflow.id}
+                  />
                   <VersionHistory
                     open={historyOpen}
                     onOpenChange={setHistoryOpen}
@@ -1206,14 +1270,6 @@ export function Editor({
                     workflowId={workflow.id}
                     onRestored={showRestored}
                   />
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    aria-label="Workflow settings"
-                    onClick={() => setSettingsOpen(true)}
-                  >
-                    <Settings />
-                  </Button>
                   <Sheet open={settingsOpen} onOpenChange={setSettingsOpen} modal={false}>
                     <SheetContent container={canvasEl}>
                       <SheetHeader>
@@ -1450,15 +1506,16 @@ export function Editor({
                       </div>
                     </SheetContent>
                   </Sheet>
-                  <Button variant="outline" onClick={exportFile}>
-                    <Download />
-                    Export
-                  </Button>
-                  <Button onClick={publish} disabled={!hasChanges}>
+                  <span aria-hidden="true" className="mx-1 h-5 w-px bg-border" />
+                  <Button
+                    onClick={publish}
+                    disabled={!hasChanges}
+                    title={hasChanges ? "Make the draft the live version" : "No changes to publish"}
+                  >
                     <Rocket />
                     Publish
                   </Button>
-                  <div className="flex items-center gap-2">
+                  <div className="ml-1 flex items-center gap-2">
                     <Switch id="workflow-active" checked={active} onCheckedChange={toggleActive} />
                     <label htmlFor="workflow-active">Active</label>
                   </div>

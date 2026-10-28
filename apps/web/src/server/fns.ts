@@ -585,6 +585,15 @@ export const getVersionFn = createServerFn({ method: "GET" })
     return {
       version: row.version,
       nodeCount: graph.nodes.length,
+      // Enough of the graph to draw a small map of it.
+      nodes: graph.nodes.map((n) => ({
+        id: n.id,
+        name: n.name,
+        type: n.type,
+        x: n.position.x,
+        y: n.position.y,
+      })),
+      edges: graph.edges.map((e) => ({ from: e.from, to: e.to })),
       // From the draft to the version: what the draft gets when you restore.
       diff: diffGraphs(draft, graph),
     };
