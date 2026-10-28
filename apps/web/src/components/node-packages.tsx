@@ -72,13 +72,26 @@ function InstallConfirm({
 }
 
 /** What a community package can do on this server. Shown before each step that adds such code. */
-function RiskWarning({ title, lead }: { title: string; lead: string }) {
+function RiskWarning({
+  title,
+  lead,
+  verified = false,
+}: {
+  title: string;
+  lead: string;
+  /** The zerodot team reviewed the source of this version. */
+  verified?: boolean;
+}) {
   return (
     <div role="alert" className="flex flex-col gap-2 rounded-lg bg-destructive/10 p-3">
       <p className="font-medium text-destructive">{title}</p>
       <p className="text-pretty">{lead}</p>
       <ul className="flex list-disc flex-col gap-1 pl-5 text-pretty">
-        <li>zerodot does not check this code. A new version can add bad code at any time.</li>
+        <li>
+          {verified
+            ? "The zerodot team read the source of this version. That makes bad code less likely, but not impossible."
+            : "zerodot does not check this code. A new version can add bad code at any time."}
+        </li>
         <li>
           The code runs on your server, in its own process. It cannot read the secret keys, the
           database, or the files of zerodot.
@@ -87,7 +100,10 @@ function RiskWarning({ title, lead }: { title: string; lead: string }) {
           It gets the credentials and the data that your workflows give to its nodes. It can send
           them to any server on the internet.
         </li>
-        <li>It can use the network of your server, also to reach services inside your network.</li>
+        <li>
+          It can use the internet. zerodot stops it from reaching addresses inside the network of
+          your server.
+        </li>
         <li>It runs as soon as it is installed, also when no workflow uses its nodes.</li>
       </ul>
       <p className="text-pretty font-medium">
@@ -133,7 +149,13 @@ export function CommunityInstallConfirm({
   onCancel,
   onConfirm,
 }: {
-  item: { name: string; label: string; version: string; registry: { name: string; url: string } };
+  item: {
+    name: string;
+    label: string;
+    version: string;
+    registry: { name: string; url: string };
+    verified: boolean;
+  };
   busy: boolean;
   onCancel: () => void;
   onConfirm: () => void;
@@ -156,8 +178,13 @@ export function CommunityInstallConfirm({
           </DialogDescription>
         </DialogHeader>
         <RiskWarning
-          title="zerodot did not check this package"
+          title={
+            item.verified
+              ? "Verified, but not written by zerodot"
+              : "zerodot did not check this package"
+          }
           lead="Somebody outside zerodot wrote this package. If it has bad code, it can steal the credentials and the data that your workflows give to its nodes."
+          verified={item.verified}
         />
         <AcceptRisk checked={accepted} disabled={busy} onChange={setAccepted}>
           I know who wrote this package, I trust them, and I accept the risk for this instance.
@@ -458,7 +485,12 @@ function PackageRow({
           {item.source === "env" && <Badge variant="outline">ZERODOT_NODE_PACKAGES</Badge>}
           {item.registry && (
             <Badge variant="outline" title={item.registry.url}>
-              <span className="text-destructive">Community</span> · {item.registry.name}
+              {item.verified ? (
+                <span>Verified</span>
+              ) : (
+                <span className="text-destructive">Community</span>
+              )}{" "}
+              · {item.registry.name}
             </Badge>
           )}
         </div>
@@ -696,7 +728,9 @@ export function NodePackagesSection() {
       item={item}
       canChange={
         overview.installEnabled &&
-        (!item.registry || item.version !== null || overview.communityEnabled)
+        (!item.registry ||
+          item.version !== null ||
+          (overview.communityEnabled && (item.verified || overview.unverifiedEnabled)))
       }
       busy={busy === item.name}
       onInstall={() => setConfirm(item)}
@@ -857,6 +891,7 @@ export function NodePackagesSection() {
             label: confirm.label,
             version: confirm.latest,
             registry: confirm.registry,
+            verified: confirm.verified,
           }}
           busy={busy === confirm.name}
           onCancel={() => setConfirm(null)}

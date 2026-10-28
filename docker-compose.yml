@@ -11,8 +11,8 @@ services:
   web:
     build: { context: ., target: web }
     environment:
-      DATABASE_URL: postgres://zerodot:zerodot@postgres:5432/zerodot
-      VALKEY_URL: redis://valkey:6379
+      DATABASE_URL: postgres://zerodot:${ZERODOT_DB_PASSWORD:-zerodot}@postgres:5432/zerodot
+      VALKEY_URL: redis://:${ZERODOT_VALKEY_PASSWORD:-}@valkey:6379
       ZERODOT_SECRET_KEY: ${ZERODOT_SECRET_KEY:?set ZERODOT_SECRET_KEY}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?set BETTER_AUTH_SECRET}
       ZERODOT_BASE_URL: ${ZERODOT_BASE_URL:-http://localhost:3000}
@@ -34,8 +34,8 @@ services:
   api:
     build: { context: ., target: api }
     environment:
-      DATABASE_URL: postgres://zerodot:zerodot@postgres:5432/zerodot
-      VALKEY_URL: redis://valkey:6379
+      DATABASE_URL: postgres://zerodot:${ZERODOT_DB_PASSWORD:-zerodot}@postgres:5432/zerodot
+      VALKEY_URL: redis://:${ZERODOT_VALKEY_PASSWORD:-}@valkey:6379
       ZERODOT_SECRET_KEY: ${ZERODOT_SECRET_KEY:?set ZERODOT_SECRET_KEY}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?set BETTER_AUTH_SECRET}
       ZERODOT_BASE_URL: ${ZERODOT_BASE_URL:-http://localhost:3000}
@@ -57,8 +57,8 @@ services:
   worker:
     build: { context: ., target: worker }
     environment:
-      DATABASE_URL: postgres://zerodot:zerodot@postgres:5432/zerodot
-      VALKEY_URL: redis://valkey:6379
+      DATABASE_URL: postgres://zerodot:${ZERODOT_DB_PASSWORD:-zerodot}@postgres:5432/zerodot
+      VALKEY_URL: redis://:${ZERODOT_VALKEY_PASSWORD:-}@valkey:6379
       ZERODOT_SECRET_KEY: ${ZERODOT_SECRET_KEY:?set ZERODOT_SECRET_KEY}
       ZERODOT_BASE_URL: ${ZERODOT_BASE_URL:-http://localhost:3000}
       SANDBOX_URL: http://sandbox:3002
@@ -124,7 +124,8 @@ services:
     image: postgres:17
     environment:
       POSTGRES_USER: zerodot
-      POSTGRES_PASSWORD: zerodot
+      # Set at the first start only. scripts/install.sh writes a random one to .env.
+      POSTGRES_PASSWORD: ${ZERODOT_DB_PASSWORD:-zerodot}
       POSTGRES_DB: zerodot
     volumes: [postgres-data:/var/lib/postgresql/data]
     healthcheck:
@@ -134,10 +135,18 @@ services:
 
   valkey:
     image: valkey/valkey:8
-    command: ["valkey-server", "--appendonly", "yes"]
+    # With ZERODOT_VALKEY_PASSWORD, Valkey asks for the password. scripts/install.sh writes one.
+    environment:
+      ZERODOT_VALKEY_PASSWORD: ${ZERODOT_VALKEY_PASSWORD:-}
+    command:
+      - sh
+      - -c
+      - exec valkey-server --appendonly yes $${ZERODOT_VALKEY_PASSWORD:+--requirepass "$$ZERODOT_VALKEY_PASSWORD"}
     volumes: [valkey-data:/data]
     healthcheck:
-      test: ["CMD", "valkey-cli", "ping"]
+      test:
+        - CMD-SHELL
+        - valkey-cli $${ZERODOT_VALKEY_PASSWORD:+--no-auth-warning -a "$$ZERODOT_VALKEY_PASSWORD"} ping | grep -q PONG
       interval: 2s
       retries: 30
 

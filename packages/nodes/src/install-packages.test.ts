@@ -8,15 +8,19 @@ import { describe, it } from "node:test";
 import { credentialTypeByName } from "./credentials";
 import { catalog, registry } from "./index";
 import {
+  checkPackumentIntegrity,
   checkRegistryUrl,
   clearCatalogCache,
   createPackageSyncer,
   fetchCatalog,
   fetchRegistry,
+  installedIntegrity,
   installedVersion,
+  installFromNpm,
   isLoaded,
   isOfficialPackage,
   isPackageName,
+  isVerified,
   loadedVersion,
   loadInstalled,
   mergeWanted,
@@ -25,6 +29,7 @@ import {
   packageEntry,
   parseCatalog,
   parseRegistry,
+  parseVerified,
   pickVersion,
   type SyncLog,
   switchVersion,
@@ -32,6 +37,19 @@ import {
   unloadPackage,
   withInstallLock,
 } from "./install-packages";
+
+const SUM_A =
+  "sha512-H0D8ktokFpR1CXnubPWC8tXX0o4YM13gWrxU0FYOD1MChgxlK/CNVgJSql50IQVG82n7u86MEs/HlXsmUv6adQ==";
+const SUM_B =
+  "sha512-Umd2iCLuYk1I/OFexcp5y9YCy39MIVelFlVpkfIu+Me173sY0f9BxZNw77CFhlHUSpNsEbexRMSP4E3zxqPo2g==";
+
+/** Writes the npm lock file of the nodes folder with a checksum for each package. */
+function writeLock(dir: string, sums: Record<string, string>) {
+  const packages = Object.fromEntries(
+    Object.entries(sums).map(([name, integrity]) => [`node_modules/${name}`, { integrity }]),
+  );
+  writeFileSync(join(dir, "package-lock.json"), JSON.stringify({ lockfileVersion: 3, packages }));
+}
 
 // A package finds zod in its own folder. The fixture imports the zod of this test instead.
 const ZOD = import.meta.resolve("zod");
@@ -516,7 +534,13 @@ describe("isPackageName", () => {
 });
 
 describe("community registry", () => {
-  const entry = (name: string) => ({ name, version: "1.0.0", sdk: "^1.0", nodes: [] });
+  const entry = (name: string) => ({
+    name,
+    version: "1.0.0",
+    sdk: "^1.0",
+    integrity: SUM_A,
+    nodes: [],
+  });
 
   it("keeps zerodot-* names only, and drops @zerodot/*, bad versions, and repeated names", () => {
     const registry = parseRegistry({
@@ -531,6 +555,8 @@ describe("community registry", () => {
         entry("@acme/zerodot-slack"),
         { ...entry("@acme/zerodot-beta"), version: "1.0.0-beta.1" },
         entry("-rf"),
+        { ...entry("zerodot-no-sum"), integrity: undefined },
+        { ...entry("zerodot-bad-sum"), integrity: "md5-abc" },
       ],
     });
     assert.equal(registry.name, "Acme");
@@ -575,5 +601,103 @@ describe("npmRegistry", () => {
       npmRegistry({ ZERODOT_NPM_REGISTRY: " http://localhost:4873/ " }),
       "http://localhost:4873",
     );
+  });
+});
+
+describe("checksums", () => {
+  it("reads the checksum that npm wrote, and compares it with npm", () => {
+    const dir = mkdtempSync(join(tmpdir(), "nodes-sum-"));
+    try {
+      assert.equal(installedIntegrity(dir, "zerodot-x"), null);
+      writeLock(dir, { "zerodot-x": SUM_A });
+      assert.equal(installedIntegrity(dir, "zerodot-x"), SUM_A);
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+    const packument = { versions: { "1.0.0": { dist: { integrity: SUM_A } } } };
+    assert.doesNotThrow(() => checkPackumentIntegrity(packument, "zerodot-x", "1.0.0", SUM_A));
+    assert.throws(
+      () => checkPackumentIntegrity(packument, "zerodot-x", "1.0.0", SUM_B),
+      /checksum of zerodot-x@1.0.0 on npm is not the one in the registry/,
+    );
+    assert.throws(
+      () => checkPackumentIntegrity(packument, "zerodot-x", "2.0.0", SUM_A),
+      /checksum/,
+    );
+  });
+
+  it("removes a package that npm installed with another checksum", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "nodes-sum-"));
+    const calls: string[] = [];
+    const runner = async (args: string[]) => {
+      calls.push(args[0] ?? "");
+      if (args[0] === "install") {
+        writePackage(dir, "zerodot-x", "1.0.0", "^1.0", "x.one");
+        writeLock(dir, { "zerodot-x": SUM_B });
+      }
+    };
+    try {
+      await assert.rejects(
+        installFromNpm(dir, "zerodot-x", "1.0.0", runner, SUM_A),
+        /another checksum than the registry has/,
+      );
+      assert.deepEqual(calls, ["install", "uninstall"]);
+      assert.equal(installedVersion(dir, "zerodot-x"), null);
+      await installFromNpm(dir, "zerodot-x", "1.0.0", runner, SUM_B);
+      assert.equal(installedVersion(dir, "zerodot-x"), "1.0.0");
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+
+  it("installs again at start when the files on disk have another checksum", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "nodes-sum-"));
+    const installs: string[] = [];
+    try {
+      writePackage(dir, "@zerodot/demo-sum", "1.0.0", "^1.0", "demo.sum");
+      writeLock(dir, { "@zerodot/demo-sum": SUM_B });
+      await syncPackages(dir, [{ name: "@zerodot/demo-sum", version: "1.0.0", integrity: SUM_A }], {
+        install: async (_dir, name, version, _runner, integrity) => {
+          installs.push(`${name}@${version}:${integrity === SUM_A}`);
+          writeLock(dir, { [name]: SUM_A });
+        },
+      });
+      assert.deepEqual(installs, ["@zerodot/demo-sum@1.0.0:true"]);
+      await unloadPackage("@zerodot/demo-sum", dir);
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+});
+
+describe("verified list", () => {
+  it("keeps reviewed versions with a checksum, and matches all three parts", () => {
+    const list = parseVerified({
+      packages: [
+        {
+          name: "zerodot-slack",
+          version: "1.2.0",
+          integrity: SUM_A,
+          source: "https://github.com/a/b",
+        },
+        { name: "zerodot-slack", version: "1.3.0" },
+        { name: "@zerodot/redis", version: "1.0.0", integrity: SUM_A },
+        { name: "zerodot-x", version: "1.0.0", integrity: SUM_A, source: "javascript:x" },
+      ],
+    });
+    assert.deepEqual(list, [
+      {
+        name: "zerodot-slack",
+        version: "1.2.0",
+        integrity: SUM_A,
+        source: "https://github.com/a/b",
+      },
+      { name: "zerodot-x", version: "1.0.0", integrity: SUM_A },
+    ]);
+    assert.equal(isVerified(list, "zerodot-slack", "1.2.0", SUM_A), true);
+    assert.equal(isVerified(list, "zerodot-slack", "1.2.0", SUM_B), false);
+    assert.equal(isVerified(list, "zerodot-slack", "1.3.0", SUM_A), false);
+    assert.equal(isVerified(list, "zerodot-slack", "1.2.0", undefined), false);
+    assert.throws(() => parseVerified({}), /no "packages"/);
   });
 });

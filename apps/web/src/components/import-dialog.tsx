@@ -318,7 +318,10 @@ function MissingNodesDialog({
                   <span>
                     {item.label}
                     {item.registry && (
-                      <span className="text-destructive"> · Community, {item.registry.name}</span>
+                      <span className={item.verified ? undefined : "text-destructive"}>
+                        {" "}
+                        · {item.verified ? "Verified" : "Community"}, {item.registry.name}
+                      </span>
                     )}
                   </span>
                   <span className="truncate text-muted-foreground">
@@ -370,6 +373,7 @@ function MissingNodesDialog({
               label: confirm.label,
               version: confirm.version,
               registry: confirm.registry,
+              verified: confirm.verified,
             }}
             busy={installing === confirm.name}
             onCancel={() => setConfirm(null)}

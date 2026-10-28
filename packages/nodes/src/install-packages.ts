@@ -63,8 +63,47 @@ function ensureNodesDir(dir: string): void {
 }
 
 export type Packument = {
-  versions?: Record<string, { zerodot?: PackageManifest } | undefined>;
+  versions?: Record<
+    string,
+    { zerodot?: PackageManifest; dist?: { integrity?: string } } | undefined
+  >;
 };
+
+/** A checksum in the form that npm uses: `sha512-` and the hash in base64. */
+export const isIntegrity = (value: unknown): value is string =>
+  typeof value === "string" && /^sha512-[A-Za-z0-9+/]{86}==$/.test(value);
+
+/**
+ * The checksum of the files of a package, as the npm lock file of the nodes folder has it. npm
+ * checked the files against it when it installed them. Null when the package is not in the file.
+ */
+export function installedIntegrity(dir: string, name: string): string | null {
+  const file = join(dir, "package-lock.json");
+  if (!existsSync(file)) return null;
+  try {
+    const lock = JSON.parse(readFileSync(file, "utf8")) as {
+      packages?: Record<string, { integrity?: string } | undefined>;
+    };
+    return lock.packages?.[`node_modules/${name}`]?.integrity ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Throws when npm does not list `integrity` for this version: the files are not the checked ones. */
+export function checkPackumentIntegrity(
+  packument: Packument,
+  name: string,
+  version: string,
+  integrity: string,
+): void {
+  const found = packument.versions?.[version]?.dist?.integrity;
+  if (found !== integrity) {
+    throw new Error(
+      `The checksum of ${name}@${version} on npm is not the one in the registry. zerodot did not install it`,
+    );
+  }
+}
 
 type Triple = [number, number, number];
 
@@ -187,13 +226,15 @@ const npm: NpmRunner = async (args, cwd) => {
 /**
  * Install scripts do not run. The code of the package still runs when zerodot loads it: at install
  * and at each start, also when no workflow uses its nodes. A community package runs in its own
- * process (see isolated-packages.ts).
+ * process (see isolated-packages.ts). With `integrity`, the package is kept only when npm
+ * installed files with that checksum.
  */
 export async function installFromNpm(
   dir: string,
   name: string,
   version: string,
   runner: NpmRunner = npm,
+  integrity?: string,
 ): Promise<void> {
   if (!isPackageName(name)) throw new Error(`"${name}" is not a valid package name`);
   ensureNodesDir(dir);
@@ -209,6 +250,15 @@ export async function installFromNpm(
     ],
     dir,
   );
+  if (integrity && installedIntegrity(dir, name) !== integrity) {
+    await runner(["uninstall", "--ignore-scripts", "--no-audit", "--no-fund", name], dir).catch(
+      () => undefined,
+    );
+    rmSync(join(dir, "node_modules", name), { recursive: true, force: true });
+    throw new Error(
+      `npm installed ${name}@${version} with another checksum than the registry has. zerodot removed it`,
+    );
+  }
 }
 
 export async function uninstallFromNpm(
@@ -411,18 +461,18 @@ export async function switchVersion(
   dir: string,
   name: string,
   version: string,
-  deps: { install?: typeof installFromNpm } = {},
+  deps: { install?: typeof installFromNpm; integrity?: string; fromIntegrity?: string } = {},
 ): Promise<NodePackageReport> {
   const install = deps.install ?? installFromNpm;
   const from = installedVersion(dir, name);
   try {
-    await install(dir, name, version);
+    await install(dir, name, version, undefined, deps.integrity);
     const [report] = await loadInstalled(dir, [name]);
     if (report && !report.error) return report;
     throw new Error(report?.error ?? "The package did not load");
   } catch (error) {
     if (from) {
-      await install(dir, name, from)
+      await install(dir, name, from, undefined, deps.fromIntegrity)
         .then(() => loadInstalled(dir, [name]))
         .catch(() => undefined);
     }
@@ -430,7 +480,8 @@ export async function switchVersion(
   }
 }
 
-export type WantedPackage = { name: string; version?: string };
+/** `integrity`: the checksum that a community package must have. */
+export type WantedPackage = { name: string; version?: string; integrity?: string };
 
 export type SyncResult = { reports: NodePackageReport[]; versions: Record<string, string> };
 
@@ -449,15 +500,16 @@ export async function syncPackages(
   const reports: NodePackageReport[] = [];
   const versions: Record<string, string> = {};
   const ready: string[] = [];
-  for (const { name, version } of wanted) {
+  for (const { name, version, integrity } of wanted) {
     try {
       if (!isPackageName(name)) throw new Error(`"${name}" is not a valid package name`);
       const have = installedVersion(dir, name);
-      if (have && (!version || version === have)) {
+      const sameFiles = !integrity || installedIntegrity(dir, name) === integrity;
+      if (have && (!version || version === have) && sameFiles) {
         versions[name] = have;
       } else {
         const target = version ?? (await resolveVersionOf(name));
-        await install(dir, name, target);
+        await install(dir, name, target, undefined, integrity);
         versions[name] = installedVersion(dir, name) ?? target;
       }
       ready.push(name);
@@ -482,10 +534,12 @@ export async function syncPackages(
  */
 export function mergeWanted(
   envNames: string[],
-  installed: { name: string; version: string }[],
+  installed: { name: string; version: string; integrity?: string }[],
 ): WantedPackage[] {
   const wanted = new Map<string, WantedPackage>();
-  for (const { name, version } of installed) wanted.set(name, { name, version });
+  for (const { name, version, integrity } of installed) {
+    wanted.set(name, integrity ? { name, version, integrity } : { name, version });
+  }
   for (const name of envNames) wanted.set(name, { name });
   return [...wanted.values()];
 }
@@ -553,6 +607,8 @@ export type CatalogPackage = {
   version: string;
   /** The node contract range of `version`. */
   sdk: string;
+  /** The npm checksum of `version`. A community registry must have it. */
+  integrity?: string;
   /** Name of a built-in icon. */
   icon?: string;
   /** The icon of the package as a `data:image/...` URL. Another address is dropped. */
@@ -586,6 +642,7 @@ export function parseCatalog(
       description: isText(item.description) ? item.description : "",
       version: item.version,
       sdk: item.sdk,
+      ...(isIntegrity(item.integrity) ? { integrity: item.integrity } : {}),
       ...(isText(item.icon) ? { icon: item.icon } : {}),
       ...(isText(item.iconUrl) && item.iconUrl.startsWith("data:image/")
         ? { iconUrl: item.iconUrl }
@@ -694,7 +751,8 @@ export function parseRegistry(json: unknown): Registry {
   return {
     name: root.name.slice(0, 80),
     homepage: isHttpsUrl(root.homepage) ? root.homepage : null,
-    packages: parseCatalog(json, isCommunityPackage),
+    // A community package needs a checksum: zerodot installs only the files that it names.
+    packages: parseCatalog(json, isCommunityPackage).filter((item) => item.integrity),
   };
 }
 
@@ -744,3 +802,64 @@ export async function fetchRegistry(
     return parseRegistry(json);
   });
 }
+
+// ---- Verified community packages ----
+
+/**
+ * A version of a community package that the zerodot team reviewed. The author sent the source,
+ * the team read it, and `integrity` is the checksum of the files on npm that match that source.
+ */
+export type VerifiedPackage = {
+  name: string;
+  version: string;
+  integrity: string;
+  /** The address of the source that the team reviewed. */
+  source?: string;
+};
+
+export const DEFAULT_VERIFIED_URL =
+  "https://raw.githubusercontent.com/zerodot-io/nodes/main/verified.json";
+
+/** Reads the verified list: `{ packages: [{ name, version, integrity, source? }] }`. */
+export function parseVerified(json: unknown): VerifiedPackage[] {
+  const list = (json as { packages?: unknown } | null)?.packages;
+  if (!Array.isArray(list)) throw new Error('The verified list has no "packages" list');
+  const packages: VerifiedPackage[] = [];
+  for (const item of list as Record<string, unknown>[]) {
+    if (!isText(item?.name) || !isCommunityPackage(item.name)) continue;
+    if (!isText(item.version) || !parseVersion(item.version) || !isIntegrity(item.integrity))
+      continue;
+    packages.push({
+      name: item.name,
+      version: item.version,
+      integrity: item.integrity,
+      ...(isHttpsUrl(item.source) ? { source: item.source } : {}),
+    });
+  }
+  return packages;
+}
+
+/** The verified list. Cached for ten minutes. Throws when the file is not reachable. */
+export async function fetchVerified(
+  url: string = DEFAULT_VERIFIED_URL,
+  fetchImpl: typeof fetch = fetch,
+  now: number = Date.now(),
+): Promise<VerifiedPackage[]> {
+  return cached(`verified:${url}`, now, async () => {
+    const response = await fetchImpl(url, { signal: AbortSignal.timeout(10_000) });
+    if (!response.ok) throw new Error(`The verified list answered with status ${response.status}`);
+    return parseVerified(await response.json());
+  });
+}
+
+/** True when the team reviewed this exact version: the name, the version, and the checksum match. */
+export const isVerified = (
+  list: VerifiedPackage[],
+  name: string,
+  version: string,
+  integrity: string | undefined,
+): boolean =>
+  integrity !== undefined &&
+  list.some(
+    (item) => item.name === name && item.version === version && item.integrity === integrity,
+  );

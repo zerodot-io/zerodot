@@ -13,16 +13,20 @@ import { SDK_VERSION, satisfiesSdk } from "@zerodot/node-sdk";
 import { catalog as nodeCatalog } from "@zerodot/nodes";
 import {
   type CatalogPackage,
+  checkPackumentIntegrity,
   checkRegistryUrl,
   compatibleVersions,
   createPackageSyncer,
+  DEFAULT_VERIFIED_URL,
   fetchCatalog,
   fetchPackument,
   fetchRegistry,
+  fetchVerified,
   installedVersion,
   installFromNpm,
   isOfficialPackage,
   isPackageName,
+  isVerified,
   loadInstalled,
   mergeWanted,
   nodesDir,
@@ -32,6 +36,7 @@ import {
   type SyncLog,
   switchVersion,
   uninstallFromNpm,
+  type VerifiedPackage,
   withInstallLock,
 } from "@zerodot/nodes/install";
 import { parseNodePackages } from "@zerodot/nodes/load";
@@ -57,6 +62,17 @@ export const installEnabled = (env: Record<string, string | undefined> = process
  */
 export const communityEnabled = (env: Record<string, string | undefined> = process.env): boolean =>
   installEnabled(env) && (env.ZERODOT_COMMUNITY_NODES ?? "").trim().toLowerCase() === "true";
+
+/**
+ * False when `ZERODOT_UNVERIFIED_NODES=false`: only community packages that the zerodot team
+ * reviewed can be installed.
+ */
+export const unverifiedEnabled = (env: Record<string, string | undefined> = process.env): boolean =>
+  (env.ZERODOT_UNVERIFIED_NODES ?? "true").trim().toLowerCase() !== "false";
+
+/** The reviewed community package versions. Empty when the list is not reachable. */
+const verifiedList = (): Promise<VerifiedPackage[]> =>
+  fetchVerified(process.env.ZERODOT_VERIFIED_NODES_URL || DEFAULT_VERIFIED_URL).catch(() => []);
 
 /** The most registries one instance can have. Each one is read when the Nodes page opens. */
 const MAX_REGISTRIES = 20;
@@ -98,6 +114,11 @@ export type NodePackageView = {
   nodes: { type: string; label: string; description?: string }[];
   /** The community registry of the package. Null for an official package. */
   registry: { url: string; name: string } | null;
+  /**
+   * For a community package: the zerodot team reviewed the source of this version (the installed
+   * one, or the one the registry lists). Always false for an official package.
+   */
+  verified: boolean;
 };
 
 export type NodeRegistryView = NodeRegistry & {
@@ -111,6 +132,8 @@ export type NodePackagesOverview = {
   installEnabled: boolean;
   /** True only when `ZERODOT_COMMUNITY_NODES=true` and installing is on. */
   communityEnabled: boolean;
+  /** False when `ZERODOT_UNVERIFIED_NODES=false`: only verified community packages install. */
+  unverifiedEnabled: boolean;
   catalogUrl: string;
   /** Why the catalog could not be read. The installed packages still show. */
   catalogError: string | null;
@@ -121,7 +144,11 @@ export type NodePackagesOverview = {
 const errorText = (error: unknown, fallback: string): string =>
   error instanceof Error ? error.message : fallback;
 
-const viewOf = (item: CatalogPackage, registry: NodePackageView["registry"]): NodePackageView => ({
+const viewOf = (
+  item: CatalogPackage,
+  registry: NodePackageView["registry"],
+  verified = false,
+): NodePackageView => ({
   name: item.name,
   label: item.label,
   summary: item.summary,
@@ -135,6 +162,7 @@ const viewOf = (item: CatalogPackage, registry: NodePackageView["registry"]): No
   iconUrl: item.iconUrl ?? null,
   nodes: item.nodes,
   registry,
+  verified,
 });
 
 export async function nodePackagesOverview(headers: Headers): Promise<NodePackagesOverview> {
@@ -145,9 +173,12 @@ export async function nodePackagesOverview(headers: Headers): Promise<NodePackag
   const fromEnv = new Set(envPackages());
   let catalog: CatalogPackage[] = [];
   let catalogError: string | null = null;
-  const [catalogResult, ...registryResults] = await Promise.allSettled([
-    fetchCatalog(catalogUrl()),
-    ...saved.map((registry) => fetchRegistry(registry.url)),
+  const [verified, [catalogResult, ...registryResults]] = await Promise.all([
+    saved.length > 0 || installed.some((item) => item.registry) ? verifiedList() : [],
+    Promise.allSettled([
+      fetchCatalog(catalogUrl()),
+      ...saved.map((registry) => fetchRegistry(registry.url)),
+    ]),
   ]);
   if (catalogResult?.status === "fulfilled") catalog = catalogResult.value;
   else catalogError = errorText(catalogResult?.reason, "The catalog is not reachable");
@@ -166,7 +197,14 @@ export async function nodePackagesOverview(headers: Headers): Promise<NodePackag
     }
     for (const item of result.value.packages) {
       if (!byName.has(item.name)) {
-        byName.set(item.name, viewOf(item, { url: registry.url, name: registry.name }));
+        byName.set(
+          item.name,
+          viewOf(
+            item,
+            { url: registry.url, name: registry.name },
+            isVerified(verified, item.name, item.version, item.integrity),
+          ),
+        );
       }
     }
     return { ...registry, error: null, count: result.value.packages.length };
@@ -188,6 +226,7 @@ export async function nodePackagesOverview(headers: Headers): Promise<NodePackag
       iconUrl: null,
       nodes: [],
       registry: null,
+      verified: false,
     };
     // An installed community package keeps its registry, also when the registry is gone.
     const from = savedByName.get(name)?.registry;
@@ -196,6 +235,10 @@ export async function nodePackagesOverview(headers: Headers): Promise<NodePackag
     }
     const report = reports.get(name);
     view.version = installedVersion(nodesDir(), name);
+    const entry = savedByName.get(name);
+    if (entry?.registry && view.version) {
+      view.verified = isVerified(verified, name, view.version, entry.integrity);
+    }
     view.source = fromEnv.has(name) ? "env" : "ui";
     view.status = report?.error ? "error" : report ? "loaded" : "not-loaded";
     if (report?.error) view.error = report.error;
@@ -210,6 +253,7 @@ export async function nodePackagesOverview(headers: Headers): Promise<NodePackag
   return {
     installEnabled: installEnabled(),
     communityEnabled: communityEnabled(),
+    unverifiedEnabled: unverifiedEnabled(),
     catalogUrl: catalogUrl(),
     catalogError,
     registries,
@@ -232,7 +276,7 @@ const RISK_NOT_ACCEPTED =
 async function communityVersion(
   db: Db,
   input: { name: string; registry: string; version?: string; acceptRisk?: boolean },
-): Promise<string> {
+): Promise<{ version: string; integrity: string; verified: boolean }> {
   if (!communityEnabled()) {
     throw conflict(
       "Community packages are off on this instance. The operator sets ZERODOT_COMMUNITY_NODES=true to turn them on",
@@ -255,10 +299,24 @@ async function communityVersion(
       `The registry now lists version ${listed.version}, not ${input.version}. Check the package again`,
     );
   }
-  if (!compatibleVersions(await fetchPackument(input.name)).includes(listed.version)) {
+  // parseRegistry keeps only entries with a checksum.
+  const integrity = listed.integrity as string;
+  const verified = isVerified(await verifiedList(), listed.name, listed.version, integrity);
+  if (!verified && !unverifiedEnabled()) {
+    throw conflict(
+      "This instance installs verified community packages only (ZERODOT_UNVERIFIED_NODES=false)",
+    );
+  }
+  const packument = await fetchPackument(input.name);
+  if (!compatibleVersions(packument).includes(listed.version)) {
     throw badRequest(`Version ${listed.version} does not work with this zerodot`);
   }
-  return listed.version;
+  try {
+    checkPackumentIntegrity(packument, input.name, listed.version, integrity);
+  } catch (error) {
+    throw conflict(errorText(error, "The checksum does not match"));
+  }
+  return { version: listed.version, integrity, verified };
 }
 
 /**
@@ -279,10 +337,13 @@ export async function installNodePackage(
   if (!registry && !isOfficialPackage(input.name)) {
     throw badRequest("A package that is not @zerodot/* must come from a registry");
   }
-  const version = registry
-    ? await communityVersion(db, { ...input, registry })
-    : await resolveVersion(input.name);
-  await installFromNpm(dir, input.name, version);
+  const community = registry ? await communityVersion(db, { ...input, registry }) : null;
+  const version = community?.version ?? (await resolveVersion(input.name));
+  await installFromNpm(dir, input.name, version, undefined, community?.integrity).catch(
+    (error: unknown) => {
+      throw conflict(errorText(error, "The package did not install"));
+    },
+  );
   const [report] = await loadInstalled(dir, [input.name]);
   if (!report || report.error) {
     await uninstallFromNpm(dir, input.name).catch(() => undefined);
@@ -292,7 +353,7 @@ export async function installNodePackage(
   const entry: InstalledNodePackage = {
     name: input.name,
     version,
-    ...(registry ? { registry } : {}),
+    ...(registry && community ? { registry, integrity: community.integrity } : {}),
   };
   await setNodePackages(db, [...rest, entry]);
   await recordAudit(db, {
@@ -300,7 +361,16 @@ export async function installNodePackage(
     action: "node_package.install",
     targetType: "node_package",
     targetId: input.name,
-    details: registry ? { version, registry, riskAccepted: true } : { version },
+    details:
+      registry && community
+        ? {
+            version,
+            registry,
+            integrity: community.integrity,
+            verified: community.verified,
+            riskAccepted: true,
+          }
+        : { version },
   });
   await publishNodesChanged(redis);
   return { name: input.name, version, added: report.added };
@@ -336,10 +406,18 @@ export async function nodePackageVersions(
 ): Promise<{ installed: string | null; versions: string[] }> {
   await requireInstanceAdmin(headers);
   checkName(input.name);
-  return {
-    installed: installedVersion(nodesDir(), input.name),
-    versions: compatibleVersions(await fetchPackument(input.name)),
-  };
+  const installed = installedVersion(nodesDir(), input.name);
+  const { db } = await getServices();
+  const saved = (await getNodePackages(db)).find((item) => item.name === input.name);
+  if (saved?.registry) {
+    // A community package can only move to the version that its registry lists, with its checksum.
+    const listed = await fetchRegistry(saved.registry)
+      .then((registry) => registry.packages.find((item) => item.name === input.name))
+      .catch(() => undefined);
+    const versions = [...new Set([listed?.version, installed].filter((v): v is string => !!v))];
+    return { installed, versions };
+  }
+  return { installed, versions: compatibleVersions(await fetchPackument(input.name)) };
 }
 
 /**
@@ -368,23 +446,48 @@ export async function updateNodePackage(
   if (current.registry && input.acceptRisk !== true) throw badRequest(RISK_NOT_ACCEPTED);
   const dir = nodesDir();
   if (input.version === current.version) throw badRequest("This version is installed already");
-  if (!compatibleVersions(await fetchPackument(input.name)).includes(input.version)) {
+  const community = current.registry
+    ? await communityVersion(db, {
+        name: input.name,
+        registry: current.registry,
+        version: input.version,
+        acceptRisk: true,
+      })
+    : null;
+  if (!community && !compatibleVersions(await fetchPackument(input.name)).includes(input.version)) {
     throw badRequest(`Version ${input.version} does not work with this zerodot`);
   }
   const report = await withInstallLock(dir, () =>
-    switchVersion(dir, input.name, input.version),
+    switchVersion(dir, input.name, input.version, {
+      integrity: community?.integrity,
+      fromIntegrity: current.integrity,
+    }),
   ).catch((error: unknown) => {
     throw conflict(error instanceof Error ? error.message : "The package did not load");
   });
   const rest = saved.filter((item) => item.name !== input.name);
-  await setNodePackages(db, [...rest, { ...current, version: input.version }]);
+  await setNodePackages(db, [
+    ...rest,
+    {
+      ...current,
+      version: input.version,
+      ...(community ? { integrity: community.integrity } : {}),
+    },
+  ]);
   await recordAudit(db, {
     actor,
     action: "node_package.update",
     targetType: "node_package",
     targetId: input.name,
     details: current.registry
-      ? { from: current.version, to: input.version, registry: current.registry, riskAccepted: true }
+      ? {
+          from: current.version,
+          to: input.version,
+          registry: current.registry,
+          integrity: community?.integrity ?? null,
+          verified: community?.verified ?? false,
+          riskAccepted: true,
+        }
       : { from: current.version, to: input.version },
   });
   await publishNodesChanged(redis);
@@ -527,6 +630,8 @@ export type NeededNodePackages = {
   packages: (AvailableNodePackage & {
     types: string[];
     registry: { url: string; name: string } | null;
+    /** For a community package: the zerodot team reviewed this version. */
+    verified: boolean;
   })[];
   /** Node types that no package gives. */
   unknown: string[];
@@ -547,7 +652,7 @@ export async function packagesForNodeTypes(
     const given = item.nodes.map((node) => node.type).filter((type) => types.includes(type));
     if (given.length === 0) continue;
     for (const type of given) found.add(type);
-    packages.push({ ...item, types: given, registry: null });
+    packages.push({ ...item, types: given, registry: null, verified: false });
   }
   if (communityEnabled() && types.some((type) => !found.has(type))) {
     const { db } = await getServices();
@@ -557,7 +662,10 @@ export async function packagesForNodeTypes(
       ...packages.map((item) => item.name),
     ]);
     const saved = await getNodeRegistries(db);
-    const results = await Promise.allSettled(saved.map((item) => fetchRegistry(item.url)));
+    const [verified, results] = await Promise.all([
+      verifiedList(),
+      Promise.allSettled(saved.map((item) => fetchRegistry(item.url))),
+    ]);
     saved.forEach((registry, index) => {
       const result = results[index];
       if (result?.status !== "fulfilled") return;
@@ -581,6 +689,7 @@ export async function packagesForNodeTypes(
           compatible: satisfiesSdk(item.sdk, SDK_VERSION),
           types: given,
           registry: { url: registry.url, name: registry.name },
+          verified: isVerified(verified, item.name, item.version, item.integrity),
         });
       }
     });
