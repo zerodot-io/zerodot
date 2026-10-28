@@ -4,7 +4,6 @@ import { credentialTypeByName } from "./credentials";
 import { smtpOptions } from "./email-send";
 import { imapOptions } from "./imap";
 import { mongoSettings } from "./mongodb";
-import { mysqlOptions } from "./mysql";
 import { postgresOptions } from "./postgres";
 import { connectSsh } from "./ssh";
 
@@ -57,16 +56,6 @@ async function checkPostgres(credential: ResolvedCredential): Promise<void> {
     await sql`select 1`;
   } finally {
     await sql.end({ timeout: 1 });
-  }
-}
-
-async function checkMysql(credential: ResolvedCredential): Promise<void> {
-  const mysql = await import("mysql2/promise");
-  const connection = await mysql.createConnection(mysqlOptions(credential));
-  try {
-    await connection.ping();
-  } finally {
-    connection.destroy();
   }
 }
 
@@ -135,7 +124,6 @@ const checks: Record<string, (credential: ResolvedCredential) => Promise<void>> 
   "github.oauth2": checkGithub,
   "telegram.bot": checkTelegram,
   postgres: checkPostgres,
-  mysql: checkMysql,
   mongodb: checkMongo,
   ssh: checkSsh,
   ftp: checkFtp,

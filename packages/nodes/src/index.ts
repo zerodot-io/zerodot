@@ -36,7 +36,6 @@ import logicIf from "./logic-if";
 import logicSwitch from "./logic-switch";
 import mcpCallTool from "./mcp-call-tool";
 import mongodb from "./mongodb";
-import mysql from "./mysql";
 import postgres from "./postgres";
 import postgresListen from "./postgres-listen";
 import postgresTrigger from "./postgres-trigger";
@@ -109,7 +108,6 @@ export const nodes: NodeDefinition[] = [
   postgres,
   postgresTrigger,
   postgresListen,
-  mysql,
   s3,
   tableInsert,
   tableQuery,
