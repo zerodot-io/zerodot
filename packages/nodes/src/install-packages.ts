@@ -596,7 +596,7 @@ export function createPackageSyncer(
   };
 }
 
-/** A package in the catalog file of zerodot-nodes. */
+/** A package in the catalog file of nodes. */
 export type CatalogPackage = {
   name: string;
   label: string;
@@ -662,7 +662,7 @@ export function parseCatalog(
 }
 
 export const DEFAULT_CATALOG_URL =
-  "https://raw.githubusercontent.com/zerodot-io/zerodot-nodes/main/catalog.json";
+  "https://raw.githubusercontent.com/zerodot-io/nodes/main/catalog.json";
 
 const CATALOG_TTL_MS = 10 * 60_000;
 /** Read lists by address. The catalog and each registry have their own entry. */

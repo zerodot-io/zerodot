@@ -12,7 +12,7 @@ A polling trigger asks another service for news on a timer, while the workflow i
 
 ## Node packages
 
-zerodot comes with the core nodes only. Other nodes are packages that you install when you need them. Official packages are `@zerodot/*` on npm. Their source is in [zerodot-nodes](https://github.com/zerodot-io/zerodot-nodes).
+zerodot comes with the core nodes only. Other nodes are packages that you install when you need them. Official packages are `@zerodot/*` on npm. Their source is in [nodes](https://github.com/zerodot-io/nodes).
 
 Install a package in the app. An instance admin opens **System > Nodes** and clicks Install. In the editor, search in the Add node list: a node that is not installed shows under "Not installed". The app picks the newest version that works with this zerodot, and every process (web, API, worker) loads it without a restart.
 
@@ -24,12 +24,12 @@ To install packages at start (for example in Docker or GitOps), list them:
 ZERODOT_NODE_PACKAGES=@zerodot/redis,@zerodot/github
 ```
 
-Official packages: `@zerodot/redis`, `@zerodot/mysql`, `@zerodot/postgres`, `@zerodot/mongodb`, `@zerodot/email` (send and IMAP trigger), `@zerodot/ssh` (SSH, FTP, SFTP), `@zerodot/s3`, `@zerodot/edit-image`, `@zerodot/mcp`, `@zerodot/telegram`, and `@zerodot/github`. Each package documents its nodes in [zerodot-nodes](https://github.com/zerodot-io/zerodot-nodes).
+Official packages: `@zerodot/redis`, `@zerodot/mysql`, `@zerodot/postgres`, `@zerodot/mongodb`, `@zerodot/email` (send and IMAP trigger), `@zerodot/ssh` (SSH, FTP, SFTP), `@zerodot/s3`, `@zerodot/edit-image`, `@zerodot/mcp`, `@zerodot/telegram`, and `@zerodot/github`. Each package documents its nodes in [nodes](https://github.com/zerodot-io/nodes).
 
 - Packages live in `ZERODOT_NODES_DIR` (default `./.zerodot/nodes`; `/nodes` in the Docker image, on the `node-packages` volume). web, API, and worker share it.
 - `ZERODOT_NODES_INSTALL=false` turns off installing and removing in the app.
 - `ZERODOT_NPM_REGISTRY` sets the npm registry that packages come from (default `https://registry.npmjs.org`), for example a private mirror.
-- `ZERODOT_NODE_CATALOG_URL` sets where the app reads the list of packages (default: the `catalog.json` of zerodot-nodes).
+- `ZERODOT_NODE_CATALOG_URL` sets where the app reads the list of packages (default: the `catalog.json` of nodes).
 - The official catalog lists only `@zerodot/*` packages. Other packages come from community registries (see below).
 - Install scripts of packages do not run.
 
