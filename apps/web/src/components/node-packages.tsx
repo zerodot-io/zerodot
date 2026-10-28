@@ -168,7 +168,9 @@ export function NodePackagesSection() {
 type Available = Awaited<ReturnType<typeof getAvailableNodePackagesFn>>;
 
 const matches = (item: Available["packages"][number], query: string): boolean =>
-  `${item.label} ${item.name} ${item.description} ${item.nodes.map((node) => node.label).join(" ")}`
+  `${item.label} ${item.name} ${item.description} ${item.nodes
+    .map((node) => `${node.label} ${node.description ?? ""} ${node.type}`)
+    .join(" ")}`
     .toLowerCase()
     .includes(query);
 

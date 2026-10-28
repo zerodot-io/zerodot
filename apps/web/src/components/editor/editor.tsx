@@ -167,6 +167,23 @@ const appOf = (entry: { app?: string; label: string; actions?: unknown[] }) =>
 
 const isWebhookType = (type: string) => type === "trigger.webhook";
 
+/** What the Add node search reads of a node: name, text, and type, but not the actions. */
+const nodeText = (entry: { label: string; description?: string; type: string }) =>
+  `${entry.label} ${entry.description ?? ""} ${entry.type}`.toLowerCase();
+
+/** The same, with the app, the category, and the action names. */
+const searchText = (entry: {
+  label: string;
+  description?: string;
+  type: string;
+  app?: string;
+  category: string;
+  actions?: { label: string }[];
+}) =>
+  `${nodeText(entry)} ${entry.app ?? ""} ${entry.category} ${(entry.actions ?? [])
+    .map((action) => action.label)
+    .join(" ")}`.toLowerCase();
+
 const NO_ERROR_WORKFLOW = "__none";
 
 /** A trigger that registers its test address at a service, so a person does not call the address. */
@@ -988,7 +1005,7 @@ export function Editor({
       const groups = new Map<string, AddRow[]>();
       for (const entry of visible) {
         if (appOf(entry) !== addApp) continue;
-        const labelMatch = !query || entry.label.toLowerCase().includes(query);
+        const labelMatch = !query || nodeText(entry).includes(query);
         const group = entry.category === "trigger" ? "triggers" : "actions";
         // A node with actions gives one row for each action.
         const rows: AddRow[] = entry.actions?.length
@@ -1008,10 +1025,7 @@ export function Editor({
       return [...groups];
     }
     const matched = visible.filter((entry) => {
-      return (
-        !query ||
-        `${entry.label} ${appOf(entry) ?? ""} ${entry.category}`.toLowerCase().includes(query)
-      );
+      return !query || searchText({ ...entry, app: appOf(entry) }).includes(query);
     });
     const apps = new Map<string, CatalogEntry[]>();
     for (const entry of matched) {
