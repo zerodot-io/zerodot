@@ -160,7 +160,7 @@ describe("isOfficialPackage", () => {
 
 describe("packages in the nodes folder", () => {
   it("finds the entry file and the version", () => {
-    const dir = mkdtempSync(join(tmpdir(), "zerodot-nodes-"));
+    const dir = mkdtempSync(join(tmpdir(), "nodes-"));
     try {
       writePackage(dir, "@zerodot/demo", "1.2.3", "^1.0", "demo.one");
       assert.equal(installedVersion(dir, "@zerodot/demo"), "1.2.3");
@@ -176,7 +176,7 @@ describe("packages in the nodes folder", () => {
   });
 
   it("loads once, and unloads", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "zerodot-nodes-"));
+    const dir = mkdtempSync(join(tmpdir(), "nodes-"));
     try {
       writePackage(dir, "@zerodot/demo-load", "1.0.0", "^1.0", "demo.load");
       const [first] = await loadInstalled(dir, ["@zerodot/demo-load"]);
@@ -193,7 +193,7 @@ describe("packages in the nodes folder", () => {
   });
 
   it("refuses a package that needs another contract", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "zerodot-nodes-"));
+    const dir = mkdtempSync(join(tmpdir(), "nodes-"));
     try {
       writePackage(dir, "@zerodot/demo-new", "1.0.0", "^9.0", "demo.new");
       const [report] = await loadInstalled(dir, ["@zerodot/demo-new"]);
@@ -210,7 +210,7 @@ describe("upgrade in the same process", () => {
   const labelOf = (type: string) => catalog.find((entry) => entry.type === type)?.label;
 
   it("runs the new code and frees the old code", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "zerodot-nodes-"));
+    const dir = mkdtempSync(join(tmpdir(), "nodes-"));
     try {
       writeCjsPackage(dir, name, "1.0.0", {
         type: "demo.cjs",
@@ -252,7 +252,7 @@ describe("upgrade in the same process", () => {
   });
 
   it("does not load again when the version is the same", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "zerodot-nodes-"));
+    const dir = mkdtempSync(join(tmpdir(), "nodes-"));
     try {
       writeCjsPackage(dir, "@zerodot/demo-same", "1.0.0", { type: "demo.same", label: "x" });
       await loadInstalled(dir, ["@zerodot/demo-same"]);
@@ -264,7 +264,7 @@ describe("upgrade in the same process", () => {
   });
 
   it("tells hooks which nodes go, and removes a package that fails to load", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "zerodot-nodes-"));
+    const dir = mkdtempSync(join(tmpdir(), "nodes-"));
     const seen: string[] = [];
     const off = onPackageUnload((who, types) => {
       seen.push(`${who}:${types.join(",")}`);
@@ -290,7 +290,7 @@ describe("upgrade in the same process", () => {
   });
 
   it("installs an older version when the wanted version is older", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "zerodot-nodes-"));
+    const dir = mkdtempSync(join(tmpdir(), "nodes-"));
     const installed: string[] = [];
     try {
       writeCjsPackage(dir, "@zerodot/demo-down", "1.2.0", { type: "demo.down", label: "x" });
@@ -318,7 +318,7 @@ describe("switchVersion", () => {
   const name = "@zerodot/demo-switch";
 
   it("loads the new version, and puts the old one back when it fails", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "zerodot-nodes-"));
+    const dir = mkdtempSync(join(tmpdir(), "nodes-"));
     const installs: string[] = [];
     const install = (broken: string) => async (folder: string, pkg: string, version: string) => {
       installs.push(version);
@@ -359,7 +359,7 @@ describe("switchVersion", () => {
 
 describe("syncPackages", () => {
   it("installs what is missing, keeps what is there, and reports failures", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "zerodot-nodes-"));
+    const dir = mkdtempSync(join(tmpdir(), "nodes-"));
     const installed: string[] = [];
     try {
       writePackage(dir, "@zerodot/demo-have", "1.0.0", "^1.0", "demo.have");

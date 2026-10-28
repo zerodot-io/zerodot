@@ -273,8 +273,8 @@ const testHookInput = workflowInput.extend({
     .optional(),
 });
 
-/** The workflow must exist in this project. Returns the token of the trigger node. */
-async function testHookToken(data: z.infer<typeof testHookInput>): Promise<string> {
+/** The workflow must exist in this project. Returns the token of the trigger node and its owner. */
+async function testHook(data: z.infer<typeof testHookInput>) {
   const ctx = await projectOrThrow(data.projectSlug);
   const scope = await orgScope(ctx);
   const wf = await scope.workflows.get(data.workflowId);
@@ -284,7 +284,18 @@ async function testHookToken(data: z.infer<typeof testHookInput>): Promise<strin
     .map((t) => t.config as { nodeId?: string; token?: string })
     .find((c) => c.nodeId === data.nodeId);
   const { tokenOf } = await import("@zerodot/server/test-webhook.server");
-  return tokenOf(existing, data.workflowId, data.nodeId, data.path);
+  return {
+    token: await tokenOf(existing, data.workflowId, data.nodeId, data.path),
+    owner: {
+      organizationId: ctx.project.organizationId,
+      workflowId: wf.id,
+      nodeId: data.nodeId,
+    },
+  };
+}
+
+async function testHookToken(data: z.infer<typeof testHookInput>): Promise<string> {
+  return (await testHook(data)).token;
 }
 
 /** A test run took the webhook of the account at the service. Give it back. */
@@ -315,8 +326,17 @@ export const testWebhookUrlFn = createServerFn({ method: "GET" })
 export const listenForTestEventFn = createServerFn({ method: "POST" })
   .validator(testHookInput)
   .handler(async ({ data }) => {
-    const { startListening, testWebhookUrl } = await import("@zerodot/server/test-webhook.server");
-    const token = await testHookToken(data);
+    const { claimTestHook, startListening, testWebhookUrl, TestHookInUseError } = await import(
+      "@zerodot/server/test-webhook.server"
+    );
+    const { token, owner } = await testHook(data);
+    // Claim first, so a path of another workflow does not move the webhook at the service.
+    try {
+      await claimTestHook(token, owner);
+    } catch (error) {
+      if (error instanceof TestHookInUseError) throw new Error(error.message);
+      throw error;
+    }
     if (data.service) {
       const ctx = await serviceContext(data.projectSlug);
       const { pointNodeAtTestUrl } = await import("@zerodot/server/api/service.server");
@@ -333,6 +353,7 @@ export const listenForTestEventFn = createServerFn({ method: "POST" })
     }
     await startListening(
       token,
+      owner,
       data.method ?? "POST",
       data.mode ?? "immediate",
       data.service && { type: data.service.type, config: data.service.config },
@@ -344,7 +365,8 @@ export const stopListeningFn = createServerFn({ method: "POST" })
   .validator(testHookInput)
   .handler(async ({ data }) => {
     const { stopListening } = await import("@zerodot/server/test-webhook.server");
-    await stopListening(await testHookToken(data));
+    const { token, owner } = await testHook(data);
+    await stopListening(token, owner);
     await restoreService(data);
     return { ok: true };
   });
@@ -352,10 +374,9 @@ export const stopListeningFn = createServerFn({ method: "POST" })
 export const linkTestRunFn = createServerFn({ method: "POST" })
   .validator(testHookInput.extend({ runId: z.string().uuid() }))
   .handler(async ({ data }) => {
-    const ctx = await projectOrThrow(data.projectSlug);
-    const token = await testHookToken(data);
+    const { token, owner } = await testHook(data);
     const { linkRun } = await import("@zerodot/server/test-webhook.server");
-    await linkRun(token, data.runId, ctx.project.organizationId);
+    await linkRun(token, owner, data.runId);
     return { ok: true };
   });
 
@@ -363,7 +384,8 @@ export const takeTestEventFn = createServerFn({ method: "POST" })
   .validator(testHookInput)
   .handler(async ({ data }) => {
     const { takeEvent } = await import("@zerodot/server/test-webhook.server");
-    const event = await takeEvent(await testHookToken(data));
+    const { token, owner } = await testHook(data);
+    const event = await takeEvent(token, owner);
     if (event !== null) await restoreService(data);
     return { event: asJson(event) };
   });

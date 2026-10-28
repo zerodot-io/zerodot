@@ -84,18 +84,40 @@ function lookupTrigger(db: Parameters<typeof findWebhookTrigger>[0], ttlMs: numb
 
 type RunResponse = { status: number; headers: Record<string, string>; body: unknown };
 
+/**
+ * Response headers that a workflow cannot set. A hook answers on the origin of the app, so a cookie
+ * or a CORS or security header from a workflow could act on the sessions of the app.
+ */
+const BLOCKED_HEADER =
+  /^(set-cookie2?|access-control-.*|content-security-policy(-report-only)?|x-content-type-options|x-frame-options|connection|keep-alive|transfer-encoding|content-length|upgrade|trailer|proxy-.*)$/i;
+
+/** The response headers that a workflow gives, without the blocked ones. */
+export function workflowHeaders(given: unknown): Record<string, string> {
+  const headers: Record<string, string> = {};
+  if (!given || typeof given !== "object") return headers;
+  for (const [name, value] of Object.entries(given)) {
+    if (typeof value === "string" && !BLOCKED_HEADER.test(name)) headers[name] = value;
+  }
+  return headers;
+}
+
+/**
+ * A hook answers with content that a workflow controls, on the origin of the app. The sandbox
+ * gives a page an opaque origin and no scripts, so it cannot use the session of the person who
+ * opens it.
+ */
+export function sandboxed(response: Response): Response {
+  response.headers.set("content-security-policy", "sandbox");
+  response.headers.set("x-content-type-options", "nosniff");
+  return response;
+}
+
 /** The options of a Webhook node. The route reads them from the trigger row. */
 function webhookOptions(config: Record<string, unknown>, nodeType: string) {
   if (nodeType !== "trigger.webhook") {
     return { method: "POST", mode: "immediate", headers: {} as Record<string, string> };
   }
-  const headers: Record<string, string> = {};
-  const given = config.responseHeaders;
-  if (given && typeof given === "object") {
-    for (const [name, value] of Object.entries(given)) {
-      if (typeof value === "string") headers[name] = value;
-    }
-  }
+  const headers = workflowHeaders(config.responseHeaders);
   return {
     method: typeof config.httpMethod === "string" ? config.httpMethod : "POST",
     mode: typeof config.responseMode === "string" ? config.responseMode : "immediate",
@@ -164,7 +186,10 @@ export async function holdForAnswer(input: {
     const text = await redis.get(runResponseKey(runId));
     if (!text) return null;
     const answer = JSON.parse(text) as RunResponse;
-    return bodyResponse(answer.status, answer.body, { ...extra, ...answer.headers });
+    return bodyResponse(answer.status, answer.body, {
+      ...extra,
+      ...workflowHeaders(answer.headers),
+    });
   };
   for (;;) {
     if (input.signal?.aborted) return null;
@@ -221,6 +246,10 @@ export async function holdForAnswer(input: {
  * The token is the path of the node, or a generated token. Runs the published version.
  */
 export async function handleWebhook(request: Request, token: string): Promise<Response> {
+  return sandboxed(await answerWebhook(request, token));
+}
+
+async function answerWebhook(request: Request, token: string): Promise<Response> {
   const { db, redis, queue, config, secretKey, heldLimiter } = await getServices();
 
   // Fixed window rate limit per token.
@@ -322,7 +351,7 @@ export async function handleWebhook(request: Request, token: string): Promise<Re
       return reply(
         { error: { code: "forbidden", message: "The request is not valid" } },
         verdict.status ?? 403,
-        verdict.headers,
+        workflowHeaders(verdict.headers),
       );
     }
     if (verdict.verdict === "ignore") {

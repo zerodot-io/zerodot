@@ -8,6 +8,6 @@ A node package depends on this package as a peer dependency and declares the con
 { "zerodot": { "sdk": "^1.0" } }
 ```
 
-zerodot checks the range before it runs any package code. See [zerodot-nodes](https://github.com/zerodot-io/zerodot-nodes) for examples.
+zerodot checks the range before it runs any package code. See [nodes](https://github.com/zerodot-io/nodes) for examples.
 
 MIT license.

@@ -3,17 +3,13 @@ import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promise
 import { join } from "node:path";
 import { type BlobRef, type BlobStore, blobId } from "@zerodot/engine";
 
-const UUID = /^[0-9a-f-]{36}$/;
-const HASH = /^[0-9a-f]{64}$/;
+import { blobIdParts, UUID } from "./id";
 
 /** Files in a directory: `<dir>/<run id>/<sha-256>`. Use a volume that all workers and web share. */
 export function diskBlobStore(dir: string): BlobStore {
-  /** The path of a blob. The id comes from a stored reference, so the shape is checked. */
+  /** The path of a blob. */
   const pathOf = (id: string): string => {
-    const [runId, hash, extra] = id.split("/");
-    if (!runId || !hash || extra !== undefined || !UUID.test(runId) || !HASH.test(hash)) {
-      throw new Error(`Invalid blob id "${id}"`);
-    }
+    const { runId, hash } = blobIdParts(id);
     return join(dir, runId, hash);
   };
 
