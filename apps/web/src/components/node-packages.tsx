@@ -81,6 +81,8 @@ function RiskWarning({ title, lead }: { title: string; lead: string }) {
         <li>The code runs on your server with all the rights of zerodot.</li>
         <li>It can read every credential, variable, table, and workflow in every project.</li>
         <li>It can read your database and your environment variables, with your secret keys.</li>
+        <li>With those keys it can open every saved credential and sign in as any user.</li>
+        <li>It runs as soon as it is installed, also when no workflow uses its nodes.</li>
         <li>It can send your data to other servers, and change or delete it.</li>
         <li>zerodot does not check this code. A new version can add bad code at any time.</li>
       </ul>
@@ -568,7 +570,8 @@ function RegistryList({
       <p className="max-w-prose text-pretty text-muted-foreground">
         Other people make these packages. zerodot does not check them, and their code can do
         anything on this server.
-        {!enabled && " Community packages are off on this instance (ZERODOT_COMMUNITY_NODES)."}
+        {!enabled &&
+          " Community packages are off on this instance. The operator sets ZERODOT_COMMUNITY_NODES=true to turn them on."}
       </p>
       {registries.length > 0 && (
         <ul className="divide-y overflow-hidden rounded-xl border">
@@ -769,7 +772,7 @@ export function NodePackagesSection() {
         </p>
       )}
 
-      {(overview.communityEnabled || overview.registries.length > 0) && (
+      {overview.installEnabled && (
         <RegistryList
           registries={overview.registries}
           enabled={overview.communityEnabled}

@@ -37,7 +37,7 @@ A package has `"zerodot": { "sdk": "^1.0" }` in its `package.json`: the range of
 
 ## Community registries
 
-> **Warning:** zerodot does not check community packages. A package runs with all the rights of the server. It can read every credential, variable, and workflow, your database, and your environment variables. Add a registry and install a package only when you trust the author.
+> **Warning:** zerodot does not check community packages, and it does not isolate them. A package runs inside the web, API, and worker processes with all the rights of the server. It can read your environment variables, with `ZERODOT_SECRET_KEY` and `BETTER_AUTH_SECRET`, and your database. With those it can open every saved credential and sign in as any user. Its code runs as soon as it is installed, also when no workflow uses its nodes. Install scripts do not run, but that does not stop this. Add a registry and install a package only when you trust the author.
 
 To make a community package, start from the template in [create](https://github.com/zerodot-io/create). It has example nodes and a script that writes `registry.json`.
 
@@ -72,5 +72,5 @@ The registry file:
 - The package name without the scope must start with `zerodot-`, for example `zerodot-slack` or `@acme/zerodot-slack`. Other names are dropped. A registry cannot list `@zerodot/*` packages. When two registries list the same package, the first registry wins. An official package wins over a community package.
 - The file must be 1 MB or less. zerodot does not follow redirects. It reads each registry again after ten minutes.
 - An instance can have 20 registries. When you remove a registry, the packages that you installed from it stay installed.
-- `ZERODOT_COMMUNITY_NODES=false` turns off community registries and community installs. Packages that are installed already stay installed. `ZERODOT_NODES_INSTALL=false` turns them off too.
+- Community registries and community installs are off by default. The operator sets `ZERODOT_COMMUNITY_NODES=true` to turn them on. When they are off, packages that are installed already stay installed. `ZERODOT_NODES_INSTALL=false` turns them off too.
 - `ZERODOT_NODE_PACKAGES` can list any npm package. The operator who sets it accepts the risk.
