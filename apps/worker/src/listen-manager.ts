@@ -46,7 +46,7 @@ export type ListenDeps = {
 /** The default cap of open listen triggers for one worker. */
 export const DEFAULT_MAX_LISTEN_TRIGGERS = 100;
 
-type Running = { versionId: string; handle: ListenHandle; lock: ListenLock };
+type Running = { versionId: string; nodeType: string; handle: ListenHandle; lock: ListenLock };
 
 /** What to do so the running listeners match the active triggers. */
 export function planListeners(
@@ -145,7 +145,7 @@ export function createListenManager(deps: ListenDeps) {
             .catch(() => {});
         },
       });
-      running.set(row.triggerId, { versionId: row.versionId, handle, lock });
+      running.set(row.triggerId, { versionId: row.versionId, nodeType: node.type, handle, lock });
       retryAt.delete(row.triggerId);
       await scope.workflows.savePollState(row.triggerId, {
         cursor: null,
@@ -200,6 +200,15 @@ export function createListenManager(deps: ListenDeps) {
         log("error", "listen.reconcile_failed", { error: String(error) });
       } finally {
         busy = false;
+      }
+    },
+    /**
+     * A node package goes away or changes: close the listeners of its node types. The triggers
+     * stay in the other database, and the next pass starts them again with the new code.
+     */
+    async stopTypes(types: readonly string[]) {
+      for (const [id, entry] of [...running]) {
+        if (types.includes(entry.nodeType)) await stop(id, false);
       }
     },
     /** The worker stops. The connections close, and the triggers stay in the other database. */

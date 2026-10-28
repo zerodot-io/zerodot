@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
-import { registry } from "./index";
+import { credentialTypeByName } from "./credentials";
+import { catalog, registry } from "./index";
 import {
   clearCatalogCache,
   createPackageSyncer,
@@ -12,12 +14,15 @@ import {
   installedVersion,
   isLoaded,
   isOfficialPackage,
+  loadedVersion,
   loadInstalled,
   mergeWanted,
+  onPackageUnload,
   packageEntry,
   parseCatalog,
   pickVersion,
   type SyncLog,
+  switchVersion,
   syncPackages,
   unloadPackage,
   withInstallLock,
@@ -25,6 +30,7 @@ import {
 
 // A package finds zod in its own folder. The fixture imports the zod of this test instead.
 const ZOD = import.meta.resolve("zod");
+const ZOD_FILE = createRequire(import.meta.url).resolve("zod");
 
 /** Writes a package like npm does into `<dir>/node_modules/<name>`. */
 function writePackage(dir: string, name: string, version: string, sdk: string, type: string) {
@@ -49,6 +55,54 @@ function writePackage(dir: string, name: string, version: string, sdk: string, t
       defaultConfig: {}, ports: { in: ["in"], out: ["out"] },
       run: () => ({ port: "out", data: null }),
     }];`,
+  );
+}
+
+/**
+ * Writes a CommonJS package like npm does. It uses a dependency of its own in the folder, and
+ * `label` shows which version runs. The dependency counts how often it was read from disk.
+ */
+function writeCjsPackage(
+  dir: string,
+  name: string,
+  version: string,
+  options: { type: string; label: string; credential?: string },
+) {
+  const root = join(dir, "node_modules", name);
+  mkdirSync(join(root, "dist"), { recursive: true });
+  mkdirSync(join(dir, "node_modules", "dep-counter"), { recursive: true });
+  writeFileSync(
+    join(dir, "node_modules", "dep-counter", "package.json"),
+    JSON.stringify({ name: "dep-counter", version: "1.0.0", main: "index.js" }),
+  );
+  writeFileSync(
+    join(dir, "node_modules", "dep-counter", "index.js"),
+    "globalThis.__depReads = (globalThis.__depReads ?? 0) + 1;\nmodule.exports = { reads: globalThis.__depReads };",
+  );
+  writeFileSync(
+    join(root, "package.json"),
+    JSON.stringify({
+      name,
+      version,
+      main: "./dist/index.cjs",
+      exports: { ".": "./dist/index.cjs" },
+      zerodot: { sdk: "^1.0" },
+    }),
+  );
+  const credential = options.credential
+    ? `exports.credentialTypes = [{ type: ${JSON.stringify(options.credential)}, label: ${JSON.stringify(options.label)}, fields: z.object({}), secretFields: [] }];`
+    : "";
+  writeFileSync(
+    join(root, "dist", "index.cjs"),
+    `const { z } = require(${JSON.stringify(ZOD_FILE)});
+    const dep = require("dep-counter");
+    exports.nodes = [{
+      type: ${JSON.stringify(options.type)}, label: ${JSON.stringify(options.label)} + dep.reads,
+      category: "integration", icon: "Plug", config: z.object({}),
+      defaultConfig: {}, ports: { in: ["in"], out: ["out"] },
+      run: () => ({ port: "out", data: null }),
+    }];
+    ${credential}`,
   );
 }
 
@@ -122,6 +176,158 @@ describe("packages in the nodes folder", () => {
       const [report] = await loadInstalled(dir, ["@zerodot/demo-new"]);
       assert.match(report?.error ?? "", /needs node contract \^9\.0/);
       assert.equal(registry.has("demo.new"), false);
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+});
+
+describe("upgrade in the same process", () => {
+  const name = "@zerodot/demo-cjs";
+  const labelOf = (type: string) => catalog.find((entry) => entry.type === type)?.label;
+
+  it("runs the new code and frees the old code", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "zerodot-nodes-"));
+    try {
+      writeCjsPackage(dir, name, "1.0.0", {
+        type: "demo.cjs",
+        label: "one-",
+        credential: "demo.cred",
+      });
+      const [first] = await loadInstalled(dir, [name]);
+      assert.deepEqual(first?.added, ["demo.cjs"]);
+      assert.equal(loadedVersion(name), "1.0.0");
+      assert.equal(credentialTypeByName.get("demo.cred")?.label, "one-");
+      const before = globalThis as { __depReads?: number };
+      const reads = before.__depReads ?? 0;
+
+      writeCjsPackage(dir, name, "1.1.0", {
+        type: "demo.cjs",
+        label: "two-",
+        credential: "demo.cred",
+      });
+      const [second] = await loadInstalled(dir, [name]);
+      assert.deepEqual(second?.added, ["demo.cjs"]);
+      assert.equal(loadedVersion(name), "1.1.0");
+      // The node, its catalog entry, and its credential type come from the new files.
+      assert.equal(labelOf("demo.cjs"), `two-${reads + 1}`);
+      assert.equal(registry.get("demo.cjs")?.label, `two-${reads + 1}`);
+      assert.equal(credentialTypeByName.get("demo.cred")?.label, "two-");
+      assert.equal(catalog.filter((entry) => entry.type === "demo.cjs").length, 1);
+
+      await unloadPackage(name, dir);
+      assert.equal(registry.has("demo.cjs"), false);
+      assert.equal(credentialTypeByName.has("demo.cred"), false);
+      const cache = createRequire(join(dir, "package.json")).cache;
+      assert.deepEqual(
+        Object.keys(cache).filter((file) => file.startsWith(realpathSync(dir))),
+        [],
+      );
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+
+  it("does not load again when the version is the same", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "zerodot-nodes-"));
+    try {
+      writeCjsPackage(dir, "@zerodot/demo-same", "1.0.0", { type: "demo.same", label: "x" });
+      await loadInstalled(dir, ["@zerodot/demo-same"]);
+      assert.deepEqual(await loadInstalled(dir, ["@zerodot/demo-same"]), []);
+      await unloadPackage("@zerodot/demo-same", dir);
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+
+  it("tells hooks which nodes go, and removes a package that fails to load", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "zerodot-nodes-"));
+    const seen: string[] = [];
+    const off = onPackageUnload((who, types) => {
+      seen.push(`${who}:${types.join(",")}`);
+    });
+    try {
+      writeCjsPackage(dir, "@zerodot/demo-hook", "1.0.0", { type: "demo.hook", label: "x" });
+      await loadInstalled(dir, ["@zerodot/demo-hook"]);
+      writeCjsPackage(dir, "@zerodot/demo-hook", "1.1.0", { type: "demo.hook", label: "y" });
+      // The new files are broken: the package must not stay half loaded.
+      writeFileSync(
+        join(dir, "node_modules", "@zerodot", "demo-hook", "dist", "index.cjs"),
+        "throw new Error('boom');",
+      );
+      const [report] = await loadInstalled(dir, ["@zerodot/demo-hook"]);
+      assert.match(report?.error ?? "", /boom/);
+      assert.deepEqual(seen, ["@zerodot/demo-hook:demo.hook"]);
+      assert.equal(registry.has("demo.hook"), false);
+      assert.equal(isLoaded("@zerodot/demo-hook"), false);
+    } finally {
+      off();
+      rmSync(dir, { recursive: true });
+    }
+  });
+
+  it("installs an older version when the wanted version is older", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "zerodot-nodes-"));
+    const installed: string[] = [];
+    try {
+      writeCjsPackage(dir, "@zerodot/demo-down", "1.2.0", { type: "demo.down", label: "x" });
+      const { versions } = await syncPackages(
+        dir,
+        [{ name: "@zerodot/demo-down", version: "1.1.0" }],
+        {
+          install: async (folder, pkg, version) => {
+            installed.push(`${pkg}@${version}`);
+            writeCjsPackage(folder, pkg, version, { type: "demo.down", label: "x" });
+          },
+        },
+      );
+      assert.deepEqual(installed, ["@zerodot/demo-down@1.1.0"]);
+      assert.equal(versions["@zerodot/demo-down"], "1.1.0");
+      assert.equal(loadedVersion("@zerodot/demo-down"), "1.1.0");
+      await unloadPackage("@zerodot/demo-down", dir);
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+});
+
+describe("switchVersion", () => {
+  const name = "@zerodot/demo-switch";
+
+  it("loads the new version, and puts the old one back when it fails", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "zerodot-nodes-"));
+    const installs: string[] = [];
+    const install = (broken: string) => async (folder: string, pkg: string, version: string) => {
+      installs.push(version);
+      writeCjsPackage(folder, pkg, version, { type: "demo.switch", label: `v${version}-` });
+      if (version === broken) {
+        writeFileSync(
+          join(folder, "node_modules", pkg, "dist", "index.cjs"),
+          "throw new Error('does not start');",
+        );
+      }
+    };
+    try {
+      writeCjsPackage(dir, name, "1.0.0", { type: "demo.switch", label: "v1.0.0-" });
+      await loadInstalled(dir, [name]);
+
+      const up = await switchVersion(dir, name, "1.1.0", { install: install("none") });
+      assert.deepEqual(up.added, ["demo.switch"]);
+      assert.equal(loadedVersion(name), "1.1.0");
+
+      await assert.rejects(
+        switchVersion(dir, name, "1.2.0", { install: install("1.2.0") }),
+        /does not start/,
+      );
+      assert.deepEqual(installs, ["1.1.0", "1.2.0", "1.1.0"]);
+      assert.equal(loadedVersion(name), "1.1.0");
+      assert.equal(installedVersion(dir, name), "1.1.0");
+      assert.equal(registry.has("demo.switch"), true);
+
+      // Going down works the same way.
+      await switchVersion(dir, name, "1.0.0", { install: install("none") });
+      assert.equal(loadedVersion(name), "1.0.0");
+      await unloadPackage(name, dir);
     } finally {
       rmSync(dir, { recursive: true });
     }
