@@ -37,7 +37,7 @@ A package has `"zerodot": { "sdk": "^1.0" }` in its `package.json`: the range of
 
 ## Community registries
 
-> **Warning:** zerodot does not check community packages, and it does not isolate them. A package runs inside the web, API, and worker processes with all the rights of the server. It can read your environment variables, with `ZERODOT_SECRET_KEY` and `BETTER_AUTH_SECRET`, and your database. With those it can open every saved credential and sign in as any user. Its code runs as soon as it is installed, also when no workflow uses its nodes. Install scripts do not run, but that does not stop this. Add a registry and install a package only when you trust the author.
+> **Warning:** zerodot does not check community packages. A package runs in its own process, so it cannot read the secret keys, the database, or the files of zerodot. But it gets the credentials and the data that your workflows give to its nodes, and it can send them to any server. It can also reach services inside your network. Add a registry and install a package only when you trust the author.
 
 To make a community package, start from the template in [create](https://github.com/zerodot-io/create). It has example nodes and a script that writes `registry.json`.
 
@@ -74,3 +74,23 @@ The registry file:
 - An instance can have 20 registries. When you remove a registry, the packages that you installed from it stay installed.
 - Community registries and community installs are off by default. The operator sets `ZERODOT_COMMUNITY_NODES=true` to turn them on. When they are off, packages that are installed already stay installed. `ZERODOT_NODES_INSTALL=false` turns them off too.
 - `ZERODOT_NODE_PACKAGES` can list any npm package. The operator who sets it accepts the risk.
+
+### How a community package runs
+
+Each process of zerodot (web, API, worker) starts one separate process for each community package. Official `@zerodot/*` packages run inside zerodot.
+
+The process of a community package:
+
+- has no environment variables, so it cannot read `ZERODOT_SECRET_KEY`, `BETTER_AUTH_SECRET`, or `DATABASE_URL`.
+- runs with the permission model of Node.js. It can read files in the nodes folder only. It cannot write files, start programs or worker threads, or load native addons.
+- can use the network.
+- has 256 MB of memory. When it stops, zerodot starts it again on the next call.
+- gets only what one call needs: the config, the input, and the credential of that node. It gets no expression scope (`$vars`, `$node`), no data tables, no code sandbox, and no sub-workflows.
+
+zerodot keeps a copy of the config schema of each node. It checks the config first, and the package checks it again with its own schema.
+
+A community package cannot use these parts of the node contract. A node or a credential type that uses one is skipped, and System > Nodes shows why:
+
+- `outPorts()` and `inPorts()`: ports that depend on the config.
+- `waitForm()` and `waitsForCallback()`: nodes that wait for a person or a call.
+- An `oauth2` function in a credential type. A fixed OAuth2 config works.

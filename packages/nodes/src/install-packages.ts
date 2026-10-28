@@ -15,6 +15,7 @@ import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { SDK_VERSION, satisfiesSdk } from "@zerodot/node-sdk";
 import { unregisterCredentialTypes } from "./credentials";
+import { importIsolated, stopIsolated } from "./isolated-packages";
 import {
   loadNodePackages,
   type ManifestReader,
@@ -185,7 +186,8 @@ const npm: NpmRunner = async (args, cwd) => {
 
 /**
  * Install scripts do not run. The code of the package still runs when zerodot loads it: at install
- * and at each start, also when no workflow uses its nodes.
+ * and at each start, also when no workflow uses its nodes. A community package runs in its own
+ * process (see isolated-packages.ts).
  */
 export async function installFromNpm(
   dir: string,
@@ -263,9 +265,9 @@ type Loaded = {
   version: string | null;
   nodes: string[];
   credentialTypes: string[];
-  /** The file that was loaded, and how. */
+  /** The file that was loaded, and how. "isolated": in its own process (a community package). */
   entry: string;
-  format: "cjs" | "esm";
+  format: "cjs" | "esm" | "isolated";
 };
 
 /** What each loaded package added. A restart clears it. */
@@ -320,6 +322,11 @@ let esmLoads = 0;
 async function importPackage(dir: string, name: string): Promise<Record<string, unknown>> {
   const entry = packageEntry(dir, name);
   const version = installedVersion(dir, name);
+  if (!isOfficialPackage(name)) {
+    // A community package runs in its own process. It cannot read the secrets of zerodot.
+    pending.set(name, { version, entry, format: "isolated" });
+    return importIsolated(name, entry, isCommonJs(entry) ? "cjs" : "esm", [dir]);
+  }
   if (isCommonJs(entry)) {
     // The cache has no entry for this file, so `require` reads the file from disk.
     const exports = createRequire(entry)(entry) as Record<string, unknown>;
@@ -365,6 +372,7 @@ export async function loadInstalled(dir: string, names: string[]): Promise<NodeP
     if (report.error) {
       // The files are loaded. Remove them again, so a failed package leaves nothing in memory.
       if (found?.format === "cjs") evictModules(dir, found.entry);
+      if (found?.format === "isolated") stopIsolated(report.name);
       continue;
     }
     if (found) {
@@ -390,6 +398,7 @@ export async function unloadPackage(name: string, dir: string = nodesDir()): Pro
   unregisterNodes(item.nodes);
   unregisterCredentialTypes(item.credentialTypes);
   if (item.format === "cjs") evictModules(dir, item.entry);
+  if (item.format === "isolated") stopIsolated(name);
   loaded.delete(name);
 }
 

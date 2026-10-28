@@ -28,8 +28,10 @@ export function parseNodePackages(value: string | undefined): string[] {
 
 /** Why a value from a package cannot be a node. Null when it can. */
 function problemWith(value: unknown): string | null {
-  const node = value as Partial<NodeDefinition> | null;
+  const node = value as (Partial<NodeDefinition> & { isolationProblem?: unknown }) | null;
   if (typeof node !== "object" || node === null) return "not an object";
+  // A node of a community package that cannot run in its own process.
+  if (typeof node.isolationProblem === "string") return node.isolationProblem;
   if (typeof node.type !== "string" || node.type === "") return "no type";
   if (typeof node.label !== "string") return "no label";
   if (typeof node.run !== "function") return "no run()";

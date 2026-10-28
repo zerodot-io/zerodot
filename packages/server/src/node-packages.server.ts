@@ -52,8 +52,8 @@ export const installEnabled = (env: Record<string, string | undefined> = process
   (env.ZERODOT_NODES_INSTALL ?? "true").trim().toLowerCase() !== "false";
 
 /**
- * True only when `ZERODOT_COMMUNITY_NODES=true`. Off by default: a community package runs inside
- * zerodot and can read all its secrets, so the operator must turn this on.
+ * True only when `ZERODOT_COMMUNITY_NODES=true`. Off by default: a community package runs code
+ * that nobody checked. It runs in its own process, but it gets the credentials of its nodes.
  */
 export const communityEnabled = (env: Record<string, string | undefined> = process.env): boolean =>
   installEnabled(env) && (env.ZERODOT_COMMUNITY_NODES ?? "").trim().toLowerCase() === "true";
