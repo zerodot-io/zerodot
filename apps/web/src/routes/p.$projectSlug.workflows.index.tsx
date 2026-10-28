@@ -553,7 +553,7 @@ function Workflows() {
                     dataKey="runs"
                     width={80}
                     height={20}
-                    color="var(--chart-foreground-muted)"
+                    color="var(--chart-foreground)"
                     aria-label={`Runs for each hour: ${trend.join(", ")}`}
                   />
                   <Switch
