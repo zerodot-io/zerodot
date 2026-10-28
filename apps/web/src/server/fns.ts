@@ -386,6 +386,23 @@ export const setActiveFn = createServerFn({ method: "POST" })
     return plain(setWorkflowActive(ctx, data.workflowId, data.active));
   });
 
+export const duplicateWorkflowFn = createServerFn({ method: "POST" })
+  .validator(workflowInput.extend({ name: z.string().trim().min(1).max(120) }))
+  .handler(async ({ data }) => {
+    const ctx = await serviceContext(data.projectSlug);
+    const { exportWorkflow, importWorkflow } = await import("@zerodot/server/api/service.server");
+    const file = await plain(exportWorkflow(ctx, data.workflowId));
+    return plain(importWorkflow(ctx, file, data.name));
+  });
+
+export const deleteWorkflowFn = createServerFn({ method: "POST" })
+  .validator(workflowInput)
+  .handler(async ({ data }) => {
+    const ctx = await serviceContext(data.projectSlug);
+    const { deleteWorkflow } = await import("@zerodot/server/api/service.server");
+    return plain(deleteWorkflow(ctx, data.workflowId));
+  });
+
 const testTargetInput = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("to"), nodeId: z.string().min(1) }),
   z.object({

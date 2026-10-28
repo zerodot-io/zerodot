@@ -4,7 +4,7 @@ import { createContext, type ReactNode, useContext } from "react";
 /** The search text of the data view. Empty when no search is active. */
 export const SearchContext = createContext("");
 
-const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /** Text with each match of the search text marked. */
 export function Marked({ text }: { text: string }) {
@@ -12,7 +12,7 @@ export function Marked({ text }: { text: string }) {
   if (!query) return <>{text}</>;
   const parts: ReactNode[] = [];
   let last = 0;
-  for (const match of text.matchAll(new RegExp(escape(query), "gi"))) {
+  for (const match of text.matchAll(new RegExp(escapeRegExp(query), "gi"))) {
     if (match.index > last) parts.push(text.slice(last, match.index));
     parts.push(
       <mark key={match.index} className="rounded-sm bg-amber-200 text-inherit dark:bg-amber-500/40">

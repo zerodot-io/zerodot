@@ -25,7 +25,7 @@ const step = defineNode({
   config: z.object({}),
   defaultConfig: {},
   ports: { in: ["in"], out: ["out"] },
-  run: ({ input }) => {
+  run: () => {
     ran.push("step");
     return { port: "out", data: "changed" };
   },

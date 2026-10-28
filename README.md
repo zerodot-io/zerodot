@@ -274,11 +274,10 @@ A node result is written once, when the node ends. There is no `running` row. Th
 
 By default the apps use `VALKEY_URL` only. For high availability set one of these in the web app, the API, and the worker:
 
-| Mode | Variables |
-| --- | --- |
+| Mode     | Variables                                                                                                         |
+| -------- | ----------------------------------------------------------------------------------------------------------------- |
 | Sentinel | `VALKEY_SENTINELS=host:port,host:port`, `VALKEY_SENTINEL_NAME` (default `mymaster`), `VALKEY_PASSWORD` (optional) |
-| Cluster | `VALKEY_CLUSTER=true`, `VALKEY_PASSWORD` (optional) |
-
+| Cluster  | `VALKEY_CLUSTER=true`, `VALKEY_PASSWORD` (optional)                                                               |
 - `VALKEY_URL` must stay set. In Sentinel mode the apps ignore it. In Cluster mode it is the first node, and the client finds the other nodes.
 - In Cluster mode all queue keys use the prefix `{zerodot}`, so they share one hash slot. Changing mode does not move jobs: drain the queues first.
 - Valkey must keep its data (AOF on). The sweep job queues again the runs that lost their job.
@@ -296,8 +295,8 @@ The System page shows the queues, the workers and the counters of the whole serv
 
 A daily job in the worker deletes old data. It never changes data tables.
 
-| Data                       | Rule                   | Setting                                                                |
-| -------------------------- | ---------------------- | ---------------------------------------------------------------------- |
+| Data                       | Rule                   | Setting                                                                   |
+| -------------------------- | ---------------------- | ------------------------------------------------------------------------- |
 | Test runs                  | Deleted after 7 days   | `ZERODOT_TEST_RUN_RETENTION_DAYS`                                         |
 | Production runs (finished) | Deleted after 30 days  | `ZERODOT_RUN_RETENTION_DAYS`, or the project setting on the Settings page |
 | Insight rollups            | Deleted after 365 days | `ZERODOT_STATS_RETENTION_DAYS`                                            |

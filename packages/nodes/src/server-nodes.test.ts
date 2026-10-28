@@ -5,7 +5,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, it } from "node:test";
 import type { NodeDefinition, NodeResult, ResolvedCredential } from "@zerodot/engine";
-import { validateCredentialData } from "./credentials";
 import { registry } from "./index";
 import { COMMANDS_ENV, FILES_ENV, resolveFilePath } from "./local-access";
 

@@ -53,12 +53,7 @@ export async function startListening(
 ) {
   const { redis } = await getServices();
   await redis.del(eventKey(token), runKey(token));
-  await redis.set(
-    listenKey(token),
-    JSON.stringify({ method, mode, check }),
-    "EX",
-    LISTEN_SECONDS,
-  );
+  await redis.set(listenKey(token), JSON.stringify({ method, mode, check }), "EX", LISTEN_SECONDS);
 }
 
 /** The editor started a test run for the event. The held request waits for its answer. */

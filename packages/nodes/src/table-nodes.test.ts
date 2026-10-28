@@ -107,8 +107,8 @@ describe("table nodes", () => {
     );
     assert.deepEqual(result.data, { count: 3, rows: [row("a"), row("b"), row("c")] });
     assert.equal(calls.length, 2);
-    assert.equal((calls[1]?.args[1] as { cursor?: string }).cursor, "c1");
-    assert.deepEqual((calls[0]?.args[1] as { sort?: unknown }).sort, [
+    assert.equal((calls[1]?.args[1] as { cursor?: string } | undefined)?.cursor, "c1");
+    assert.deepEqual((calls[0]?.args[1] as { sort?: unknown } | undefined)?.sort, [
       { field: "a", direction: "desc" },
     ]);
 
@@ -120,7 +120,7 @@ describe("table nodes", () => {
       },
     } as unknown as TableStore;
     const part = await run("table.get_all", { table: "t", limit: 2 }, two);
-    assert.equal((limited[0]?.args[1] as { limit: number }).limit, 2);
+    assert.equal((limited[0]?.args[1] as { limit: number } | undefined)?.limit, 2);
     assert.equal(limited.length, 1);
     assert.equal((part.data as { count: number }).count, 2);
   });
@@ -138,10 +138,12 @@ describe("table nodes", () => {
   it("column fields and row fields ask the editor for table columns", () => {
     const props = (type: string) =>
       (
-        catalog.find((n) => n.type === type)?.configSchema as {
-          properties: Record<string, { ui?: string; prefill?: string; idOption?: boolean }>;
-        }
-      ).properties;
+        catalog.find((n) => n.type === type)?.configSchema as
+          | {
+              properties: Record<string, { ui?: string; prefill?: string; idOption?: boolean }>;
+            }
+          | undefined
+      )?.properties ?? {};
     assert.equal(props("table.get").by?.ui, "table-column");
     assert.equal(props("table.get").by?.idOption, true);
     assert.equal(props("table.upsert").column?.ui, "table-column");

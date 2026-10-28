@@ -11,12 +11,7 @@ import {
   rootNodes,
   validateGraph,
 } from "@zerodot/engine";
-import {
-  openCredential,
-  registry,
-  validateCron,
-  validateGraphNodes,
-} from "@zerodot/nodes";
+import { openCredential, registry, validateCron, validateGraphNodes } from "@zerodot/nodes";
 import { ZodError } from "zod";
 import type { ApiContext } from "./context.server";
 import { ApiError, badRequest, conflict, notFound } from "./errors";
@@ -379,6 +374,13 @@ export async function setWorkflowActive(ctx: ApiContext, workflowId: string, act
   await ctx.services.syncSchedules(ctx.principal.organizationId, workflowId);
   if (!active) await syncNodeWebhooks(ctx, workflowId, false);
   return { active };
+}
+
+/** Removes the workflow with its versions and runs. Webhooks and schedules go first. */
+export async function deleteWorkflow(ctx: ApiContext, workflowId: string) {
+  await requireWorkflow(ctx, workflowId);
+  await setWorkflowActive(ctx, workflowId, false);
+  return { deleted: await ctx.scope.workflows.remove(workflowId) };
 }
 
 async function enqueueOrFail(ctx: ApiContext, run: RunRow, mode: "production" | "test") {
