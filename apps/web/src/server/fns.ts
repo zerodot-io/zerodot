@@ -810,8 +810,20 @@ export const getAvailableNodePackagesFn = createServerFn({ method: "GET" }).hand
   return availableNodePackages(await adminHeaders());
 });
 
+const installNodePackageInput = z.object({
+  name: z.string().min(1).max(214),
+  /** The community registry of the package. None for an official package. */
+  registry: z.string().min(1).max(2048).optional(),
+  /** The version that the admin saw and accepted. */
+  version: z
+    .string()
+    .regex(/^\d+\.\d+\.\d+$/)
+    .optional(),
+  acceptRisk: z.boolean().optional(),
+});
+
 export const installNodePackageFn = createServerFn({ method: "POST" })
-  .validator(packageNameInput)
+  .validator(installNodePackageInput)
   .handler(async ({ data }) => {
     const { installNodePackage } = await nodePackageServer();
     return installNodePackage(await adminHeaders(), data);
@@ -820,6 +832,7 @@ export const installNodePackageFn = createServerFn({ method: "POST" })
 const updateNodePackageInput = z.object({
   name: z.string().min(1).max(214),
   version: z.string().regex(/^\d+\.\d+\.\d+$/),
+  acceptRisk: z.boolean().optional(),
 });
 
 /** The versions of an installed package that one can switch to. Instance admins only. */
@@ -843,4 +856,19 @@ export const uninstallNodePackageFn = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const { uninstallNodePackage } = await nodePackageServer();
     return uninstallNodePackage(await adminHeaders(), data);
+  });
+
+/** Adds a community registry of node packages. Instance admins only, after they accept the risk. */
+export const addNodeRegistryFn = createServerFn({ method: "POST" })
+  .validator(z.object({ url: z.string().min(1).max(2048), acceptRisk: z.boolean() }))
+  .handler(async ({ data }) => {
+    const { addNodeRegistry } = await nodePackageServer();
+    return addNodeRegistry(await adminHeaders(), data);
+  });
+
+export const removeNodeRegistryFn = createServerFn({ method: "POST" })
+  .validator(z.object({ url: z.string().min(1).max(2048) }))
+  .handler(async ({ data }) => {
+    const { removeNodeRegistry } = await nodePackageServer();
+    return removeNodeRegistry(await adminHeaders(), data);
   });
