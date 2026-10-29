@@ -42,9 +42,7 @@ export function AboutDialog({
           <DialogTitle>
             <Logo className="text-xl" />
           </DialogTitle>
-          <DialogDescription>
-            Minimal, self-hosted workflow automation. No telemetry.
-          </DialogDescription>
+          <DialogDescription>Minimal, self-hosted workflow automation.</DialogDescription>
         </DialogHeader>
         <ItemGroup>
           {rows.map((row, i) => (

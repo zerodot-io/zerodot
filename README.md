@@ -2,7 +2,7 @@
 
 # •‑‑‑ zerodot
 
-Minimal, self-hosted workflow automation. AGPL-3.0-only. No telemetry. You own your workflow files.
+Minimal, self-hosted workflow automation. AGPL-3.0-only. You own your workflow files.
 
 ![The zerodot workflow editor](assets/mock.png)
 
@@ -16,6 +16,8 @@ open http://localhost:3000
 ```
 
 To build the images yourself, run `docker compose up -d --build`.
+
+The web app has a feedback widget (FeedbackJar). Signed-in users open it from **Send feedback** in the Account menu, to send feature requests. A feedback includes the name and email of the user, the Zerodot version, and the system of the server. Set `ZERODOT_FEEDBACK_WIDGET=false` to turn the widget off.
 
 To run Zerodot on a VPS with a domain and HTTPS, see [docs/deploy-vps.md](docs/deploy-vps.md).
 

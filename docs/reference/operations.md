@@ -17,6 +17,14 @@ The instance admin sees a toast when a new version is out, one time for each ver
 - **Turn it off:** `ZERODOT_UPDATE_CHECK=false` in the web app. Then Zerodot makes no call to GitHub.
 - **Who sees it:** the instance admin only. Other users see nothing.
 
+## Feedback widget
+
+The web app has a feedback widget. A signed-in user opens it from **Send feedback** in the Account menu of the sidebar, and sends a feature request to the Zerodot board on FeedbackJar. There is no floating button, and the sign-in pages do not load it.
+
+- **What loads:** the browser of a signed-in user loads `https://cdn.feedbackjar.com/sdk.js`.
+- **What goes with a feedback:** the name and email of the signed-in user, the user role (`instance admin` or `member`), the Zerodot version, and the system of the server (for example `linux 6.8.0 x64`). FeedbackJar also sees the usual request data of the browser. Zerodot sends no workflow data and no credentials.
+- **Turn it off:** `ZERODOT_FEEDBACK_WIDGET=false` in the web app. Then the browser loads nothing from FeedbackJar.
+
 ## Retention
 
 A daily job in the worker deletes old data. It never changes data tables.

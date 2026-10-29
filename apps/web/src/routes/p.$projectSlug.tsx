@@ -2,6 +2,7 @@
 
 import {
   createFileRoute,
+  getRouteApi,
   Link,
   Outlet,
   redirect,
@@ -39,11 +40,15 @@ import {
   Table2,
   Workflow,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AboutDialog, releaseUrl } from "../components/about-dialog";
 import { CommandPalette, type PaletteAction } from "../components/command-palette";
+import { FeedbackWidget, openFeedback, setFeedbackUser } from "../components/feedback-widget";
 import { ProjectDialog } from "../components/project-dialog";
 import { getIsInstanceAdmin, getProjectFn, getUpdateFn } from "../server/fns";
+
+/** The root route has the feedback widget settings. */
+const rootRoute = getRouteApi("__root__");
 
 export const Route = createFileRoute("/p/$projectSlug")({
   beforeLoad: async ({ params }) => {
@@ -94,6 +99,8 @@ function ProjectLayout() {
   const [instanceAdmin, setInstanceAdmin] = useState(false);
   const [update, setUpdate] = useState<string | null>(null);
   const slug = project.slug;
+  const { widgetId, system } = rootRoute.useLoaderData();
+  const feedbackProperties = useMemo(() => ({ version: __APP_VERSION__, system }), [system]);
 
   // Once per layout mount. The layout stays mounted while you move between pages.
   useEffect(() => {
@@ -126,6 +133,15 @@ function ProjectLayout() {
       })
       .catch(() => undefined);
   }, [instanceAdmin]);
+
+  // The feedback widget gets the name and email of who sends feedback, and the role.
+  useEffect(() => {
+    setFeedbackUser(
+      { id: user.id, name: user.name, email: user.email },
+      instanceAdmin ? "instance admin" : "member",
+    );
+    return () => setFeedbackUser(null);
+  }, [user.id, user.name, user.email, instanceAdmin]);
 
   useEffect(() => {
     try {
@@ -283,6 +299,9 @@ function ProjectLayout() {
                 </DropdownMenuItem>
               </DropdownMenuGroup>
               <DropdownMenuSeparator />
+              {widgetId && (
+                <DropdownMenuItem onClick={openFeedback}>Send feedback</DropdownMenuItem>
+              )}
               {instanceAdmin && (
                 <DropdownMenuItem onClick={() => navigate({ to: "/system" })}>
                   System
@@ -306,6 +325,7 @@ function ProjectLayout() {
         </nav>
       </div>
       <CommandPalette slug={slug} actions={paletteActions} />
+      <FeedbackWidget widgetId={widgetId} properties={feedbackProperties} />
       {about && (
         <AboutDialog project={project.name} update={update} onClose={() => setAbout(false)} />
       )}
