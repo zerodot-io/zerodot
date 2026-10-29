@@ -28,8 +28,8 @@ COPY packages/nodes/package.json packages/nodes/
 COPY packages/queue/package.json packages/queue/
 COPY packages/server/package.json packages/server/
 COPY packages/ui/package.json packages/ui/
-# Run make in parallel. node-gyp builds one file at a time by default.
-ENV JOBS=max
+# Cap parallel compile jobs. Each g++ job on V8 headers uses about 1 GB of RAM.
+ENV JOBS=2
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
     --mount=type=cache,target=/root/.cache/node-gyp \
     pnpm install --frozen-lockfile
