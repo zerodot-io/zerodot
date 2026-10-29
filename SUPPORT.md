@@ -6,7 +6,7 @@ Use [GitHub issues](https://github.com/zerodot-io/zerodot/issues) for bug report
 
 ## Community Access
 
-Community Access is a digital product. It gives you access to the private Zerodot community Discord server and a private channel to vote on the roadmap.
+Community Access is a digital product. It gives you access to the private Zerodot community Discord server and a private channel to vote on the roadmap. Each Commercial License includes it, and you also get a Discord role for your license type (Hobby, Team, Organization, or Extended).
 
 |                        | Free               | Community Access |
 | ---------------------- | ------------------ | ---------------- |
@@ -20,4 +20,4 @@ Community Access does not include setup, deployment, or technical support. It do
 
 ## What Community Access does not change
 
-Zerodot stays free software under AGPL-3.0-only. Community Access is not a software license. It does not give you any rights to the code, and it does not remove any duty in the AGPL.
+Zerodot stays free software under AGPL-3.0-only. To keep your changes private, buy a [Commercial License](COMMERCIAL-LICENSE.md). Every Commercial License includes Community Access. Community Access is not a software license. It does not give you any rights to the code, and it does not remove any duty in the AGPL.
