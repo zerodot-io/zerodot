@@ -8,9 +8,12 @@ Minimal, self-hosted workflow automation. AGPL-3.0-only. No telemetry. You own y
 
 ```sh
 cp .env.example .env   # set ZERODOT_SECRET_KEY (openssl rand -base64 32) and BETTER_AUTH_SECRET
+docker compose pull    # prebuilt images from GHCR
 docker compose up -d
 open http://localhost:3000
 ```
+
+To build the images yourself, run `docker compose up -d --build`.
 
 To run Zerodot on a VPS with a domain and HTTPS, see [docs/deploy-vps.md](docs/deploy-vps.md).
 
@@ -81,4 +84,3 @@ The `test` command needs a separate Postgres database. It deletes the data in th
 
 - [Reference](docs/reference/README.md): credentials, nodes, webhooks, API and MCP, scaling, operations.
 - [Deploy on a VPS](docs/deploy-vps.md)
-- [SPEC.md](SPEC.md)
