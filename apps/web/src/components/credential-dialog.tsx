@@ -37,6 +37,8 @@ export type SavedCredential = {
   type: string;
   status?: "ok" | "needs_reconnect";
   connected?: boolean;
+  /** Field names of the data. Not the values. Empty for a credential just made. */
+  fields?: string[];
 };
 
 /** A credential type that a node can use, with the nodes that use it. */

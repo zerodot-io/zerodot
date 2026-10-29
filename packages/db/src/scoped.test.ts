@@ -264,12 +264,15 @@ describe("forOrganization", { skip: !url }, () => {
     assert.deepEqual(Object.keys((await a.credentials.list())[0] ?? {}).sort(), [
       "connected",
       "createdAt",
+      "fields",
       "id",
       "name",
       "status",
       "type",
       "updatedAt",
     ]);
+    // Field names only. No value.
+    assert.deepEqual((await a.credentials.list())[0]?.fields, ["password", "username"]);
     assert.equal((await b.credentials.list()).length, 0);
     assert.equal(await b.credentials.open(created.id), null);
     assert.equal(await b.credentials.remove(created.id), false);
