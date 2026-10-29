@@ -79,14 +79,10 @@ We can change these terms for future orders. A change does not apply to a licens
 
 ## 11. Law
 
-`<GOVERNING_LAW>` law applies to these terms.
+The laws of India apply to these terms.
 
 ## 12. Contact
 
-`<CONTACT_EMAIL>`
+Email: <zerodot@7angle.com>
 
 Checkout: <https://zerodot.io/pricing>
-
----
-
-_Replace every `<...>` placeholder and have a lawyer review this document before you sell the first license._

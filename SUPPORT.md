@@ -14,8 +14,6 @@ Community Access is a digital product. It gives you access to the private Zerodo
 | Private Discord server | No                 | Yes              |
 | Vote on the roadmap    | Public issues only | Private channel  |
 
-Price and checkout: `<COMMUNITY_ACCESS_URL>`
-
 Community Access does not include setup, deployment, or technical support. It does not include direct help from the maintainer. It does not include a response time. The [Community Access terms](SUPPORT-LICENSE.md) explain what you get and what you do not get.
 
 ## What Community Access does not change
