@@ -217,17 +217,39 @@ export function credentials(db: Db, organizationId: string, secretKey: Buffer | 
       return rows.length > 0;
     },
 
-    /** Workflows whose draft or published graph uses this credential. */
+    /**
+     * Workflows whose draft or published graph uses this credential: it is picked on a node, or
+     * a config reads `$credentials["name"]`. The second check is a text search of the saved graph,
+     * so it can find a few extra matches.
+     */
     async usedBy(id: string): Promise<{ id: string; name: string }[]> {
       const needle = JSON.stringify({ nodes: [{ credentialId: id }] });
+      const [row] = await db
+        .select({ name: credential.name })
+        .from(credential)
+        .where(owned(id))
+        .limit(1);
+      // The patterns are in the form the JSON text has, so a quote in a name is escaped.
+      const patterns = row
+        ? [`$credentials["${row.name}"]`, `$credentials['${row.name}']`].map((p) =>
+            JSON.stringify(p).slice(1, -1),
+          )
+        : [];
+      const byName = (column: string) =>
+        sql.join(
+          [sql`false`, ...patterns.map((p) => sql`strpos(${sql.raw(column)}::text, ${p}) > 0`)],
+          sql` or `,
+        );
       const rows = await db.execute(sql`
         select w.id, w.name from workflow w
         where w.organization_id = ${organizationId}
           and (
             w.draft_graph @> ${needle}::jsonb
+            or (${byName("w.draft_graph")})
             or exists (
               select 1 from workflow_version v
-              where v.id = w.published_version_id and v.graph @> ${needle}::jsonb
+              where v.id = w.published_version_id
+                and (v.graph @> ${needle}::jsonb or (${byName("v.graph")}))
             )
           )
         order by w.name

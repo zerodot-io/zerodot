@@ -278,6 +278,28 @@ function similarKeys(key: string, keys: string[]): string[] {
     .map(({ k }) => k);
 }
 
+const CREDENTIAL_REF =
+  /\$credentials\[\s*(?:"([^"]+)"|'([^']+)')\s*\](?:\.([A-Za-z_][\w-]*)|\[\s*(?:"([^"]+)"|'([^']+)')\s*\])/g;
+
+/**
+ * Credential fields that a text reads as `$credentials["name"].field`. Only this static form is
+ * valid, so a workflow shows which credentials it reads. `invalid` is true when the text has a
+ * `$credentials` that is not in this form, for example a name that comes from an expression.
+ */
+export function credentialRefsUsed(text: string): {
+  refs: { name: string; field: string }[];
+  invalid: boolean;
+} {
+  const refs: { name: string; field: string }[] = [];
+  for (const match of text.matchAll(CREDENTIAL_REF)) {
+    const name = match[1] ?? match[2];
+    const field = match[3] ?? match[4] ?? match[5];
+    if (name && field) refs.push({ name, field });
+  }
+  const total = text.split("$credentials").length - 1;
+  return { refs, invalid: total !== refs.length };
+}
+
 const FORBIDDEN_KEYS = new Set(["__proto__", "constructor", "prototype"]);
 
 function readMember(object: unknown, key: unknown, path: string): unknown {

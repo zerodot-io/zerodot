@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { type BlobStore, containsBlobRef, hydrate } from "./blob";
-import { ExpressionError, resolveConfig, StrictRecord } from "./expression";
+import { credentialRefsUsed, ExpressionError, resolveConfig, StrictRecord } from "./expression";
 import { type Graph, type GraphEdge, type GraphNode, isTriggerType, validateGraph } from "./graph";
 import {
   inputPortsOf,
@@ -152,6 +152,41 @@ function scrubError(error: { message: string; path?: string }, secrets: string[]
     message = message.split(secret).join("***");
   }
   return error.path ? { message, path: error.path } : { message };
+}
+
+/** The secret as it can appear in a URL: raw and percent-encoded. */
+function secretForms(value: string): string[] {
+  const encoded = encodeURIComponent(value);
+  return encoded === value ? [value] : [value, encoded];
+}
+
+/** A copy of a value where each secret in any text is now `***`. Keys and other types stay. */
+function maskSecrets<T>(value: T, secrets: string[]): T {
+  const walk = (item: unknown): unknown => {
+    if (typeof item === "string") {
+      let text = item;
+      for (const secret of secrets) text = text.split(secret).join("***");
+      return text;
+    }
+    if (Array.isArray(item)) return item.map(walk);
+    if (
+      item !== null &&
+      typeof item === "object" &&
+      Object.getPrototypeOf(item) === Object.prototype
+    ) {
+      return Object.fromEntries(Object.entries(item).map(([key, inner]) => [key, walk(inner)]));
+    }
+    return item;
+  };
+  return walk(value) as T;
+}
+
+function* configTexts(value: unknown): Generator<string> {
+  if (typeof value === "string") yield value;
+  else if (Array.isArray(value)) for (const item of value) yield* configTexts(item);
+  else if (value !== null && typeof value === "object") {
+    for (const item of Object.values(value)) yield* configTexts(item);
+  }
 }
 
 function defaultSleep(ms: number) {
@@ -547,6 +582,8 @@ export async function executeGraph(options: ExecuteOptions): Promise<ExecuteResu
       await call("beforeNode", { node, attempt, input });
       const startedAt = Date.now();
       let secrets: string[] = [];
+      /** Values of `$credentials` fields. They are removed from the output and the logs too. */
+      const masked: string[] = [];
       const logs: CodeLog[] = [];
       try {
         if (!definition) throw new Error(`Unknown node type "${node.type}"`);
@@ -555,7 +592,44 @@ export async function executeGraph(options: ExecuteOptions): Promise<ExecuteResu
         const fullInput =
           node.executeOnce && Array.isArray(hydrated) ? hydrated.slice(0, 1) : hydrated;
         const scope = scopeFor(fullInput);
-        const config = configFor(node, definition, scope);
+        const refs = new Map<string, Set<string>>();
+        const rawKeys = new Set(definition.rawConfigKeys ?? []);
+        for (const [key, value] of Object.entries(node.config)) {
+          if (rawKeys.has(key)) continue;
+          for (const text of configTexts(value)) {
+            const found = credentialRefsUsed(text);
+            if (found.invalid) {
+              throw new Error(
+                'Write a credential field as $credentials["name"].field. The name must be text, not an expression',
+              );
+            }
+            for (const ref of found.refs) {
+              refs.set(ref.name, (refs.get(ref.name) ?? new Set()).add(ref.field));
+            }
+          }
+        }
+        let configScope = scope;
+        if (refs.size > 0) {
+          const byName: Record<string, StrictRecord> = {};
+          for (const [name, fields] of refs) {
+            const opened = await options.credentials?.(name, "idOrName");
+            if (!opened) throw new Error(`The credential "${name}" does not exist`);
+            const values: Record<string, unknown> = {};
+            for (const field of fields) {
+              if (!Object.hasOwn(opened.data, field)) continue;
+              const value = opened.data[field];
+              values[field] = value;
+              if (typeof value === "string" && value.length >= 4) {
+                masked.push(...secretForms(value));
+              }
+            }
+            byName[name] = new StrictRecord(`Field of credential "${name}"`, values);
+          }
+          masked.sort((a, b) => b.length - a.length);
+          secrets = [...masked];
+          configScope = { ...scope, $credentials: new StrictRecord("Credential", byName) };
+        }
+        const config = configFor(node, definition, configScope);
         let credential: ResolvedCredential | null = null;
         if (node.credentialExpression || node.credentialId) {
           if (node.credentialExpression) {
@@ -575,15 +649,16 @@ export async function executeGraph(options: ExecuteOptions): Promise<ExecuteResu
           if (!allowed?.includes(credential.type)) {
             throw new Error(`This node does not accept a credential of type "${credential.type}"`);
           }
-          secrets = secretValues(credential.data);
+          secrets = [...secrets, ...secretValues(credential.data)];
         }
-        const raw = await definition.run({
+        const ran = await definition.run({
           config,
           input: fullInput,
           credential,
           signal,
           scope: runScope(scope, fullInput),
-          log: (entries) => logs.push(...entries),
+          log: (entries) =>
+            logs.push(...(masked.length > 0 ? maskSecrets(entries, masked) : entries)),
           sandbox: options.sandbox ?? null,
           tables: options.tables ?? null,
           resumeUrl: options.resumeUrl?.(node.id) ?? null,
@@ -591,6 +666,7 @@ export async function executeGraph(options: ExecuteOptions): Promise<ExecuteResu
           loopBack,
           state: nodeState.get(node.id),
         });
+        const raw = masked.length > 0 ? maskSecrets(ran, masked) : ran;
         const empty =
           raw.data === null ||
           raw.data === undefined ||

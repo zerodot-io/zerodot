@@ -21,6 +21,21 @@ On each pass the nodes on `loop` get `{ items, item, index, total }`. `items` is
 
 All node runs of a loop count against `ZERODOT_MAX_NODE_RUNS` (default 1000). A loop of 200 items with 4 nodes in its body uses about 1000. Raise the limit for long loops. A wait inside the loop body works: the run stops, and goes on at the same item.
 
+## Credential values in an expression
+
+A node can put a field of a credential in its config. Use this when a service needs a secret in the URL or in the body, for example a Telegram bot token:
+
+`https://api.telegram.org/bot{{ $credentials["Telegram bot"].token }}/sendDice`
+
+- Write the name of the credential and the field as text: `$credentials["name"].field`. A name that comes from an expression is not allowed. The whole credential is not allowed.
+- The credential must be in the same project. The run fails when the credential or the field does not exist.
+- Only the config of the node can read it. The `Code` node, raw config fields, and community node expression scope do not get `$credentials`.
+- The editor shows `••••••` for the value in the preview. The browser never gets the real value.
+- The engine removes the value from the node output, the logs, and the error. It removes the raw text and the percent-encoded text. It does not remove other forms, for example Base64. It does not remove a value shorter than 4 characters.
+- Anyone who can edit a workflow can send a credential of the project to any URL. Give edit access only to people you trust with these credentials.
+
+For a credential that is only a header (bearer, basic, header), pick it in the credential field of the node. To pick it by a value in the run, use **Expression** on that field.
+
 ## Test runs in the editor
 
 - **Test run** runs the whole draft graph.
