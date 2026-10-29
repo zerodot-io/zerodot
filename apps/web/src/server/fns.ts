@@ -843,6 +843,12 @@ export const getNodePackagesFn = createServerFn({ method: "GET" }).handler(async
   return nodePackagesOverview(await adminHeaders());
 });
 
+/** Reads the catalog again, without the cache. Instance admins only. */
+export const refreshNodePackagesFn = createServerFn({ method: "POST" }).handler(async () => {
+  const { refreshNodePackages } = await nodePackageServer();
+  return refreshNodePackages(await adminHeaders());
+});
+
 /** Packages that are not installed, for the Add node list. Any signed-in person. */
 export const getAvailableNodePackagesFn = createServerFn({ method: "GET" }).handler(async () => {
   const { availableNodePackages } = await nodePackageServer();

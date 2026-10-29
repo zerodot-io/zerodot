@@ -15,6 +15,7 @@ import {
   type CatalogPackage,
   checkPackumentIntegrity,
   checkRegistryUrl,
+  clearCatalogCache,
   compatibleVersions,
   createPackageSyncer,
   DEFAULT_VERIFIED_URL,
@@ -164,6 +165,13 @@ const viewOf = (
   registry,
   verified,
 });
+
+/** Drops the cached catalog and version lists, then reads them again. Instance admins only. */
+export async function refreshNodePackages(headers: Headers): Promise<NodePackagesOverview> {
+  await requireInstanceAdmin(headers);
+  clearCatalogCache();
+  return nodePackagesOverview(headers);
+}
 
 export async function nodePackagesOverview(headers: Headers): Promise<NodePackagesOverview> {
   await requireInstanceAdmin(headers);
