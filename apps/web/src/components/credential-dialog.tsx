@@ -375,7 +375,7 @@ export function CredentialDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg gap-0 p-0" initialFocus={false}>
-        <form onSubmit={onSubmit} className="flex flex-col">
+        <form onSubmit={onSubmit} className="flex min-w-0 flex-col">
           <DialogHeader className="flex-row items-center gap-3 px-5 pt-5 pr-12">
             <NodeIcon name={definition?.icon ?? "KeyRound"} src={definition?.iconUrl} />
             <DialogTitle className="sr-only">{definition?.label}</DialogTitle>
