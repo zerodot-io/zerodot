@@ -3,8 +3,11 @@
 import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
 import { Toaster, TooltipProvider } from "@zerodot/ui";
 import appCss from "../app.css?url";
+import { FeedbackWidget } from "../components/feedback-widget";
+import { getFeedbackWidgetFn } from "../server/feedback-fns";
 
 export const Route = createRootRoute({
+  loader: () => getFeedbackWidgetFn(),
   head: () => ({
     meta: [
       { charSet: "utf-8" },
@@ -16,7 +19,12 @@ export const Route = createRootRoute({
       { rel: "stylesheet", href: appCss },
     ],
   }),
-  component: () => (
+  component: RootDocument,
+});
+
+function RootDocument() {
+  const { widgetId } = Route.useLoaderData();
+  return (
     <html lang="en">
       <head>
         <HeadContent />
@@ -26,8 +34,9 @@ export const Route = createRootRoute({
           <Outlet />
         </TooltipProvider>
         <Toaster />
+        <FeedbackWidget widgetId={widgetId} />
         <Scripts />
       </body>
     </html>
-  ),
-});
+  );
+}

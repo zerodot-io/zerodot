@@ -9,6 +9,13 @@ The System page shows the queues, the workers and the counters of the whole serv
 - **What an admin can do:** cancel any run, retry, remove or promote a job, clean a queue, pause and resume a queue. Each change writes one row to the `admin_audit` table (who, what, which id). Rows hold ids and counts only.
 - **What it never shows:** job data, node input or node output.
 
+## Feedback widget
+
+The web app can show the FeedbackJar feedback widget. It is off by default.
+
+- **Turn it on:** set `ZERODOT_FEEDBACK_WIDGET_ID` to your widget id in the web app. The browser then loads `https://cdn.feedbackjar.com/sdk.js` and the widget sends feedback to FeedbackJar.
+- **Off:** with no id, the browser loads nothing from FeedbackJar.
+
 ## Retention
 
 A daily job in the worker deletes old data. It never changes data tables.
