@@ -8,6 +8,7 @@ export {
   type FieldSpec,
   FORM_FIELD_TYPES,
   type Item,
+  type ItemIcon,
   isRecord,
   type ListenContext,
   type ListenHandle,
