@@ -19,6 +19,7 @@ import {
   Spinner,
   toast,
 } from "@zerodot/ui";
+import { RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { addServerCatalog } from "../lib/flow";
 import {
@@ -28,6 +29,7 @@ import {
   getNodePackagesFn,
   getNodePackageVersionsFn,
   installNodePackageFn,
+  refreshNodePackagesFn,
   removeNodeRegistryFn,
   uninstallNodePackageFn,
   updateNodePackageFn,
@@ -378,6 +380,11 @@ function VersionDialog({
             <Spinner />
             Loading versions
           </p>
+        ) : versions.every((version) => version === item.version) ? (
+          <p className="text-muted-foreground">
+            No other version is available. {item.version} is the only version that this zerodot can
+            use.
+          </p>
         ) : (
           <div className="flex items-center gap-3">
             <span className="tabular-nums text-muted-foreground">{item.version}</span>
@@ -655,6 +662,7 @@ export function NodePackagesSection() {
   const [removing, setRemoving] = useState<PackageView | null>(null);
   const [addingRegistry, setAddingRegistry] = useState(false);
   const [removingRegistry, setRemovingRegistry] = useState<RegistryView | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -667,6 +675,19 @@ export function NodePackagesSection() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  /** Reads the catalog again. The server keeps it for ten minutes, so a new version waits. */
+  async function refresh() {
+    setRefreshing(true);
+    try {
+      setOverview(await refreshNodePackagesFn());
+      toast.success("Packages refreshed");
+    } catch (error) {
+      toast.error(errorText(error));
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   async function change(name: string, work: () => Promise<unknown>, done: string) {
     setBusy(name);
@@ -766,14 +787,27 @@ export function NodePackagesSection() {
             );
           })}
         </div>
-        <Input
-          type="search"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search by name, node, or use"
-          aria-label="Search packages"
-          className="w-full sm:w-72"
-        />
+        <div className="flex w-full items-center gap-2 sm:w-auto">
+          <Input
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search by name, node, or use"
+            aria-label="Search packages"
+            className="w-full sm:w-72"
+          />
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            aria-label="Refresh packages"
+            title="Refresh packages"
+            disabled={refreshing}
+            onClick={() => void refresh()}
+          >
+            <RefreshCw className={refreshing ? "animate-spin" : undefined} />
+          </Button>
+        </div>
       </div>
 
       {showInstalled && (
