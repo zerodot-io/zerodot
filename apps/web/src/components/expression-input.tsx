@@ -23,6 +23,9 @@ export type CredentialHint = { name: string; type: string; fields: string[] };
 /** The project credentials, names and field names only. The fields suggest `$credentials[...]`. */
 export const CredentialsContext = createContext<CredentialHint[]>([]);
 
+/** Names of the nodes that wait for a callback. The fields suggest them after `$resumeUrl["`. */
+export const ResumeNamesContext = createContext<string[]>([]);
+
 /** The node names of the workflow. The fields suggest `$node["Name"].data` for them. */
 export const NodeNamesContext = createContext<string[]>([]);
 
@@ -65,6 +68,7 @@ type Props = {
 const TRIGGER = /\$vars\.([A-Za-z0-9_]*)$/;
 const CREDENTIAL_NAME = /\$credentials\[\s*"([^"]*)$/;
 const CREDENTIAL_FIELD = /\$credentials\[\s*"([^"]+)"\]\.([A-Za-z0-9_-]*)$/;
+const RESUME_NAME = /\$resumeUrl\[\s*"([^"]*)$/;
 const PATH =
   /(\$input|\$node\[("(?:[^"\\]|\\.)*")\]\.data)((?:\.[A-Za-z0-9_]+)*)\.([A-Za-z0-9_]*)$/;
 const ROOT = /\$([A-Za-z0-9_]*)$/;
@@ -99,6 +103,7 @@ export function ExpressionInput({
 }: Props) {
   const variables = useContext(VariablesContext);
   const credentials = useContext(CredentialsContext);
+  const resumeNames = useContext(ResumeNamesContext);
   const nodeNames = useContext(NodeNamesContext);
   const outputs = useContext(NodeOutputsContext);
   const inputData = useContext(InputDataContext);
@@ -134,6 +139,7 @@ export function ExpressionInput({
   const varPrefix = TRIGGER.exec(before)?.[1];
   const rootPrefix = ROOT.exec(before)?.[0];
   const path = PATH.exec(before);
+  const resumeName = RESUME_NAME.exec(before);
   const credentialName = CREDENTIAL_NAME.exec(before);
   const credentialField = CREDENTIAL_FIELD.exec(before);
   let matches: Suggestion[] = [];
@@ -171,6 +177,12 @@ export function ExpressionInput({
       matches = (credentials.find((c) => c.name === name)?.fields ?? [])
         .filter((field) => field.startsWith(partial) && field !== partial)
         .map((field) => ({ label: field, insert: field, hint: "field, value hidden" }));
+    } else if (resumeName) {
+      const partial = resumeName[1] ?? "";
+      typed = partial;
+      matches = resumeNames
+        .filter((name) => name.startsWith(partial) && !name.includes('"'))
+        .map((name) => ({ label: name, insert: `${name}"]`, hint: "resume address" }));
     } else if (credentialName) {
       const partial = credentialName[1] ?? "";
       typed = partial;
