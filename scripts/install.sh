@@ -738,8 +738,14 @@ services:
       - "127.0.0.1:${PORT}:3000"
 CONF
 
-  say "Building and starting (the first build takes about 10 minutes)"
-  docker compose up -d --build
+  # Use the images from GHCR. Build on the server only if the pull fails.
+  if docker compose pull --quiet; then
+    say "Starting"
+    docker compose up -d
+  else
+    say "Pull failed. Building on this server (the first build takes about 10 minutes)"
+    docker compose up -d --build
+  fi
 
   UPSTREAM_PORT="$PORT"
   wait_http "http://127.0.0.1:${PORT}/" || { docker compose ps; die "The app did not start. See: docker compose logs"; }

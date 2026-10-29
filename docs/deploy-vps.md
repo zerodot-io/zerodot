@@ -204,15 +204,16 @@ CONF
 
 If port 3000 is in use on the host, change the left side (for example `127.0.0.1:3100:3000`) and use the same port in step 7.
 
-## 6. Build and start
+## 6. Pull and start
 
 ```sh
-docker compose up -d --build
+docker compose pull
+docker compose up -d
 docker compose ps
 curl -sI http://127.0.0.1:3000/
 ```
 
-The first build takes about 10 minutes. All services must show `Up`. The `curl` command must answer `307` with `Location: /sign-in`.
+The images come from GHCR. The first pull takes about 1 minute. To build on the server instead, run `docker compose up -d --build`. The first build takes about 10 minutes and needs 4 GB of RAM or more. All services must show `Up`. The `curl` command must answer `307` with `Location: /sign-in`.
 
 ## 7. Caddy
 
@@ -256,7 +257,7 @@ You can also set `ZERODOT_SIGNUP_DISABLED=true` in `.env`. Then signup stays off
 ## Update
 
 ```sh
-cd /var/www/zerodot && git pull && docker compose up -d --build
+cd /var/www/zerodot && git pull && docker compose pull && docker compose up -d
 ```
 
 ## Back up
