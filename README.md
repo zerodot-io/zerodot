@@ -90,15 +90,15 @@ The `test` command needs a separate Postgres database. It deletes the data in th
 
 ## License
 
-Zerodot is free under AGPL-3.0-only. If you cannot follow the AGPL, for example you want to keep your changes private, buy a one-time [Commercial License](COMMERCIAL-LICENSE.md).
+Zerodot is free under AGPL-3.0-only. If you cannot follow the AGPL, for example you want to keep your changes private, buy a [Commercial License](COMMERCIAL-LICENSE.md).
 
-| Tier         | Price | Developers | Instances |
-| ------------ | ----- | ---------- | --------- |
-| Community    | Free  | Unlimited  | Unlimited |
-| Hobby        | $49   | 1          | 1         |
-| Team         | $149  | Up to 10   | Up to 5   |
-| Organization | $299  | Unlimited  | Unlimited |
-| Extended     | $499  | Unlimited  | 1 product |
+| Tier       | Price                 | Developers | Instances |
+| ---------- | --------------------- | ---------- | --------- |
+| Community  | Free                  | Unlimited  | Unlimited |
+| Hobby      | $49 one time          | 1          | 1         |
+| Team       | $199 one time         | Up to 10   | Up to 5   |
+| Business   | $999 each year        | Up to 100  | Unlimited |
+| Enterprise | From $4,999 each year | Unlimited  | Unlimited |
 
 ## Contribute and support
 

@@ -6,7 +6,7 @@ Use [GitHub issues](https://github.com/zerodot-io/zerodot/issues) for bug report
 
 ## Community Access
 
-Community Access is a digital product. It gives you access to the private Zerodot community Discord server and a private channel to vote on the roadmap. Each Commercial License includes it, and you also get a Discord role for your license type (Hobby, Team, Organization, or Extended).
+Community Access is a digital product. It gives you access to the private Zerodot community Discord server and a private channel to vote on the roadmap. Each Commercial License includes it, and you also get a Discord role for your license type (Hobby, Team, Business, or Enterprise).
 
 |                        | Free               | Community Access |
 | ---------------------- | ------------------ | ---------------- |

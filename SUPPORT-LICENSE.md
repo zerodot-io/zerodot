@@ -10,7 +10,7 @@ You get:
 
 1. Access to the private Zerodot community Discord server and its member channels.
 2. A vote on the roadmap in the private channels.
-3. A Discord role. With a Commercial License, you also get a role that shows your license type: Hobby, Team, Organization, or Extended.
+3. A Discord role. With a Commercial License, you also get a role that shows your license type: Hobby, Team, Business, or Enterprise.
 
 After payment, You link Your Discord account in the Polar checkout. We give You the roles automatically.
 
