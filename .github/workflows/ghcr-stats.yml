@@ -1,0 +1,35 @@
+name: ghcr-stats
+
+# Counts the pulls of the web image once a day. The count goes to the ghcr-stats branch, not main.
+# The README badge reads web.json from that branch. A pull of the web image is one install or update.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 3 * * *"
+
+permissions:
+  contents: write
+
+jobs:
+  stats:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ghcr-stats
+      # Pinned to a commit (v1.0.4). The action reads the public package page.
+      - uses: actionstore/ghcr-stats@3bf18e157b9a95158e54c0f6c4f72b61f67fba39
+        with:
+          owner: zerodot-io
+          repo: zerodot
+          name: zerodot-web
+          path: web.json
+      - name: Commit the count
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add web.json
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: update ghcr stats"
+            git push
+          fi

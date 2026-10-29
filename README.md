@@ -4,6 +4,8 @@
 
 Minimal, self-hosted workflow automation. AGPL-3.0-only. No telemetry. You own your workflow files.
 
+[![GHCR pulls](https://img.shields.io/badge/dynamic/json?url=https://raw.githubusercontent.com/zerodot-io/zerodot/ghcr-stats/web.json&query=downloads_compact&label=ghcr+pulls&style=flat-square)](https://github.com/zerodot-io/zerodot/pkgs/container/zerodot-web)
+
 ![The zerodot workflow editor](assets/mock.png)
 
 ## Quickstart
