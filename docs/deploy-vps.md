@@ -9,22 +9,14 @@ You need:
 
 1. Add a DNS record: `A  zerodot.example.com  <VPS IP>`.
    If you use Cloudflare, set the SSL mode to **Full**. The mode "Flexible" causes redirect loops.
-2. Run the script on the VPS as root. The repository is public:
+2. Run the script on the VPS as root:
 
    ```sh
    curl -fsSL https://raw.githubusercontent.com/zerodot-io/zerodot/main/scripts/install.sh -o install.sh
    bash install.sh zerodot.example.com
    ```
 
-   The repository is private: copy the script from your computer, then run it in a terminal on the VPS:
-
-   ```sh
-   scp scripts/install.sh root@<VPS IP>:
-   ssh -t root@<VPS IP> bash install.sh zerodot.example.com
-   ```
-
-   The clone fails, so the script makes a deploy key and shows it. Add it in GitHub
-   (repository **Settings > Deploy keys**, no write access), press Enter, and the script continues.
+   In Docker mode the script pulls the prebuilt images from GHCR (`ghcr.io/zerodot-io/zerodot-web`, `-api`, `-worker`, `-sandbox`). It does not build on the server. If the pull fails, it builds the images on the server instead. That takes about 10 minutes and needs 4 GB of RAM or more.
 
 3. Open `https://zerodot.example.com` and sign up. The first user is the instance admin.
    Then open **System > Access** and turn **Public signup** off.
@@ -81,7 +73,7 @@ Native mode runs the API, worker and sandbox on `127.0.0.1` only (`ZERODOT_BIND_
 
 Run the script again. If it finds a Zerodot install, it asks:
 
-- **Update** an install that exists. It pulls the new code, builds, and restarts. It keeps `.env` and secrets.
+- **Update** an install that exists. It pulls the new code and images, and restarts. It keeps `.env` and secrets.
 - **Set up another instance.** Each instance has its own name, folder, domain, ports, database and services. Example:
 
   ```sh
@@ -93,6 +85,16 @@ To skip the question: `--update` or `--new`. If you give the domain of an existi
 ```sh
 bash /var/www/zerodot/scripts/install.sh zerodot.example.com
 ```
+
+## Image versions
+
+Each release tag (`v0.1.0`) publishes four images to GHCR with the tags `latest`, `0.1.0` and `0.1`. Compose uses `latest`. To pin a release, set it in `.env`:
+
+```sh
+ZERODOT_VERSION=0.1.0
+```
+
+Then run `docker compose pull && docker compose up -d`.
 
 ## All options
 
