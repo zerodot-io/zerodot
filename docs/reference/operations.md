@@ -9,6 +9,14 @@ The System page shows the queues, the workers and the counters of the whole serv
 - **What an admin can do:** cancel any run, retry, remove or promote a job, clean a queue, pause and resume a queue. Each change writes one row to the `admin_audit` table (who, what, which id). Rows hold ids and counts only.
 - **What it never shows:** job data, node input or node output.
 
+## Feedback widget
+
+The web app has a feedback widget. A signed-in user opens it from **Send feedback** in the Account menu of the sidebar, and sends a feature request to the Zerodot board on FeedbackJar. There is no floating button, and the sign-in pages do not load it.
+
+- **What loads:** the browser of a signed-in user loads `https://cdn.feedbackjar.com/sdk.js`.
+- **What goes with a feedback:** the name and email of the signed-in user, the user role (`instance admin` or `member`), the Zerodot version, and the system of the server (for example `linux 6.8.0 x64`). FeedbackJar also sees the usual request data of the browser. Zerodot sends no workflow data and no credentials.
+- **Turn it off:** `ZERODOT_FEEDBACK_WIDGET=false` in the web app. Then the browser loads nothing from FeedbackJar.
+
 ## Retention
 
 A daily job in the worker deletes old data. It never changes data tables.

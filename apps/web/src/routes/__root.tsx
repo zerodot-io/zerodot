@@ -3,8 +3,10 @@
 import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
 import { Toaster, TooltipProvider } from "@zerodot/ui";
 import appCss from "../app.css?url";
+import { getFeedbackWidgetFn } from "../server/feedback-fns";
 
 export const Route = createRootRoute({
+  loader: () => getFeedbackWidgetFn(),
   head: () => ({
     meta: [
       { charSet: "utf-8" },
@@ -16,7 +18,11 @@ export const Route = createRootRoute({
       { rel: "stylesheet", href: appCss },
     ],
   }),
-  component: () => (
+  component: RootDocument,
+});
+
+function RootDocument() {
+  return (
     <html lang="en">
       <head>
         <HeadContent />
@@ -29,5 +35,5 @@ export const Route = createRootRoute({
         <Scripts />
       </body>
     </html>
-  ),
-});
+  );
+}

@@ -3,7 +3,7 @@
 ## Essence
 
 - Minimal, self-hosted workflow automation.
-- Promise: no telemetry, you own your files.
+- Promise: you own your files.
 - Feel: quiet, exact, small. One dot is the start of a flow.
 
 ## Name
@@ -16,7 +16,7 @@
 - Use short sentences. Use active verbs. Put one idea in each sentence.
 - Say what the product does. Do not use hype words ("powerful", "seamless", "revolutionary").
 - Tone: calm, direct, a little dry.
-- Example: "Self-hosted workflows. No telemetry. Your files."
+- Example: "Self-hosted workflows. Your files."
 
 ## Logo
 
