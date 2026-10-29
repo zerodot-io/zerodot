@@ -1,8 +1,21 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
-const TAGS_URL = "https://api.github.com/repos/zerodot-io/zerodot/tags?per_page=100";
-const FOUND_CACHE_MS = 24 * 60 * 60 * 1000;
-const FAILED_CACHE_MS = 60 * 60 * 1000;
+const RELEASES_URL = "https://api.github.com/repos/zerodot-io/zerodot/releases?per_page=30";
+const CACHE_MS = 60 * 60 * 1000;
+const MAX_RELEASES = 10;
+const MAX_BODY = 20_000;
+
+export type Release = {
+  /** Like `0.2.5`, without the `v`. */
+  version: string;
+  tag: string;
+  name: string;
+  publishedAt: string | null;
+  /** Markdown. */
+  body: string;
+  /** The page of the release on GitHub. */
+  url: string;
+};
 
 type Version = [number, number, number];
 
@@ -20,20 +33,35 @@ function compare(a: Version, b: Version): number {
   return 0;
 }
 
-/** The highest release among the tag names, like `0.2.1`. Null when none is a version. */
-export function newestVersion(tags: string[]): string | null {
-  let best: Version | null = null;
-  for (const tag of tags) {
-    const version = parseVersion(tag);
-    if (version && (!best || compare(version, best) > 0)) best = version;
-  }
-  return best ? best.join(".") : null;
-}
-
 export function isNewer(latest: string, current: string): boolean {
   const a = parseVersion(latest);
   const b = parseVersion(current);
   return a !== null && b !== null && compare(a, b) > 0;
+}
+
+const parts = (release: Release): Version => parseVersion(release.version) ?? [0, 0, 0];
+const text = (value: unknown): string => (typeof value === "string" ? value : "");
+
+/** The stable releases in a GitHub answer. Drafts, pre-releases and other tags are skipped. */
+export function parseReleases(body: unknown): Release[] {
+  if (!Array.isArray(body)) return [];
+  const releases: Release[] = [];
+  for (const item of body) {
+    if (!item || typeof item !== "object") continue;
+    const raw = item as Record<string, unknown>;
+    const tag = text(raw.tag_name);
+    const parsed = parseVersion(tag);
+    if (!parsed || raw.draft === true || raw.prerelease === true) continue;
+    releases.push({
+      version: parsed.join("."),
+      tag,
+      name: text(raw.name) || tag,
+      publishedAt: text(raw.published_at) || null,
+      body: text(raw.body).slice(0, MAX_BODY),
+      url: `https://github.com/zerodot-io/zerodot/releases/tag/${encodeURIComponent(tag)}`,
+    });
+  }
+  return releases;
 }
 
 type Options = {
@@ -44,46 +72,47 @@ type Options = {
 };
 
 /**
- * Asks GitHub for the newest release tag, at most once a day. It sends nothing about the
- * instance. An error or a timeout gives null, and the next try waits one hour.
+ * Asks GitHub for the releases, at most once an hour (with the ETag, so an unchanged list does
+ * not use the rate limit). It sends nothing about the instance. An error, a rate limit or a
+ * timeout keeps the last list, and the next try waits one hour.
  */
 export function createUpdateCheck(options: Options = {}) {
   const fetcher = options.fetcher ?? fetch;
   const now = options.now ?? Date.now;
   const enabled = options.enabled ?? (() => process.env.ZERODOT_UPDATE_CHECK !== "false");
-  let cached: { latest: string | null; until: number } | null = null;
+  let releases: Release[] = [];
+  let etag: string | null = null;
+  let until = 0;
 
-  async function latest(): Promise<string | null> {
-    if (cached && now() < cached.until) return cached.latest;
+  async function load(): Promise<Release[]> {
+    if (now() < until) return releases;
+    until = now() + CACHE_MS;
     try {
-      const response = await fetcher(TAGS_URL, {
-        headers: { accept: "application/vnd.github+json", "user-agent": "zerodot-update-check" },
+      const response = await fetcher(RELEASES_URL, {
+        headers: {
+          accept: "application/vnd.github+json",
+          "user-agent": "zerodot-update-check",
+          ...(etag ? { "if-none-match": etag } : {}),
+        },
         signal: AbortSignal.timeout(5000),
       });
+      if (response.status === 304) return releases;
       if (!response.ok) throw new Error(`GitHub answered ${response.status}`);
-      const body: unknown = await response.json();
-      const names = Array.isArray(body)
-        ? body.flatMap((item) =>
-            item &&
-            typeof item === "object" &&
-            typeof (item as { name?: unknown }).name === "string"
-              ? [(item as { name: string }).name]
-              : [],
-          )
-        : [];
-      const found = newestVersion(names);
-      cached = { latest: found, until: now() + (found ? FOUND_CACHE_MS : FAILED_CACHE_MS) };
+      releases = parseReleases(await response.json());
+      etag = response.headers.get("etag");
     } catch {
-      cached = { latest: null, until: now() + FAILED_CACHE_MS };
+      // offline or rate limited: no update, no error
     }
-    return cached.latest;
+    return releases;
   }
 
-  /** The newest version when it is newer than `current`. Otherwise null. */
-  return async function checkForUpdate(current: string): Promise<string | null> {
-    if (!enabled()) return null;
-    const found = await latest();
-    return found && isNewer(found, current) ? found : null;
+  /** The releases newer than `current`, newest first, at most 10. Empty when none. */
+  return async function checkForUpdate(current: string): Promise<Release[]> {
+    if (!enabled()) return [];
+    return (await load())
+      .filter((release) => isNewer(release.version, current))
+      .sort((a, b) => compare(parts(b), parts(a)))
+      .slice(0, MAX_RELEASES);
   };
 }
 

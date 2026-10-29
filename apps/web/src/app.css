@@ -39,3 +39,20 @@ body {
     animation: none;
   }
 }
+
+/* The dot of the update notice blinks. With reduced motion it stays steady. */
+@keyframes update-dot {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+.update-dot {
+  animation: update-dot 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .update-dot {
+    animation: none;
+  }
+}
