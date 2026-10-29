@@ -84,4 +84,3 @@ The `test` command needs a separate Postgres database. It deletes the data in th
 
 - [Reference](docs/reference/README.md): credentials, nodes, webhooks, API and MCP, scaling, operations.
 - [Deploy on a VPS](docs/deploy-vps.md)
-- [SPEC.md](SPEC.md)
