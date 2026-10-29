@@ -25,6 +25,7 @@ export function SystemHeader({
           <Link
             to="/p/$projectSlug/workflows"
             params={{ projectSlug: homeSlug }}
+            search={{ all: true }}
             className="text-muted-foreground transition-colors duration-150 ease-out hover:text-foreground"
           >
             Back to app
