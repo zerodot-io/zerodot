@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
+import type { ItemIcon } from "@zerodot/engine";
 import { cn } from "@zerodot/ui";
 import {
   ArrowUpDown,
@@ -120,7 +121,10 @@ const CHIP_COLOR: Record<string, string> = {
   integration: "text-indigo-700 dark:text-indigo-400",
 };
 
-/** `tile` is the large icon inside a canvas node. `chip` is the small icon in lists and headers. */
+/**
+ * `tile` is the large icon inside a canvas node. `chip` is the small icon in lists and headers.
+ * `inline` is a bare icon next to a label, for example an option of a select.
+ */
 export function NodeIcon({
   name,
   src,
@@ -132,7 +136,7 @@ export function NodeIcon({
   /** Image URL of the node. It replaces the icon `name`. */
   src?: string;
   category?: string;
-  variant?: "tile" | "chip";
+  variant?: "tile" | "chip" | "inline";
   className?: string;
 }) {
   const Icon = ICONS[name] ?? Circle;
@@ -144,11 +148,16 @@ export function NodeIcon({
         src={src}
         className={cn(
           "shrink-0 object-contain",
-          variant === "tile" ? "size-6" : "size-6 rounded-md p-0.5",
+          variant === "tile" && "size-6",
+          variant === "chip" && "size-6 rounded-md p-0.5",
+          variant === "inline" && "size-4 rounded-xs",
           className,
         )}
       />
     );
+  }
+  if (variant === "inline") {
+    return <Icon aria-hidden className={cn("size-4 shrink-0", className)} strokeWidth={1.75} />;
   }
   if (variant === "tile") {
     return (
@@ -171,4 +180,10 @@ export function NodeIcon({
       <Icon className="size-3.5" strokeWidth={1.75} />
     </span>
   );
+}
+
+/** The icon of an option or other labelled item. It renders nothing when the item has no icon. */
+export function ItemIconView({ icon }: { icon?: ItemIcon }) {
+  if (!icon?.icon && !icon?.iconUrl) return null;
+  return <NodeIcon variant="inline" name={icon.icon ?? ""} src={icon.iconUrl} />;
 }

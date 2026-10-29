@@ -19,6 +19,7 @@ import {
 import { ChevronDown, ChevronRight, Plus, X } from "lucide-react";
 import { useState } from "react";
 import { ExpressionInput } from "./expression-input";
+import { ItemIconView } from "./node-icon";
 
 type Obj = Record<string, unknown>;
 const isObj = (value: unknown): value is Obj =>
@@ -101,11 +102,22 @@ function Leaf({
             }
           >
             <SelectTrigger>
-              <SelectValue />
+              <SelectValue>
+                {(picked: string | null) => {
+                  const o = options.find((x) => String(x.value) === picked);
+                  return (
+                    <>
+                      <ItemIconView icon={o} />
+                      {o?.label ?? picked}
+                    </>
+                  );
+                }}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               {options.map((o) => (
                 <SelectItem key={String(o.value)} value={String(o.value)}>
+                  <ItemIconView icon={o} />
                   {o.label}
                 </SelectItem>
               ))}
