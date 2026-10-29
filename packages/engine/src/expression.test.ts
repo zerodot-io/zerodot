@@ -30,6 +30,31 @@ describe("expressions", () => {
     assert.equal(evaluateExpression("!false", scope), true);
   });
 
+  it("converts types with toString, toNumber and toBoolean", () => {
+    assert.equal(evaluateExpression("$trigger.body.id.toString()", scope), "7");
+    assert.equal(evaluateExpression("$trigger.body.tags.toString()", scope), '["a","b"]');
+    assert.equal(evaluateExpression('"42".toNumber()', scope), 42);
+    assert.equal(evaluateExpression('" 1.5 ".toNumber() + 1', scope), 2.5);
+    assert.equal(evaluateExpression("true.toNumber()", scope), 1);
+    assert.equal(evaluateExpression("$trigger.body.id.toBoolean()", scope), true);
+    assert.equal(evaluateExpression("0.toBoolean()", scope), false);
+    assert.equal(evaluateExpression('"No".toBoolean()', scope), false);
+    assert.equal(evaluateExpression('"false".toBoolean()', scope), false);
+    assert.equal(evaluateExpression('"yes".toBoolean()', scope), true);
+    assert.throws(() => evaluateExpression('"abc".toNumber()', scope), ExpressionError);
+    assert.throws(() => evaluateExpression('"".toNumber()', scope), ExpressionError);
+    assert.throws(() => evaluateExpression("null.toBoolean()", scope), ExpressionError);
+    assert.throws(
+      () => evaluateExpression("$trigger.body.id.toUpperCase()", scope),
+      ExpressionError,
+    );
+  });
+
+  it("keeps the number type of a single expression, and makes text with toString", () => {
+    assert.equal(resolveTemplate("{{ $trigger.body.id }}", scope), 7);
+    assert.equal(resolveTemplate("{{ $trigger.body.id.toString() }}", scope), "7");
+  });
+
   it("supports includes and length", () => {
     assert.equal(evaluateExpression('$trigger.body.tags.includes("b")', scope), true);
     assert.equal(evaluateExpression('$trigger.body.tags.includes("z")', scope), false);

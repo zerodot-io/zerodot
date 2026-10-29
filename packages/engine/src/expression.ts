@@ -3,7 +3,8 @@
 /**
  * Small safe expression evaluator. No eval, no new Function, no function calls.
  * Syntax: literals, paths (a.b, a["b"], a[0]), unary ! and -, arithmetic,
- * comparison, && || ??, the ternary operator, and `.includes(value)` on lists and text.
+ * comparison, && || ??, the ternary operator, `.includes(value)` on lists and text, and the
+ * type helpers `.toString()`, `.toNumber()` and `.toBoolean()`.
  */
 
 export class ExpressionError extends Error {
@@ -94,9 +95,13 @@ type Node =
   | { type: "id"; name: string }
   | { type: "member"; object: Node; key: Node; label: string }
   | { type: "includes"; object: Node; arg: Node }
+  | { type: "convert"; object: Node; to: Conversion }
   | { type: "unary"; op: string; arg: Node }
   | { type: "binary"; op: string; left: Node; right: Node }
   | { type: "cond"; test: Node; yes: Node; no: Node };
+
+const CONVERSIONS = ["toString", "toNumber", "toBoolean"] as const;
+type Conversion = (typeof CONVERSIONS)[number];
 
 const BINARY_PRECEDENCE: Record<string, number> = {
   "??": 1,
@@ -206,13 +211,23 @@ class Parser {
           label: key.type === "lit" ? String(key.value) : "[…]",
         };
       } else if (this.isOp("(")) {
-        if (node.type !== "member" || node.label !== "includes" || node.key.type !== "lit") {
+        if (node.type !== "member" || node.key.type !== "lit") {
           throw new ExpressionError("Function calls are not allowed. Use a code node.");
         }
-        this.pos++;
-        const arg = this.ternary();
-        this.expectOp(")");
-        node = { type: "includes", object: node.object, arg };
+        const { label } = node;
+        const conversion = CONVERSIONS.find((name) => name === label);
+        if (conversion) {
+          this.pos++;
+          this.expectOp(")");
+          node = { type: "convert", object: node.object, to: conversion };
+        } else if (label === "includes") {
+          this.pos++;
+          const arg = this.ternary();
+          this.expectOp(")");
+          node = { type: "includes", object: node.object, arg };
+        } else {
+          throw new ExpressionError("Function calls are not allowed. Use a code node.");
+        }
       } else {
         return node;
       }
@@ -358,6 +373,8 @@ function evaluate(node: Node, scope: Record<string, unknown>, path: string): unk
       if (typeof object === "string") return typeof arg === "string" && object.includes(arg);
       throw new ExpressionError('"includes" needs a list or text', path);
     }
+    case "convert":
+      return convert(evaluate(node.object, scope, path), node.to, path);
     case "unary": {
       const value = evaluate(node.arg, scope, path);
       return node.op === "!" ? !value : -numeric(value, "-");
@@ -414,6 +431,33 @@ function evaluate(node: Node, scope: Record<string, unknown>, path: string): unk
       }
     }
   }
+}
+
+const FALSE_TEXT = new Set(["0", "false", "no"]);
+
+/** `.toString()`, `.toNumber()` and `.toBoolean()`. A value that cannot convert is an error. */
+function convert(value: unknown, to: Conversion, path: string): unknown {
+  if (to === "toString") return stringify(value);
+  if (to === "toNumber") {
+    if (typeof value === "number") return value;
+    if (typeof value === "boolean") return value ? 1 : 0;
+    const number = typeof value === "string" && value.trim() !== "" ? Number(value) : Number.NaN;
+    if (Number.isNaN(number)) {
+      throw new ExpressionError(
+        `Cannot turn ${JSON.stringify(value) ?? "undefined"} into a number`,
+        path,
+      );
+    }
+    return number;
+  }
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value !== 0;
+  // "0", "false" and "no" are false in any letter case. Other text is true.
+  if (typeof value === "string") return !FALSE_TEXT.has(value.trim().toLowerCase());
+  throw new ExpressionError(
+    `Cannot turn ${JSON.stringify(value) ?? "undefined"} into true or false`,
+    path,
+  );
 }
 
 function stringify(value: unknown): string {
