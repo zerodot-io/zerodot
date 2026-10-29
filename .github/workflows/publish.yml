@@ -48,9 +48,23 @@ jobs:
     needs: image
     permissions:
       contents: write
+    env:
+      DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
     steps:
       - uses: actions/checkout@v4
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release create "$GITHUB_REF_NAME" --generate-notes --verify-tag --title "$GITHUB_REF_NAME"
+      - name: Announce on Discord
+        if: env.DISCORD_WEBHOOK_URL != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          body=$(gh release view "$GITHUB_REF_NAME" --json body --jq .body | head -c 3500)
+          jq -n \
+            --arg title "zerodot $GITHUB_REF_NAME" \
+            --arg url "https://github.com/$GITHUB_REPOSITORY/releases/tag/$GITHUB_REF_NAME" \
+            --arg body "$body" \
+            '{embeds: [{title: $title, url: $url, description: $body, color: 16742656}]}' \
+            | curl -fsS -H "Content-Type: application/json" -d @- "$DISCORD_WEBHOOK_URL"
