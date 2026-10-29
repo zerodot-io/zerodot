@@ -11,9 +11,9 @@ The System page shows the queues, the workers and the counters of the whole serv
 
 ## Update notice
 
-The instance admin sees a toast when a new version is out, one time for each version. The About dialog keeps a link to the release.
+The instance admin sees a small blinking orange dot in the bottom-right corner while a newer version exists. It stays until the app is updated. A click on the dot shows a toast, and **View** opens a window with the release notes.
 
-- **How it works:** the web app asks the GitHub tags API for the newest `vX.Y.Z` tag, at most once a day. A failed request waits one hour. The request has no cookie and no data about your instance. GitHub sees the IP address of the server.
+- **How it works:** the web app asks the GitHub releases API, at most once an hour, and keeps the ETag. It ignores drafts and pre-releases. A failed or rate-limited request gives no update and waits one hour. The request has no cookie and no data about your instance. GitHub sees the IP address of the server.
 - **Turn it off:** `ZERODOT_UPDATE_CHECK=false` in the web app. Then Zerodot makes no call to GitHub.
 - **Who sees it:** the instance admin only. Other users see nothing.
 
