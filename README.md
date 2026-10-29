@@ -4,6 +4,8 @@
 
 Minimal, self-hosted workflow automation. AGPL-3.0-only. No telemetry. You own your workflow files.
 
+![The zerodot workflow editor](assets/mock.png)
+
 ## Quickstart
 
 ```sh
