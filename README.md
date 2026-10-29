@@ -88,6 +88,14 @@ The `test` command needs a separate Postgres database. It deletes the data in th
 - **A Code node cannot run.** The worker needs `SANDBOX_URL` (`http://localhost:3002` in `.env.example`) and the sandbox must run. `pnpm run dev` starts it.
 - **Nothing is saved.** Check that the dev server runs. The editor saves to the server, and a stopped server cannot save.
 
+## Contribute and support
+
+Zerodot is owned and maintained by [7 Angle](https://7angle.com).
+
+- To send a pull request, sign the [CLA](CLA.md). Read [CONTRIBUTING.md](CONTRIBUTING.md).
+- Free support: [GitHub issues](https://github.com/zerodot-io/zerodot/issues).
+- Paid support: private Discord and priority help. Read [SUPPORT.md](SUPPORT.md).
+
 ## More
 
 - [Reference](docs/reference/README.md): credentials, nodes, webhooks, API and MCP, scaling, operations.
