@@ -10,4 +10,18 @@ A node package depends on this package as a peer dependency and declares the con
 
 zerodot checks the range before it runs any package code. See [nodes](https://github.com/zerodot-io/nodes) for examples.
 
+## Option icons
+
+An option of a select can show an icon. Both fields are optional. `iconUrl` (a data URL, see `fileIcon`) wins over `icon` (a Lucide name in PascalCase).
+
+```ts
+// A nested field (FieldSpec)
+options: [{ value: "get", label: "Get", hint: "Read a row", icon: "Download" }];
+
+// A select in the config schema, by value, like `hints`
+z.enum(["get", "put"]).meta({ icons: { get: { icon: "Download" }, put: { iconUrl } } });
+```
+
+The type is `ItemIcon`: `{ icon?: string; iconUrl?: string }`.
+
 MIT license.

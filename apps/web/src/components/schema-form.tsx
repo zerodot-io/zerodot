@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { type FieldSpec, isVisible, type ShowRules } from "@zerodot/engine";
+import { type FieldSpec, type ItemIcon, isVisible, type ShowRules } from "@zerodot/engine";
 import {
   Button,
   DropdownMenu,
@@ -25,6 +25,7 @@ import { CodeEditor } from "./code-editor";
 import { CronField } from "./cron-field";
 import { ExpressionInput } from "./expression-input";
 import { ConditionsEditor, FieldCollectionEditor } from "./field-collection";
+import { ItemIconView } from "./node-icon";
 import { TimezoneSelect } from "./timezone-select";
 import {
   ConditionEditor,
@@ -62,6 +63,8 @@ type JsonSchema = {
   labels?: Record<string, string>;
   /** A line under each enum value in a select or multi select. */
   hints?: Record<string, string>;
+  /** An icon for each enum value, by value. Shows before the text in a select or multi select. */
+  icons?: Record<string, ItemIcon>;
   /** Shows under "Options", after the user adds it, like the options of a node. */
   option?: boolean;
   /** `table-column`: which columns of the picked table to offer. */
@@ -348,6 +351,7 @@ export function SchemaForm({
                 key={name}
                 className="flex items-center gap-1.5 rounded-md bg-secondary px-2 py-0.5"
               >
+                <ItemIconView icon={prop.icons?.[name]} />
                 {prop.labels?.[name] ?? name}
                 <X
                   className="size-3"
@@ -368,6 +372,7 @@ export function SchemaForm({
                 closeOnClick={false}
                 onCheckedChange={() => toggle(name)}
               >
+                <ItemIconView icon={prop.icons?.[name]} />
                 <span className="flex flex-col gap-0.5 py-0.5">
                   <span className={prop.hints?.[name] ? "font-medium" : undefined}>
                     {prop.labels?.[name] ?? name}
@@ -424,11 +429,21 @@ export function SchemaForm({
           onValueChange={(v) => set(key, v)}
         >
           <SelectTrigger id={id}>
-            <SelectValue />
+            <SelectValue>
+              {(picked: string | null) =>
+                options.some((option) => String(option) === picked) && (
+                  <>
+                    <ItemIconView icon={prop.icons?.[String(picked)]} />
+                    {label(picked)}
+                  </>
+                )
+              }
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             {options.map((option) => (
               <SelectItem key={String(option)} value={String(option)}>
+                <ItemIconView icon={prop.icons?.[String(option)]} />
                 <span className="flex flex-col gap-0.5 py-0.5">
                   <span className={prop.hints?.[String(option)] ? "font-medium" : undefined}>
                     {label(option)}
