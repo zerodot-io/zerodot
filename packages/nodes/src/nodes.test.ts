@@ -161,6 +161,19 @@ describe("http.request", () => {
     assert.equal((off[1].headers as Headers).get("x-k"), null);
   });
 
+  it("turns number and boolean query and header values into strings", () => {
+    const parsed = node("http.request").config.parse({
+      method: "GET",
+      url: "https://api.example.com/x",
+      sendQuery: true,
+      query: { chat_id: 12345, silent: true },
+      sendHeaders: true,
+      headers: { "x-n": 7 },
+    }) as { query: Record<string, string>; headers: Record<string, string> };
+    assert.deepEqual(parsed.query, { chat_id: "12345", silent: "true" });
+    assert.deepEqual(parsed.headers, { "x-n": "7" });
+  });
+
   it("fails on error status without fullResponse", async () => {
     mock.method(globalThis, "fetch", async () => new Response("nope", { status: 404 }));
     await assert.rejects(
