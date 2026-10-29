@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-import { resolveTemplate } from "@zerodot/engine";
+import { credentialRefsUsed, resolveTemplate } from "@zerodot/engine";
 import {
   Button,
   cn,
@@ -32,10 +32,19 @@ type Suggestion = { label: string; insert: string; hint: string };
 const ROOTS: Suggestion[] = [
   { label: "$input", insert: "$input", hint: "output of the previous node" },
   { label: "$vars.", insert: "$vars.", hint: "project variable" },
+  { label: "$credentials[", insert: '$credentials["', hint: "credential field, value hidden" },
   { label: "$run.id", insert: "$run.id", hint: "run id" },
   { label: "$run.startedAt", insert: "$run.startedAt", hint: "run start time" },
   { label: "$resumeUrl[", insert: '$resumeUrl["', hint: "resume address of a Wait node" },
 ];
+
+function previewCredentials(text: string): Record<string, Record<string, string>> {
+  const out: Record<string, Record<string, string>> = {};
+  for (const { name, field } of credentialRefsUsed(text).refs) {
+    out[name] = { ...out[name], [field]: "••••••" };
+  }
+  return out;
+}
 
 type Props = {
   id?: string;
@@ -285,6 +294,8 @@ export function ExpressionInput({
         $node: Object.fromEntries(Object.entries(outputs).map(([name, data]) => [name, { data }])),
         $run: { id: "run_preview", startedAt: new Date().toISOString() },
         $resumeUrl: {},
+        // The browser never gets a real credential value.
+        $credentials: previewCredentials(value),
       });
       const text =
         typeof resolved === "string" ? resolved : (JSON.stringify(resolved) ?? "undefined");

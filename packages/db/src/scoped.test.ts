@@ -293,6 +293,18 @@ describe("forOrganization", { skip: !url }, () => {
       ["uses cred"],
     );
 
+    // A config that reads a field by name is found too.
+    const byName = await a.workflows.create({ name: "reads field" });
+    await a.workflows.saveDraft(byName.id, {
+      schema: 1,
+      nodes: [{ id: "n", config: { url: 'x/{{ $credentials["API"].password }}' } }],
+      edges: [],
+    });
+    assert.deepEqual(
+      (await a.credentials.usedBy(created.id)).map((w) => w.name),
+      ["reads field", "uses cred"],
+    );
+
     // Rotation: the new key opens it, the old key does not.
     const newKey = randomBytes(32);
     assert.equal(await rotateSecretKey(db, key, newKey), 1);

@@ -734,6 +734,84 @@ describe("executeGraph", () => {
     assert.equal(failed?.error?.message, "The server said no to Bearer ***");
   });
 
+  describe("$credentials", () => {
+    const opened = async (ref: string) =>
+      ref === "Bot" ? { type: "test.token", data: { token: "123:abc-secret", user: "me" } } : null;
+    const graphOf = (value: string): Graph => ({
+      schema: 1,
+      nodes: [node("t", "trigger.test"), node("e", "test.echo", { value })],
+      edges: [edge("t", "e")],
+    });
+
+    it("puts a credential field in the config, and hides it in the output", async () => {
+      const { result, events } = run(
+        graphOf('https://x.test/bot{{ $credentials["Bot"].token }}/go'),
+        {
+          credentials: opened,
+        },
+      );
+      assert.equal((await result).status, "succeeded");
+      assert.equal(events.find((e) => e.node.id === "e")?.output, "https://x.test/bot***/go");
+    });
+
+    it("hides the percent-encoded secret", async () => {
+      const { result, events } = run(graphOf('{{ $credentials["Bot"].token }}'), {
+        credentials: async () => ({ type: "test.token", data: { token: "a b&c-secret" } }),
+      });
+      await result;
+      assert.equal(events.find((e) => e.node.id === "e")?.output, "***");
+    });
+
+    it("fails for a credential or a field that does not exist", async () => {
+      const missing = await run(graphOf('{{ $credentials["Nope"].token }}'), {
+        credentials: opened,
+      }).result;
+      assert.match(String(missing.error?.message), /The credential "Nope" does not exist/);
+      const field = await run(graphOf('{{ $credentials["Bot"].tokn }}'), { credentials: opened })
+        .result;
+      assert.match(String(field.error?.message), /does not exist/);
+    });
+
+    it("does not accept a name from an expression, or the whole credential", async () => {
+      for (const value of [
+        "{{ $credentials[$input.name].token }}",
+        "{{ $credentials }}",
+        '{{ $credentials["Bot"] }}',
+      ]) {
+        const outcome = await run(graphOf(value), { credentials: opened }).result;
+        assert.match(String(outcome.error?.message), /Write a credential field as/);
+      }
+    });
+
+    it("does not give it to raw config or to the run scope", async () => {
+      const graph: Graph = {
+        schema: 1,
+        nodes: [
+          node("t", "trigger.test"),
+          node("r", "test.raw", { code: '$credentials["Bot"].token', note: "" }),
+        ],
+        edges: [edge("t", "r")],
+      };
+      const { result, events } = run(graph, { credentials: opened });
+      await result;
+      const out = events.find((e) => e.node.id === "r")?.output as { scopeKeys: string[] };
+      assert.ok(!out.scopeKeys.includes("$credentials"));
+    });
+
+    it("hides the secret in logs and in an error", async () => {
+      const graph: Graph = {
+        schema: 1,
+        nodes: [
+          node("t", "trigger.test"),
+          node("k", "test.echo", { value: '{{ $credentials["Bot"].token }}{{ $input.nope.x }}' }),
+        ],
+        edges: [edge("t", "k")],
+      };
+      const outcome = await run(graph, { credentials: opened }).result;
+      assert.ok(!String(outcome.error?.message).includes("123:abc-secret"));
+    });
+  });
+
   it("reads variables, and fails on a missing one", async () => {
     const graph: Graph = {
       schema: 1,
