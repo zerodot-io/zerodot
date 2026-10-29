@@ -11,10 +11,10 @@ The System page shows the queues, the workers and the counters of the whole serv
 
 ## Feedback widget
 
-The web app can show the FeedbackJar feedback widget. It is off by default.
+The web app shows a feedback widget. A user can send a feature request to the Zerodot board on FeedbackJar.
 
-- **Turn it on:** set `ZERODOT_FEEDBACK_WIDGET_ID` to your widget id in the web app. The browser then loads `https://cdn.feedbackjar.com/sdk.js` and the widget sends feedback to FeedbackJar.
-- **Off:** with no id, the browser loads nothing from FeedbackJar.
+- **What loads:** the browser of each user loads `https://cdn.feedbackjar.com/sdk.js`. FeedbackJar sees what the widget sends and the usual request data of the browser. Zerodot sends no workflow data or credentials to it.
+- **Turn it off:** `ZERODOT_FEEDBACK_WIDGET=false` in the web app. Then the browser loads nothing from FeedbackJar.
 
 ## Retention
 
