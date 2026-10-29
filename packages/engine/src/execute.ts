@@ -599,6 +599,17 @@ export async function executeGraph(options: ExecuteOptions): Promise<ExecuteResu
           for (const text of configTexts(value)) {
             const found = credentialRefsUsed(text);
             if (found.invalid) {
+              // A credential with no field: name the fields it has. Names only, no values.
+              const bare = /\$credentials\[\s*(?:"([^"]+)"|'([^']+)')\s*\](?!\s*(?:\.|\[))/.exec(
+                text,
+              );
+              const bareName = bare?.[1] ?? bare?.[2];
+              const opened = bareName ? await options.credentials?.(bareName, "idOrName") : null;
+              if (bareName && opened) {
+                throw new Error(
+                  `Add a field to $credentials["${bareName}"]. Fields: ${Object.keys(opened.data).join(", ")}`,
+                );
+              }
               throw new Error(
                 'Write a credential field as $credentials["name"].field. The name must be text, not an expression',
               );

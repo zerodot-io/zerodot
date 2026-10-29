@@ -772,15 +772,20 @@ describe("executeGraph", () => {
       assert.match(String(field.error?.message), /does not exist/);
     });
 
-    it("does not accept a name from an expression, or the whole credential", async () => {
-      for (const value of [
-        "{{ $credentials[$input.name].token }}",
-        "{{ $credentials }}",
-        '{{ $credentials["Bot"] }}',
-      ]) {
+    it("does not accept a name from an expression, or a bare $credentials", async () => {
+      for (const value of ["{{ $credentials[$input.name].token }}", "{{ $credentials }}"]) {
         const outcome = await run(graphOf(value), { credentials: opened }).result;
         assert.match(String(outcome.error?.message), /Write a credential field as/);
       }
+    });
+
+    it("names the fields when a credential has no field", async () => {
+      const outcome = await run(graphOf('{{ $credentials["Bot"] }}'), { credentials: opened })
+        .result;
+      assert.equal(
+        outcome.error?.message,
+        'Add a field to $credentials["Bot"]. Fields: token, user',
+      );
     });
 
     it("does not give it to raw config or to the run scope", async () => {

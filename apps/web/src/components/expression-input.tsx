@@ -288,6 +288,9 @@ export function ExpressionInput({
   let result: { ok: true; text: string } | { ok: false; text: string } | undefined;
   if (expression && focused) {
     try {
+      if (credentialRefsUsed(value).invalid) {
+        throw new Error('Write a credential field as $credentials["name"].field');
+      }
       const resolved = resolveTemplate(value, {
         $input: inputData,
         $vars: Object.fromEntries(variables.map((v) => [v.key, v.preview])),
