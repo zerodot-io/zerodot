@@ -2,6 +2,7 @@
 
 import {
   createFileRoute,
+  getRouteApi,
   Link,
   Outlet,
   redirect,
@@ -38,12 +39,15 @@ import {
   Table2,
   Workflow,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AboutDialog } from "../components/about-dialog";
 import { CommandPalette, type PaletteAction } from "../components/command-palette";
-import { setFeedbackUser } from "../components/feedback-widget";
+import { FeedbackWidget, openFeedback, setFeedbackUser } from "../components/feedback-widget";
 import { ProjectDialog } from "../components/project-dialog";
 import { getIsInstanceAdmin, getProjectFn } from "../server/fns";
+
+/** The root route has the feedback widget settings. */
+const rootRoute = getRouteApi("__root__");
 
 export const Route = createFileRoute("/p/$projectSlug")({
   beforeLoad: async ({ params }) => {
@@ -92,6 +96,8 @@ function ProjectLayout() {
   const [animate, setAnimate] = useState(false);
   const [instanceAdmin, setInstanceAdmin] = useState(false);
   const slug = project.slug;
+  const { widgetId, system } = rootRoute.useLoaderData();
+  const feedbackProperties = useMemo(() => ({ version: __APP_VERSION__, system }), [system]);
 
   // Once per layout mount. The layout stays mounted while you move between pages.
   useEffect(() => {
@@ -265,6 +271,9 @@ function ProjectLayout() {
                 </DropdownMenuItem>
               </DropdownMenuGroup>
               <DropdownMenuSeparator />
+              {widgetId && (
+                <DropdownMenuItem onClick={openFeedback}>Send feedback</DropdownMenuItem>
+              )}
               {instanceAdmin && (
                 <DropdownMenuItem onClick={() => navigate({ to: "/system" })}>
                   System
@@ -288,6 +297,7 @@ function ProjectLayout() {
         </nav>
       </div>
       <CommandPalette slug={slug} actions={paletteActions} />
+      <FeedbackWidget widgetId={widgetId} properties={feedbackProperties} />
       {about && <AboutDialog project={project.name} onClose={() => setAbout(false)} />}
       {newProject && (
         <ProjectDialog

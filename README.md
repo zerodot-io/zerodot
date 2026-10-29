@@ -17,7 +17,7 @@ open http://localhost:3000
 
 To build the images yourself, run `docker compose up -d --build`.
 
-The web app shows a feedback widget (FeedbackJar), so users can send feature requests. A feedback includes the name and email of the user, the Zerodot version, and the system of the server. Set `ZERODOT_FEEDBACK_WIDGET=false` to turn the widget off.
+The web app has a feedback widget (FeedbackJar). Signed-in users open it from **Send feedback** in the Account menu, to send feature requests. A feedback includes the name and email of the user, the Zerodot version, and the system of the server. Set `ZERODOT_FEEDBACK_WIDGET=false` to turn the widget off.
 
 To run Zerodot on a VPS with a domain and HTTPS, see [docs/deploy-vps.md](docs/deploy-vps.md).
 

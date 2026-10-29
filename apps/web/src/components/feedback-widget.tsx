@@ -28,7 +28,15 @@ export function setFeedbackUser(next: FeedbackUser | null, nextRole: string | nu
   apply();
 }
 
-/** Loads the FeedbackJar widget once. `properties` (version, system) go with each feedback. */
+/** Opens the feedback panel. */
+export function openFeedback() {
+  window.fj?.showWidget();
+}
+
+/**
+ * Loads the FeedbackJar widget while it is on the page, and removes it when it leaves.
+ * `properties` (version, system) go with each feedback.
+ */
 export function FeedbackWidget({
   widgetId,
   properties,
@@ -40,12 +48,13 @@ export function FeedbackWidget({
     if (!widgetId) return;
     base = properties;
     const start = () => {
-      window.fj?.init(widgetId);
+      // "custom": no floating button. The Account menu opens the panel.
+      window.fj?.init(widgetId, { trigger: "custom" });
       apply();
     };
     if (window.fj) {
       start();
-      return;
+      return () => window.fj?.destroy();
     }
     let script = document.querySelector<HTMLScriptElement>(`script[src="${SDK_URL}"]`);
     if (!script) {
@@ -55,6 +64,10 @@ export function FeedbackWidget({
       document.body.appendChild(script);
     }
     script.addEventListener("load", start, { once: true });
+    return () => {
+      script.removeEventListener("load", start);
+      window.fj?.destroy();
+    };
   }, [widgetId, properties]);
   return null;
 }
