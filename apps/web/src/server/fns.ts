@@ -731,6 +731,23 @@ export const getIsInstanceAdmin = createServerFn({ method: "GET" }).handler(asyn
   return isInstanceAdmin({ id: session.user.id, email: session.user.email });
 });
 
+const updateServer = createServerOnlyFn(() => import("@zerodot/server/update-check.server"));
+
+/** The newest release when it is newer than this one. Only an instance admin gets an answer. */
+export const getUpdateFn = createServerFn({ method: "GET" })
+  .validator(z.object({ current: z.string().max(40) }))
+  .handler(async ({ data }) => {
+    const { requireSession } = await import("./session.server");
+    const { session } = await requireSession();
+    if (!session) return { latest: null };
+    const { isInstanceAdmin } = await adminServer();
+    if (!(await isInstanceAdmin({ id: session.user.id, email: session.user.email }))) {
+      return { latest: null };
+    }
+    const { checkForUpdate } = await updateServer();
+    return { latest: await checkForUpdate(data.current) };
+  });
+
 export const getAdminOverview = createServerFn({ method: "GET" }).handler(async () => {
   const { adminOverview } = await adminServer();
   return asJson(await adminOverview(await adminHeaders()));
