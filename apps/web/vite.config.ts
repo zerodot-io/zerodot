@@ -51,10 +51,10 @@ const browserServerOnly: Plugin = {
   },
 };
 
-// The About dialog shows the version.
-const appVersion = String(
-  JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8")).version,
-);
+// The About dialog shows the version. The image build sets APP_VERSION from the release tag.
+const appVersion =
+  process.env.APP_VERSION ||
+  String(JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8")).version);
 
 // The API app serves these paths. In dev, Vite sends them there so the browser keeps one origin.
 // In production a reverse proxy does the same (see Caddyfile).

@@ -34,6 +34,9 @@ RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
     --mount=type=cache,target=/root/.cache/node-gyp \
     pnpm install --frozen-lockfile
 COPY . .
+# The release workflow sets this. The About dialog shows it.
+ARG APP_VERSION
+ENV APP_VERSION=$APP_VERSION
 RUN pnpm run build
 
 FROM base AS web
