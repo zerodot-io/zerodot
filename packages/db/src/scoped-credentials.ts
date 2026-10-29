@@ -20,6 +20,8 @@ export type CredentialSummary = {
 export type CredentialListItem = CredentialSummary & {
   /** True when the data has an OAuth2 access token. The token itself never leaves the server. */
   connected: boolean;
+  /** The field names of the data, for example `token`. Never the values. */
+  fields: string[];
 };
 
 const hasAccessToken = (data: unknown): boolean =>
@@ -70,10 +72,14 @@ export function credentials(db: Db, organizationId: string, secretKey: Buffer | 
         .from(credential)
         .where(eq(credential.organizationId, organizationId))
         .orderBy(asc(credential.name));
-      return rows.map(({ dataEncrypted, ...row }) => ({
-        ...row,
-        connected: hasAccessToken(open(key(), dataEncrypted, organizationId)),
-      }));
+      return rows.map(({ dataEncrypted, ...row }) => {
+        const data = open(key(), dataEncrypted, organizationId);
+        const fields =
+          typeof data === "object" && data !== null && !Array.isArray(data)
+            ? Object.keys(data).sort()
+            : [];
+        return { ...row, connected: hasAccessToken(data), fields };
+      });
     },
 
     async create(input: {

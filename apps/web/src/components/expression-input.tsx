@@ -18,6 +18,11 @@ export type VariableHint = { key: string; preview: string };
 /** The project variables. The fields use them to suggest names after "$vars.". */
 export const VariablesContext = createContext<VariableHint[]>([]);
 
+export type CredentialHint = { name: string; type: string; fields: string[] };
+
+/** The project credentials, names and field names only. The fields suggest `$credentials[...]`. */
+export const CredentialsContext = createContext<CredentialHint[]>([]);
+
 /** The node names of the workflow. The fields suggest `$node["Name"].data` for them. */
 export const NodeNamesContext = createContext<string[]>([]);
 
@@ -58,6 +63,8 @@ type Props = {
 };
 
 const TRIGGER = /\$vars\.([A-Za-z0-9_]*)$/;
+const CREDENTIAL_NAME = /\$credentials\[\s*"([^"]*)$/;
+const CREDENTIAL_FIELD = /\$credentials\[\s*"([^"]+)"\]\.([A-Za-z0-9_-]*)$/;
 const PATH =
   /(\$input|\$node\[("(?:[^"\\]|\\.)*")\]\.data)((?:\.[A-Za-z0-9_]+)*)\.([A-Za-z0-9_]*)$/;
 const ROOT = /\$([A-Za-z0-9_]*)$/;
@@ -91,6 +98,7 @@ export function ExpressionInput({
   expandable = true,
 }: Props) {
   const variables = useContext(VariablesContext);
+  const credentials = useContext(CredentialsContext);
   const nodeNames = useContext(NodeNamesContext);
   const outputs = useContext(NodeOutputsContext);
   const inputData = useContext(InputDataContext);
@@ -126,6 +134,8 @@ export function ExpressionInput({
   const varPrefix = TRIGGER.exec(before)?.[1];
   const rootPrefix = ROOT.exec(before)?.[0];
   const path = PATH.exec(before);
+  const credentialName = CREDENTIAL_NAME.exec(before);
+  const credentialField = CREDENTIAL_FIELD.exec(before);
   let matches: Suggestion[] = [];
   let typed = "";
   if (!dismissed && insideExpression(before)) {
@@ -155,6 +165,19 @@ export function ExpressionInput({
           insert: key,
           hint: previewOf((target as Record<string, unknown>)[key]),
         }));
+    } else if (credentialField) {
+      const [, name = "", partial = ""] = credentialField;
+      typed = partial;
+      matches = (credentials.find((c) => c.name === name)?.fields ?? [])
+        .filter((field) => field.startsWith(partial) && field !== partial)
+        .map((field) => ({ label: field, insert: field, hint: "field, value hidden" }));
+    } else if (credentialName) {
+      const partial = credentialName[1] ?? "";
+      typed = partial;
+      // Accept a name: close the quote and the bracket, then the field list opens.
+      matches = credentials
+        .filter((c) => c.name.startsWith(partial) && !c.name.includes('"'))
+        .map((c) => ({ label: c.name, insert: `${c.name}"].`, hint: c.type }));
     } else if (varPrefix !== undefined) {
       typed = varPrefix;
       matches = variables

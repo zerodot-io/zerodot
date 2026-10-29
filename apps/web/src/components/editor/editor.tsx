@@ -93,6 +93,7 @@ import {
 } from "../../server/fns";
 import type { SavedCredential } from "../credential-dialog";
 import {
+  CredentialsContext,
   InputDataContext,
   NodeNamesContext,
   NodeOutputsContext,
@@ -1151,781 +1152,800 @@ export function Editor({
     }
     return known;
   }, [nodes, ios]);
+  const credentialHints = useMemo(
+    () => credentials.map((c) => ({ name: c.name, type: c.type, fields: c.fields ?? [] })),
+    [credentials],
+  );
   const selectedIo = selected ? { ...ios[selected.id], input: inputFor(selected) } : undefined;
   const webhookUrl = workflow.triggers.find((t) => t.nodeId === selected?.id && t.url)?.url ?? null;
 
   return (
     <VariablesContext.Provider value={variables}>
-      <NodeNamesContext.Provider value={nodeNames}>
-        <NodeOutputsContext.Provider value={nodeOutputs}>
-          <InputDataContext.Provider value={selected ? inputFor(selected) : undefined}>
-            <div className="flex h-svh min-w-0 flex-col overflow-hidden">
-              <div className="flex items-center gap-1.5 border-b px-4 py-2">
-                <Link
-                  to="/p/$projectSlug/workflows"
-                  params={{ projectSlug }}
-                  search={{ all: true }}
-                  className="rounded-md px-1.5 py-0.5 text-muted-foreground transition-colors duration-150 ease-out hover:text-foreground"
-                >
-                  Workflows
-                </Link>
-                <ChevronRight aria-hidden="true" className="size-3.5 text-muted-foreground/60" />
-                {renaming === null ? (
-                  <button
-                    type="button"
-                    aria-label="Rename workflow"
-                    title="Rename"
-                    onClick={() => setRenaming(name)}
-                    className="max-w-64 cursor-text truncate rounded-md px-1.5 py-0.5 font-semibold transition-colors duration-150 ease-out hover:bg-muted"
+      <CredentialsContext.Provider value={credentialHints}>
+        <NodeNamesContext.Provider value={nodeNames}>
+          <NodeOutputsContext.Provider value={nodeOutputs}>
+            <InputDataContext.Provider value={selected ? inputFor(selected) : undefined}>
+              <div className="flex h-svh min-w-0 flex-col overflow-hidden">
+                <div className="flex items-center gap-1.5 border-b px-4 py-2">
+                  <Link
+                    to="/p/$projectSlug/workflows"
+                    params={{ projectSlug }}
+                    search={{ all: true }}
+                    className="rounded-md px-1.5 py-0.5 text-muted-foreground transition-colors duration-150 ease-out hover:text-foreground"
                   >
-                    {name}
-                  </button>
-                ) : (
-                  <input
-                    // biome-ignore lint/a11y/noAutofocus: the person just chose to edit the name
-                    autoFocus
-                    aria-label="Workflow name"
-                    value={renaming}
-                    maxLength={120}
-                    onChange={(event) => setRenaming(event.target.value)}
-                    onFocus={(event) => event.target.select()}
-                    onBlur={commitRename}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") event.currentTarget.blur();
-                      if (event.key === "Escape") setRenaming(null);
-                    }}
-                    className="rounded-md border bg-background px-1.5 py-0.5 font-semibold outline-none"
-                  />
-                )}
-                <span
-                  aria-live="polite"
-                  className={`ml-1.5 flex items-center gap-1.5 ${saveState === "error" ? "text-destructive" : "text-muted-foreground"}`}
-                >
-                  <span
-                    aria-hidden="true"
-                    className={`size-1.5 rounded-full transition-colors duration-150 ${
-                      saveState === "saving"
-                        ? "animate-pulse bg-muted-foreground motion-reduce:animate-none"
-                        : saveState === "error"
-                          ? "bg-destructive"
-                          : "bg-muted-foreground/40"
-                    }`}
-                  />
-                  {saveState === "saving"
-                    ? "Saving…"
-                    : saveState === "error"
-                      ? "Not saved"
-                      : "Saved"}
-                </span>
-                <div className="ml-auto flex items-center gap-2">
-                  <DropdownMenu>
-                    <Tooltip label="More" side="bottom">
-                      <DropdownMenuTrigger render={<Button variant="ghost" size="icon" />}>
-                        <EllipsisVertical />
-                      </DropdownMenuTrigger>
-                    </Tooltip>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem
-                        onClick={() => {
-                          setSettingsOpen(false);
-                          setHistoryOpen(false);
-                          setRunsOpen(true);
-                        }}
-                      >
-                        <ListChecks />
-                        Runs
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => {
-                          setSettingsOpen(false);
-                          setRunsOpen(false);
-                          setHistoryOpen(true);
-                        }}
-                      >
-                        <History />
-                        Version history
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => {
-                          setHistoryOpen(false);
-                          setRunsOpen(false);
-                          setSettingsOpen(true);
-                        }}
-                      >
-                        <Settings />
-                        Workflow settings
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={exportFile}>
-                        <Download />
-                        Export as a file
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => setShareOpen(true)}>
-                        <Share2 />
-                        Share
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                  {shareOpen && (
-                    <ShareDialog
-                      projectSlug={projectSlug}
-                      workflowId={workflow.id}
-                      workflowName={workflow.name}
-                      beforeShare={saveNow}
-                      onClose={() => setShareOpen(false)}
+                    Workflows
+                  </Link>
+                  <ChevronRight aria-hidden="true" className="size-3.5 text-muted-foreground/60" />
+                  {renaming === null ? (
+                    <button
+                      type="button"
+                      aria-label="Rename workflow"
+                      title="Rename"
+                      onClick={() => setRenaming(name)}
+                      className="max-w-64 cursor-text truncate rounded-md px-1.5 py-0.5 font-semibold transition-colors duration-150 ease-out hover:bg-muted"
+                    >
+                      {name}
+                    </button>
+                  ) : (
+                    <input
+                      // biome-ignore lint/a11y/noAutofocus: the person just chose to edit the name
+                      autoFocus
+                      aria-label="Workflow name"
+                      value={renaming}
+                      maxLength={120}
+                      onChange={(event) => setRenaming(event.target.value)}
+                      onFocus={(event) => event.target.select()}
+                      onBlur={commitRename}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") event.currentTarget.blur();
+                        if (event.key === "Escape") setRenaming(null);
+                      }}
+                      className="rounded-md border bg-background px-1.5 py-0.5 font-semibold outline-none"
                     />
                   )}
-                  <RunsSheet
-                    open={runsOpen}
-                    onOpenChange={setRunsOpen}
-                    container={canvasEl}
-                    projectSlug={projectSlug}
-                    workflowId={workflow.id}
-                  />
-                  <VersionHistory
-                    open={historyOpen}
-                    onOpenChange={setHistoryOpen}
-                    container={canvasEl}
-                    projectSlug={projectSlug}
-                    workflowId={workflow.id}
-                    onRestored={showRestored}
-                  />
-                  <Sheet open={settingsOpen} onOpenChange={setSettingsOpen} modal={false}>
-                    <SheetContent container={canvasEl}>
-                      <SheetHeader>
-                        <SheetTitle>Workflow settings</SheetTitle>
-                      </SheetHeader>
-                      <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto p-4">
-                        <section className="flex flex-col gap-4">
-                          <h3 className="font-medium text-muted-foreground">General</h3>
-                          <Field>
-                            <FieldLabel htmlFor="workflow-description">Description</FieldLabel>
-                            <Textarea
-                              id="workflow-description"
-                              rows={2}
-                              maxLength={500}
-                              value={description}
-                              onChange={(event) => setDescription(event.target.value)}
-                              onBlur={() => {
-                                const next = description.trim();
-                                if (next === saved.current.description) return;
-                                saved.current.description = next;
-                                void saveSettings({ description: next || null }, () => undefined);
-                              }}
-                            />
-                          </Field>
-                          <Field>
-                            <FieldLabel htmlFor="workflow-tags">Tags</FieldLabel>
-                            <Input
-                              id="workflow-tags"
-                              placeholder="billing, daily"
-                              value={tags}
-                              onChange={(event) => setTags(event.target.value)}
-                              onBlur={() => {
-                                const next = [
-                                  ...new Set(
-                                    tags
-                                      .split(",")
-                                      .map((tag) => tag.trim())
-                                      .filter(Boolean),
-                                  ),
-                                ].slice(0, 10);
-                                setTags(next.join(", "));
-                                if (next.join(",") === saved.current.tags.join(",")) return;
-                                const previous = saved.current.tags;
-                                saved.current.tags = next;
-                                void saveSettings({ tags: next }, () => {
-                                  saved.current.tags = previous;
-                                  setTags(previous.join(", "));
-                                });
-                              }}
-                            />
-                            <FieldDescription>Separate tags with commas.</FieldDescription>
-                          </Field>
-                        </section>
-                        <section className="flex flex-col gap-4">
-                          <h3 className="font-medium text-muted-foreground">Execution</h3>
-                          <Field>
-                            <FieldLabel htmlFor="workflow-timezone">Time zone</FieldLabel>
-                            <TimezoneSelect
-                              id="workflow-timezone"
-                              className="w-full"
-                              value={timezone}
-                              inheritLabel={`Project (${workflow.projectTimezone || "UTC"})`}
-                              onChange={async (next) => {
-                                const previous = timezone;
-                                setTimezone(next);
-                                try {
-                                  await setWorkflowTimezoneFn({
-                                    data: {
-                                      projectSlug,
-                                      workflowId: workflow.id,
-                                      timezone: next || null,
-                                    },
-                                  });
-                                } catch {
-                                  setTimezone(previous);
-                                  setMessage("Could not save the time zone");
-                                }
-                              }}
-                            />
-                            <FieldDescription>
-                              Schedule nodes use it when they set no time zone of their own.
-                            </FieldDescription>
-                          </Field>
-                          <Field>
-                            <FieldLabel htmlFor="workflow-timeout">Timeout (seconds)</FieldLabel>
-                            <Input
-                              id="workflow-timeout"
-                              type="number"
-                              min={1}
-                              max={86400}
-                              placeholder="Default"
-                              value={timeout}
-                              onChange={(event) => setTimeoutSeconds(event.target.value)}
-                              onBlur={() => {
-                                const parsed = Number.parseInt(timeout, 10);
-                                const next =
-                                  Number.isFinite(parsed) && parsed >= 1
-                                    ? Math.min(parsed, 86_400)
-                                    : null;
-                                setTimeoutSeconds(next?.toString() ?? "");
-                                if (next === saved.current.timeoutSeconds) return;
-                                const previous = saved.current.timeoutSeconds;
-                                saved.current.timeoutSeconds = next;
-                                void saveSettings({ timeoutSeconds: next }, () => {
-                                  saved.current.timeoutSeconds = previous;
-                                  setTimeoutSeconds(previous?.toString() ?? "");
-                                });
-                              }}
-                            />
-                            <FieldDescription>
-                              Stops a run that takes longer. Empty uses the server default.
-                            </FieldDescription>
-                          </Field>
-                          <Field>
-                            <FieldLabel htmlFor="workflow-error-workflow">
-                              Error workflow
-                            </FieldLabel>
-                            <Combobox
-                              id="workflow-error-workflow"
-                              className="w-full"
-                              items={[
-                                { value: NO_ERROR_WORKFLOW, label: "None" },
-                                ...otherWorkflows.map((w) => ({ value: w.id, label: w.name })),
-                              ]}
-                              value={errorWorkflowId || NO_ERROR_WORKFLOW}
-                              placeholder="Search workflows"
-                              onValueChange={(next) => {
-                                const value = next === NO_ERROR_WORKFLOW ? "" : next;
-                                const previous = errorWorkflowId;
-                                setErrorWorkflowId(value);
-                                void saveSettings({ errorWorkflowId: value || null }, () =>
-                                  setErrorWorkflowId(previous),
-                                );
-                              }}
-                            />
-                            <FieldDescription>
-                              Runs when a live run of this workflow fails. It needs an Error Trigger
-                              node and a published version. With auto retry on, it runs after the
-                              last retry fails.
-                            </FieldDescription>
-                          </Field>
-                          <Field>
-                            <FieldLabel htmlFor="workflow-auto-retry">Auto retries</FieldLabel>
-                            <Input
-                              id="workflow-auto-retry"
-                              type="number"
-                              min={0}
-                              max={10}
-                              value={autoRetryMax}
-                              onChange={(event) => setAutoRetryMax(event.target.value)}
-                              onBlur={() => {
-                                const parsed = Number.parseInt(autoRetryMax, 10);
-                                const next = Number.isFinite(parsed)
-                                  ? Math.min(Math.max(parsed, 0), 10)
-                                  : 0;
-                                setAutoRetryMax(next.toString());
-                                if (next === saved.current.autoRetryMax) return;
-                                const previous = saved.current.autoRetryMax;
-                                saved.current.autoRetryMax = next;
-                                void saveSettings({ autoRetryMax: next }, () => {
-                                  saved.current.autoRetryMax = previous;
-                                  setAutoRetryMax(previous.toString());
-                                });
-                              }}
-                            />
-                            <FieldDescription>
-                              Tries a failed live run again from the failed node, up to this many
-                              times. 0 turns it off.
-                            </FieldDescription>
-                          </Field>
-                          <Field>
-                            <FieldLabel htmlFor="workflow-auto-retry-wait">
-                              Wait between retries (seconds)
-                            </FieldLabel>
-                            <Input
-                              id="workflow-auto-retry-wait"
-                              type="number"
-                              min={0}
-                              max={3600}
-                              value={autoRetryWait}
-                              onChange={(event) => setAutoRetryWait(event.target.value)}
-                              onBlur={() => {
-                                const parsed = Number.parseFloat(autoRetryWait);
-                                const seconds = Number.isFinite(parsed)
-                                  ? Math.min(Math.max(parsed, 0), 3600)
-                                  : 0;
-                                const next = Math.round(seconds * 1000);
-                                setAutoRetryWait((next / 1000).toString());
-                                if (next === saved.current.autoRetryBackoffMs) return;
-                                const previous = saved.current.autoRetryBackoffMs;
-                                saved.current.autoRetryBackoffMs = next;
-                                void saveSettings({ autoRetryBackoffMs: next }, () => {
-                                  saved.current.autoRetryBackoffMs = previous;
-                                  setAutoRetryWait((previous / 1000).toString());
-                                });
-                              }}
-                            />
-                          </Field>
-                        </section>
-                        <section className="flex flex-col gap-4">
-                          <h3 className="font-medium text-muted-foreground">Run data</h3>
-                          <div className="flex items-center justify-between gap-2">
-                            <label htmlFor="workflow-save-success">
-                              Save data of successful runs
-                            </label>
-                            <Switch
-                              id="workflow-save-success"
-                              checked={saveSuccessData}
-                              onCheckedChange={(next) => {
-                                setSaveSuccessData(next);
-                                void saveSettings({ saveSuccessData: next }, () =>
-                                  setSaveSuccessData(!next),
-                                );
-                              }}
-                            />
-                          </div>
-                          <div className="flex items-center justify-between gap-2">
-                            <label htmlFor="workflow-save-failure">Save data of failed runs</label>
-                            <Switch
-                              id="workflow-save-failure"
-                              checked={saveFailureData}
-                              onCheckedChange={(next) => {
-                                setSaveFailureData(next);
-                                void saveSettings({ saveFailureData: next }, () =>
-                                  setSaveFailureData(!next),
-                                );
-                              }}
-                            />
-                          </div>
-                          <p className="text-pretty text-muted-foreground">
-                            Applies to live runs. Test runs always keep their data.
-                          </p>
-                        </section>
-                      </div>
-                    </SheetContent>
-                  </Sheet>
-                  <span aria-hidden="true" className="mx-1 h-5 w-px bg-border" />
-                  <Button
-                    onClick={publish}
-                    disabled={!hasChanges}
-                    title={hasChanges ? "Make the draft the live version" : "No changes to publish"}
+                  <span
+                    aria-live="polite"
+                    className={`ml-1.5 flex items-center gap-1.5 ${saveState === "error" ? "text-destructive" : "text-muted-foreground"}`}
                   >
-                    <Rocket />
-                    Publish
-                  </Button>
-                  <div className="ml-1 flex items-center gap-2">
-                    <Switch id="workflow-active" checked={active} onCheckedChange={toggleActive} />
-                    <label htmlFor="workflow-active">Active</label>
+                    <span
+                      aria-hidden="true"
+                      className={`size-1.5 rounded-full transition-colors duration-150 ${
+                        saveState === "saving"
+                          ? "animate-pulse bg-muted-foreground motion-reduce:animate-none"
+                          : saveState === "error"
+                            ? "bg-destructive"
+                            : "bg-muted-foreground/40"
+                      }`}
+                    />
+                    {saveState === "saving"
+                      ? "Saving…"
+                      : saveState === "error"
+                        ? "Not saved"
+                        : "Saved"}
+                  </span>
+                  <div className="ml-auto flex items-center gap-2">
+                    <DropdownMenu>
+                      <Tooltip label="More" side="bottom">
+                        <DropdownMenuTrigger render={<Button variant="ghost" size="icon" />}>
+                          <EllipsisVertical />
+                        </DropdownMenuTrigger>
+                      </Tooltip>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                          onClick={() => {
+                            setSettingsOpen(false);
+                            setHistoryOpen(false);
+                            setRunsOpen(true);
+                          }}
+                        >
+                          <ListChecks />
+                          Runs
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => {
+                            setSettingsOpen(false);
+                            setRunsOpen(false);
+                            setHistoryOpen(true);
+                          }}
+                        >
+                          <History />
+                          Version history
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => {
+                            setHistoryOpen(false);
+                            setRunsOpen(false);
+                            setSettingsOpen(true);
+                          }}
+                        >
+                          <Settings />
+                          Workflow settings
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={exportFile}>
+                          <Download />
+                          Export as a file
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setShareOpen(true)}>
+                          <Share2 />
+                          Share
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                    {shareOpen && (
+                      <ShareDialog
+                        projectSlug={projectSlug}
+                        workflowId={workflow.id}
+                        workflowName={workflow.name}
+                        beforeShare={saveNow}
+                        onClose={() => setShareOpen(false)}
+                      />
+                    )}
+                    <RunsSheet
+                      open={runsOpen}
+                      onOpenChange={setRunsOpen}
+                      container={canvasEl}
+                      projectSlug={projectSlug}
+                      workflowId={workflow.id}
+                    />
+                    <VersionHistory
+                      open={historyOpen}
+                      onOpenChange={setHistoryOpen}
+                      container={canvasEl}
+                      projectSlug={projectSlug}
+                      workflowId={workflow.id}
+                      onRestored={showRestored}
+                    />
+                    <Sheet open={settingsOpen} onOpenChange={setSettingsOpen} modal={false}>
+                      <SheetContent container={canvasEl}>
+                        <SheetHeader>
+                          <SheetTitle>Workflow settings</SheetTitle>
+                        </SheetHeader>
+                        <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto p-4">
+                          <section className="flex flex-col gap-4">
+                            <h3 className="font-medium text-muted-foreground">General</h3>
+                            <Field>
+                              <FieldLabel htmlFor="workflow-description">Description</FieldLabel>
+                              <Textarea
+                                id="workflow-description"
+                                rows={2}
+                                maxLength={500}
+                                value={description}
+                                onChange={(event) => setDescription(event.target.value)}
+                                onBlur={() => {
+                                  const next = description.trim();
+                                  if (next === saved.current.description) return;
+                                  saved.current.description = next;
+                                  void saveSettings({ description: next || null }, () => undefined);
+                                }}
+                              />
+                            </Field>
+                            <Field>
+                              <FieldLabel htmlFor="workflow-tags">Tags</FieldLabel>
+                              <Input
+                                id="workflow-tags"
+                                placeholder="billing, daily"
+                                value={tags}
+                                onChange={(event) => setTags(event.target.value)}
+                                onBlur={() => {
+                                  const next = [
+                                    ...new Set(
+                                      tags
+                                        .split(",")
+                                        .map((tag) => tag.trim())
+                                        .filter(Boolean),
+                                    ),
+                                  ].slice(0, 10);
+                                  setTags(next.join(", "));
+                                  if (next.join(",") === saved.current.tags.join(",")) return;
+                                  const previous = saved.current.tags;
+                                  saved.current.tags = next;
+                                  void saveSettings({ tags: next }, () => {
+                                    saved.current.tags = previous;
+                                    setTags(previous.join(", "));
+                                  });
+                                }}
+                              />
+                              <FieldDescription>Separate tags with commas.</FieldDescription>
+                            </Field>
+                          </section>
+                          <section className="flex flex-col gap-4">
+                            <h3 className="font-medium text-muted-foreground">Execution</h3>
+                            <Field>
+                              <FieldLabel htmlFor="workflow-timezone">Time zone</FieldLabel>
+                              <TimezoneSelect
+                                id="workflow-timezone"
+                                className="w-full"
+                                value={timezone}
+                                inheritLabel={`Project (${workflow.projectTimezone || "UTC"})`}
+                                onChange={async (next) => {
+                                  const previous = timezone;
+                                  setTimezone(next);
+                                  try {
+                                    await setWorkflowTimezoneFn({
+                                      data: {
+                                        projectSlug,
+                                        workflowId: workflow.id,
+                                        timezone: next || null,
+                                      },
+                                    });
+                                  } catch {
+                                    setTimezone(previous);
+                                    setMessage("Could not save the time zone");
+                                  }
+                                }}
+                              />
+                              <FieldDescription>
+                                Schedule nodes use it when they set no time zone of their own.
+                              </FieldDescription>
+                            </Field>
+                            <Field>
+                              <FieldLabel htmlFor="workflow-timeout">Timeout (seconds)</FieldLabel>
+                              <Input
+                                id="workflow-timeout"
+                                type="number"
+                                min={1}
+                                max={86400}
+                                placeholder="Default"
+                                value={timeout}
+                                onChange={(event) => setTimeoutSeconds(event.target.value)}
+                                onBlur={() => {
+                                  const parsed = Number.parseInt(timeout, 10);
+                                  const next =
+                                    Number.isFinite(parsed) && parsed >= 1
+                                      ? Math.min(parsed, 86_400)
+                                      : null;
+                                  setTimeoutSeconds(next?.toString() ?? "");
+                                  if (next === saved.current.timeoutSeconds) return;
+                                  const previous = saved.current.timeoutSeconds;
+                                  saved.current.timeoutSeconds = next;
+                                  void saveSettings({ timeoutSeconds: next }, () => {
+                                    saved.current.timeoutSeconds = previous;
+                                    setTimeoutSeconds(previous?.toString() ?? "");
+                                  });
+                                }}
+                              />
+                              <FieldDescription>
+                                Stops a run that takes longer. Empty uses the server default.
+                              </FieldDescription>
+                            </Field>
+                            <Field>
+                              <FieldLabel htmlFor="workflow-error-workflow">
+                                Error workflow
+                              </FieldLabel>
+                              <Combobox
+                                id="workflow-error-workflow"
+                                className="w-full"
+                                items={[
+                                  { value: NO_ERROR_WORKFLOW, label: "None" },
+                                  ...otherWorkflows.map((w) => ({ value: w.id, label: w.name })),
+                                ]}
+                                value={errorWorkflowId || NO_ERROR_WORKFLOW}
+                                placeholder="Search workflows"
+                                onValueChange={(next) => {
+                                  const value = next === NO_ERROR_WORKFLOW ? "" : next;
+                                  const previous = errorWorkflowId;
+                                  setErrorWorkflowId(value);
+                                  void saveSettings({ errorWorkflowId: value || null }, () =>
+                                    setErrorWorkflowId(previous),
+                                  );
+                                }}
+                              />
+                              <FieldDescription>
+                                Runs when a live run of this workflow fails. It needs an Error
+                                Trigger node and a published version. With auto retry on, it runs
+                                after the last retry fails.
+                              </FieldDescription>
+                            </Field>
+                            <Field>
+                              <FieldLabel htmlFor="workflow-auto-retry">Auto retries</FieldLabel>
+                              <Input
+                                id="workflow-auto-retry"
+                                type="number"
+                                min={0}
+                                max={10}
+                                value={autoRetryMax}
+                                onChange={(event) => setAutoRetryMax(event.target.value)}
+                                onBlur={() => {
+                                  const parsed = Number.parseInt(autoRetryMax, 10);
+                                  const next = Number.isFinite(parsed)
+                                    ? Math.min(Math.max(parsed, 0), 10)
+                                    : 0;
+                                  setAutoRetryMax(next.toString());
+                                  if (next === saved.current.autoRetryMax) return;
+                                  const previous = saved.current.autoRetryMax;
+                                  saved.current.autoRetryMax = next;
+                                  void saveSettings({ autoRetryMax: next }, () => {
+                                    saved.current.autoRetryMax = previous;
+                                    setAutoRetryMax(previous.toString());
+                                  });
+                                }}
+                              />
+                              <FieldDescription>
+                                Tries a failed live run again from the failed node, up to this many
+                                times. 0 turns it off.
+                              </FieldDescription>
+                            </Field>
+                            <Field>
+                              <FieldLabel htmlFor="workflow-auto-retry-wait">
+                                Wait between retries (seconds)
+                              </FieldLabel>
+                              <Input
+                                id="workflow-auto-retry-wait"
+                                type="number"
+                                min={0}
+                                max={3600}
+                                value={autoRetryWait}
+                                onChange={(event) => setAutoRetryWait(event.target.value)}
+                                onBlur={() => {
+                                  const parsed = Number.parseFloat(autoRetryWait);
+                                  const seconds = Number.isFinite(parsed)
+                                    ? Math.min(Math.max(parsed, 0), 3600)
+                                    : 0;
+                                  const next = Math.round(seconds * 1000);
+                                  setAutoRetryWait((next / 1000).toString());
+                                  if (next === saved.current.autoRetryBackoffMs) return;
+                                  const previous = saved.current.autoRetryBackoffMs;
+                                  saved.current.autoRetryBackoffMs = next;
+                                  void saveSettings({ autoRetryBackoffMs: next }, () => {
+                                    saved.current.autoRetryBackoffMs = previous;
+                                    setAutoRetryWait((previous / 1000).toString());
+                                  });
+                                }}
+                              />
+                            </Field>
+                          </section>
+                          <section className="flex flex-col gap-4">
+                            <h3 className="font-medium text-muted-foreground">Run data</h3>
+                            <div className="flex items-center justify-between gap-2">
+                              <label htmlFor="workflow-save-success">
+                                Save data of successful runs
+                              </label>
+                              <Switch
+                                id="workflow-save-success"
+                                checked={saveSuccessData}
+                                onCheckedChange={(next) => {
+                                  setSaveSuccessData(next);
+                                  void saveSettings({ saveSuccessData: next }, () =>
+                                    setSaveSuccessData(!next),
+                                  );
+                                }}
+                              />
+                            </div>
+                            <div className="flex items-center justify-between gap-2">
+                              <label htmlFor="workflow-save-failure">
+                                Save data of failed runs
+                              </label>
+                              <Switch
+                                id="workflow-save-failure"
+                                checked={saveFailureData}
+                                onCheckedChange={(next) => {
+                                  setSaveFailureData(next);
+                                  void saveSettings({ saveFailureData: next }, () =>
+                                    setSaveFailureData(!next),
+                                  );
+                                }}
+                              />
+                            </div>
+                            <p className="text-pretty text-muted-foreground">
+                              Applies to live runs. Test runs always keep their data.
+                            </p>
+                          </section>
+                        </div>
+                      </SheetContent>
+                    </Sheet>
+                    <span aria-hidden="true" className="mx-1 h-5 w-px bg-border" />
+                    <Button
+                      onClick={publish}
+                      disabled={!hasChanges}
+                      title={
+                        hasChanges ? "Make the draft the live version" : "No changes to publish"
+                      }
+                    >
+                      <Rocket />
+                      Publish
+                    </Button>
+                    <div className="ml-1 flex items-center gap-2">
+                      <Switch
+                        id="workflow-active"
+                        checked={active}
+                        onCheckedChange={toggleActive}
+                      />
+                      <label htmlFor="workflow-active">Active</label>
+                    </div>
                   </div>
                 </div>
-              </div>
-              <div className="flex min-h-0 flex-1">
-                <div ref={setCanvasEl} className="relative min-w-0 flex-1 overflow-clip">
-                  <EdgeCountContext.Provider value={edgeCounts}>
-                    <NodeStatusContext.Provider value={statuses}>
-                      <EditorActionsContext.Provider
-                        value={{
-                          addAfter: (nodeId, port) => {
-                            setAddFrom({ nodeId, port });
-                            setAddOpen(true);
-                          },
-                          executeNode: (nodeId) =>
-                            void executeStep(nodes.find((n) => n.id === nodeId) ?? null),
-                          openNode: setOpenId,
-                          insertOnEdge: (edgeId) => {
-                            setInsertEdgeId(edgeId);
-                            setAddOpen(true);
-                          },
-                        }}
-                      >
-                        <ReactFlow
-                          nodes={nodes}
-                          edges={edges}
-                          nodeTypes={nodeTypes}
-                          edgeTypes={edgeTypes}
-                          onNodesChange={onNodesChange}
-                          onEdgesChange={onEdgesChange}
-                          onConnect={onConnect}
-                          // The plus button of a port is a handle. A click opens its menu, not a connection.
-                          connectOnClick={false}
-                          isValidConnection={isValidConnection}
-                          onNodeDoubleClick={(_, node) => setOpenId(node.id)}
-                          connectionLineComponent={ZerodotConnectionLine}
-                          defaultEdgeOptions={{
-                            type: "zerodot",
-                            style: { strokeWidth: 1.25, stroke: EDGE_COLOR },
+                <div className="flex min-h-0 flex-1">
+                  <div ref={setCanvasEl} className="relative min-w-0 flex-1 overflow-clip">
+                    <EdgeCountContext.Provider value={edgeCounts}>
+                      <NodeStatusContext.Provider value={statuses}>
+                        <EditorActionsContext.Provider
+                          value={{
+                            addAfter: (nodeId, port) => {
+                              setAddFrom({ nodeId, port });
+                              setAddOpen(true);
+                            },
+                            executeNode: (nodeId) =>
+                              void executeStep(nodes.find((n) => n.id === nodeId) ?? null),
+                            openNode: setOpenId,
+                            insertOnEdge: (edgeId) => {
+                              setInsertEdgeId(edgeId);
+                              setAddOpen(true);
+                            },
                           }}
-                          zoomOnDoubleClick={false}
-                          // Drag selects. Hold Space, Cmd or Ctrl to pan. Middle or right button pans too.
-                          selectionOnDrag
-                          panOnDrag={[1, 2]}
-                          panActivationKeyCode={["Space", "Meta", "Control"]}
-                          onInit={(instance) => {
-                            flowRef.current = instance;
-                          }}
-                          fitView
-                          fitViewOptions={{ minZoom: 1.307, maxZoom: 1.307, padding: 0.3 }}
-                          proOptions={{ hideAttribution: true }}
                         >
-                          <Background />
-                          <Controls showZoom={false} showFitView={false} showInteractive={false}>
-                            <Tooltip label="Zoom in" side="right">
-                              <ControlButton onClick={() => flowRef.current?.zoomIn()}>
-                                <Plus className="fill-none" />
-                              </ControlButton>
-                            </Tooltip>
-                            <Tooltip label="Zoom out" side="right">
-                              <ControlButton onClick={() => flowRef.current?.zoomOut()}>
-                                <Minus className="fill-none" />
-                              </ControlButton>
-                            </Tooltip>
-                            <Tooltip label="Fit view" side="right">
-                              <ControlButton onClick={fit}>
-                                <Maximize className="fill-none" />
-                              </ControlButton>
-                            </Tooltip>
-                            <Tooltip label="Auto arrange" side="right">
-                              <ControlButton onClick={arrangeAndFit}>
-                                <WorkflowIcon className="fill-none" />
-                              </ControlButton>
-                            </Tooltip>
-                          </Controls>
-                        </ReactFlow>
-                      </EditorActionsContext.Provider>
-                    </NodeStatusContext.Provider>
-                  </EdgeCountContext.Provider>
-                  <Button
-                    size="icon-lg"
-                    variant="outline"
-                    className="group absolute top-4 right-4 z-10 rounded-full bg-card shadow-md hover:border-primary hover:bg-primary hover:text-primary-foreground"
-                    aria-label="Add node"
-                    title="Add node (Tab)"
-                    onClick={() => setAddOpen(true)}
-                  >
-                    <Plus />
-                  </Button>
-                  <div className="absolute bottom-6 left-1/2 z-10 flex -translate-x-1/2 flex-col items-center gap-3">
-                    <div className="flex items-center rounded-full">
-                      <div
-                        className={cn(
-                          "grid transition-[grid-template-columns,opacity] duration-300 ease-out",
-                          listeningId ? "grid-cols-[0fr] opacity-0" : "grid-cols-[1fr] opacity-100",
-                        )}
-                        inert={!!listeningId}
-                      >
-                        <div className="flex items-center gap-2 overflow-hidden p-1 -m-1">
-                          <Button
-                            size="icon-lg"
-                            className="shrink-0 rounded-full shadow-md"
-                            disabled={runStatus === "queued" || runStatus === "running"}
-                            aria-label="Execute workflow"
-                            title="Execute workflow"
-                            onClick={testRun}
+                          <ReactFlow
+                            nodes={nodes}
+                            edges={edges}
+                            nodeTypes={nodeTypes}
+                            edgeTypes={edgeTypes}
+                            onNodesChange={onNodesChange}
+                            onEdgesChange={onEdgesChange}
+                            onConnect={onConnect}
+                            // The plus button of a port is a handle. A click opens its menu, not a connection.
+                            connectOnClick={false}
+                            isValidConnection={isValidConnection}
+                            onNodeDoubleClick={(_, node) => setOpenId(node.id)}
+                            connectionLineComponent={ZerodotConnectionLine}
+                            defaultEdgeOptions={{
+                              type: "zerodot",
+                              style: { strokeWidth: 1.25, stroke: EDGE_COLOR },
+                            }}
+                            zoomOnDoubleClick={false}
+                            // Drag selects. Hold Space, Cmd or Ctrl to pan. Middle or right button pans too.
+                            selectionOnDrag
+                            panOnDrag={[1, 2]}
+                            panActivationKeyCode={["Space", "Meta", "Control"]}
+                            onInit={(instance) => {
+                              flowRef.current = instance;
+                            }}
+                            fitView
+                            fitViewOptions={{ minZoom: 1.307, maxZoom: 1.307, padding: 0.3 }}
+                            proOptions={{ hideAttribution: true }}
                           >
-                            {runStatus === "queued" || runStatus === "running" ? (
-                              <Loader2 className="animate-spin" />
-                            ) : (
-                              <Play />
-                            )}
-                          </Button>
-                          {(runId || Object.keys(ios).length > 0) && (
-                            <Button
-                              size="icon-lg"
-                              variant="outline"
-                              className="shrink-0 rounded-full bg-card shadow-md"
-                              aria-label="Clear results"
-                              title="Clear results"
-                              onClick={clearResults}
-                            >
-                              <Trash2 />
-                            </Button>
+                            <Background />
+                            <Controls showZoom={false} showFitView={false} showInteractive={false}>
+                              <Tooltip label="Zoom in" side="right">
+                                <ControlButton onClick={() => flowRef.current?.zoomIn()}>
+                                  <Plus className="fill-none" />
+                                </ControlButton>
+                              </Tooltip>
+                              <Tooltip label="Zoom out" side="right">
+                                <ControlButton onClick={() => flowRef.current?.zoomOut()}>
+                                  <Minus className="fill-none" />
+                                </ControlButton>
+                              </Tooltip>
+                              <Tooltip label="Fit view" side="right">
+                                <ControlButton onClick={fit}>
+                                  <Maximize className="fill-none" />
+                                </ControlButton>
+                              </Tooltip>
+                              <Tooltip label="Auto arrange" side="right">
+                                <ControlButton onClick={arrangeAndFit}>
+                                  <WorkflowIcon className="fill-none" />
+                                </ControlButton>
+                              </Tooltip>
+                            </Controls>
+                          </ReactFlow>
+                        </EditorActionsContext.Provider>
+                      </NodeStatusContext.Provider>
+                    </EdgeCountContext.Provider>
+                    <Button
+                      size="icon-lg"
+                      variant="outline"
+                      className="group absolute top-4 right-4 z-10 rounded-full bg-card shadow-md hover:border-primary hover:bg-primary hover:text-primary-foreground"
+                      aria-label="Add node"
+                      title="Add node (Tab)"
+                      onClick={() => setAddOpen(true)}
+                    >
+                      <Plus />
+                    </Button>
+                    <div className="absolute bottom-6 left-1/2 z-10 flex -translate-x-1/2 flex-col items-center gap-3">
+                      <div className="flex items-center rounded-full">
+                        <div
+                          className={cn(
+                            "grid transition-[grid-template-columns,opacity] duration-300 ease-out",
+                            listeningId
+                              ? "grid-cols-[0fr] opacity-0"
+                              : "grid-cols-[1fr] opacity-100",
                           )}
-                        </div>
-                      </div>
-                      <div
-                        className={cn(
-                          "grid transition-[grid-template-columns,opacity] duration-300 ease-out",
-                          listeningId ? "grid-cols-[1fr] opacity-100" : "grid-cols-[0fr] opacity-0",
-                        )}
-                        inert={!listeningId}
-                      >
-                        <div className="overflow-hidden p-1 -m-1">
-                          <div
-                            role="status"
-                            className="flex w-[28rem] max-w-[calc(100vw-4rem)] items-center gap-3 whitespace-nowrap rounded-full border bg-card py-1.5 pr-1.5 pl-4 shadow-md"
-                          >
-                            <span className="relative flex size-2 shrink-0">
-                              <span className="absolute inline-flex size-full animate-ping rounded-full bg-primary opacity-60" />
-                              <span className="relative inline-flex size-2 rounded-full bg-primary" />
-                            </span>
-                            <span className="flex min-w-0 flex-1 flex-col">
-                              <span>Listening for test event</span>
-                              {listeningId && testUrls[listeningId] && (
-                                <code className="truncate text-muted-foreground text-xs">
-                                  {testUrls[listeningId]}
-                                </code>
-                              )}
-                            </span>
+                          inert={!!listeningId}
+                        >
+                          <div className="flex items-center gap-2 overflow-hidden p-1 -m-1">
                             <Button
                               size="icon-lg"
-                              className="shrink-0 rounded-full"
-                              aria-label="Stop listening"
-                              title="Stop listening"
-                              onClick={stopListening}
+                              className="shrink-0 rounded-full shadow-md"
+                              disabled={runStatus === "queued" || runStatus === "running"}
+                              aria-label="Execute workflow"
+                              title="Execute workflow"
+                              onClick={testRun}
                             >
-                              <Square className="fill-current" />
+                              {runStatus === "queued" || runStatus === "running" ? (
+                                <Loader2 className="animate-spin" />
+                              ) : (
+                                <Play />
+                              )}
                             </Button>
+                            {(runId || Object.keys(ios).length > 0) && (
+                              <Button
+                                size="icon-lg"
+                                variant="outline"
+                                className="shrink-0 rounded-full bg-card shadow-md"
+                                aria-label="Clear results"
+                                title="Clear results"
+                                onClick={clearResults}
+                              >
+                                <Trash2 />
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                        <div
+                          className={cn(
+                            "grid transition-[grid-template-columns,opacity] duration-300 ease-out",
+                            listeningId
+                              ? "grid-cols-[1fr] opacity-100"
+                              : "grid-cols-[0fr] opacity-0",
+                          )}
+                          inert={!listeningId}
+                        >
+                          <div className="overflow-hidden p-1 -m-1">
+                            <div
+                              role="status"
+                              className="flex w-[28rem] max-w-[calc(100vw-4rem)] items-center gap-3 whitespace-nowrap rounded-full border bg-card py-1.5 pr-1.5 pl-4 shadow-md"
+                            >
+                              <span className="relative flex size-2 shrink-0">
+                                <span className="absolute inline-flex size-full animate-ping rounded-full bg-primary opacity-60" />
+                                <span className="relative inline-flex size-2 rounded-full bg-primary" />
+                              </span>
+                              <span className="flex min-w-0 flex-1 flex-col">
+                                <span>Listening for test event</span>
+                                {listeningId && testUrls[listeningId] && (
+                                  <code className="truncate text-muted-foreground text-xs">
+                                    {testUrls[listeningId]}
+                                  </code>
+                                )}
+                              </span>
+                              <Button
+                                size="icon-lg"
+                                className="shrink-0 rounded-full"
+                                aria-label="Stop listening"
+                                title="Stop listening"
+                                onClick={stopListening}
+                              >
+                                <Square className="fill-current" />
+                              </Button>
+                            </div>
                           </div>
                         </div>
                       </div>
                     </div>
                   </div>
                 </div>
-              </div>
-              <Sheet
-                modal={false}
-                open={addOpen}
-                onOpenChange={(open) => {
-                  setAddOpen(open);
-                  if (!open) {
-                    setAddQuery("");
-                    setAddApp(null);
-                    setInsertEdgeId(null);
-                    setAddFrom(null);
-                  }
-                  setAddActive(0);
-                }}
-              >
-                <SheetContent container={canvasEl}>
-                  <SheetHeader className={cn(addApp && "bg-muted/50")}>
-                    {addApp ? (
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          aria-label="Back to all nodes"
-                          onClick={() => openApp(null)}
-                        >
-                          <ArrowLeft />
-                        </Button>
-                        {addAppEntry && (
-                          <NodeIcon
-                            name={addAppEntry.icon}
-                            src={addAppEntry.iconUrl}
-                            category={addAppEntry.category}
-                            className="size-7 [&>svg]:size-4"
-                          />
-                        )}
-                        <SheetTitle>{addApp}</SheetTitle>
-                      </div>
-                    ) : (
-                      <SheetTitle>Add node</SheetTitle>
-                    )}
-                    <Input
-                      autoFocus
-                      placeholder={addApp ? `Search ${addApp} nodes` : "Search nodes"}
-                      aria-label="Search nodes"
-                      value={addQuery}
-                      onChange={(event) => {
-                        setAddQuery(event.target.value);
-                        setAddActive(0);
-                      }}
-                      onKeyDown={(event) => {
-                        if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-                          event.preventDefault();
-                          const step = event.key === "ArrowDown" ? 1 : -1;
-                          const count = addFlat.length;
-                          if (count)
-                            setAddActive((i) => (Math.min(i, count - 1) + step + count) % count);
-                        } else if (event.key === "Enter" && activeRow) {
-                          event.preventDefault();
-                          pickRow(activeRow);
-                        } else if (event.key === "Backspace" && addApp && !addQuery) {
-                          event.preventDefault();
-                          openApp(null);
-                        }
-                      }}
-                    />
-                  </SheetHeader>
-                  <div
-                    className={cn(
-                      "flex min-h-0 flex-1 flex-col overflow-y-auto",
-                      addApp ? "gap-3 pb-2" : "gap-4 p-2",
-                    )}
-                  >
-                    {addGroups.map(([category, rows]) => {
-                      const open = isCategoryOpen(category);
-                      return (
-                        <div key={category} className="flex flex-col">
-                          <button
-                            type="button"
-                            tabIndex={-1}
-                            aria-expanded={open}
-                            className={cn(
-                              "flex items-center gap-1 text-left font-medium capitalize hover:bg-muted",
-                              addApp ? "border-b px-4 py-2" : "rounded-lg px-2 py-1.5",
-                            )}
-                            onClick={() => toggleCategory(category)}
+                <Sheet
+                  modal={false}
+                  open={addOpen}
+                  onOpenChange={(open) => {
+                    setAddOpen(open);
+                    if (!open) {
+                      setAddQuery("");
+                      setAddApp(null);
+                      setInsertEdgeId(null);
+                      setAddFrom(null);
+                    }
+                    setAddActive(0);
+                  }}
+                >
+                  <SheetContent container={canvasEl}>
+                    <SheetHeader className={cn(addApp && "bg-muted/50")}>
+                      {addApp ? (
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label="Back to all nodes"
+                            onClick={() => openApp(null)}
                           >
-                            {!addApp && (
-                              <ChevronRight
-                                className={cn(
-                                  "size-4 text-muted-foreground transition-transform duration-150 ease-out",
-                                  open && "rotate-90",
-                                )}
-                              />
-                            )}
-                            {category} ({rows.length})
-                            {addApp && category === "triggers" && (
-                              <Zap className="size-3.5 fill-primary text-primary" />
-                            )}
-                            {addApp && (
-                              <ChevronRight
-                                className={cn(
-                                  "ml-auto size-4 text-muted-foreground transition-transform duration-150 ease-out",
-                                  open ? "rotate-90" : "-rotate-90",
-                                )}
-                              />
-                            )}
-                          </button>
-                          {open &&
-                            rows.map((row) => {
-                              const first = row.kind === "app" ? row.entries[0] : row.entry;
-                              if (!first) return null;
-                              const actions =
-                                row.kind === "app"
-                                  ? row.entries
-                                      .filter((e) => e.category !== "trigger")
-                                      .reduce((sum, e) => sum + (e.actions?.length ?? 1), 0)
-                                  : 0;
-                              const triggers =
-                                row.kind === "app" ? row.entries.length - actions : 0;
-                              return (
-                                <button
-                                  key={row.key}
-                                  id={`add-node-${row.key}`}
-                                  type="button"
-                                  tabIndex={-1}
+                            <ArrowLeft />
+                          </Button>
+                          {addAppEntry && (
+                            <NodeIcon
+                              name={addAppEntry.icon}
+                              src={addAppEntry.iconUrl}
+                              category={addAppEntry.category}
+                              className="size-7 [&>svg]:size-4"
+                            />
+                          )}
+                          <SheetTitle>{addApp}</SheetTitle>
+                        </div>
+                      ) : (
+                        <SheetTitle>Add node</SheetTitle>
+                      )}
+                      <Input
+                        autoFocus
+                        placeholder={addApp ? `Search ${addApp} nodes` : "Search nodes"}
+                        aria-label="Search nodes"
+                        value={addQuery}
+                        onChange={(event) => {
+                          setAddQuery(event.target.value);
+                          setAddActive(0);
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                            event.preventDefault();
+                            const step = event.key === "ArrowDown" ? 1 : -1;
+                            const count = addFlat.length;
+                            if (count)
+                              setAddActive((i) => (Math.min(i, count - 1) + step + count) % count);
+                          } else if (event.key === "Enter" && activeRow) {
+                            event.preventDefault();
+                            pickRow(activeRow);
+                          } else if (event.key === "Backspace" && addApp && !addQuery) {
+                            event.preventDefault();
+                            openApp(null);
+                          }
+                        }}
+                      />
+                    </SheetHeader>
+                    <div
+                      className={cn(
+                        "flex min-h-0 flex-1 flex-col overflow-y-auto",
+                        addApp ? "gap-3 pb-2" : "gap-4 p-2",
+                      )}
+                    >
+                      {addGroups.map(([category, rows]) => {
+                        const open = isCategoryOpen(category);
+                        return (
+                          <div key={category} className="flex flex-col">
+                            <button
+                              type="button"
+                              tabIndex={-1}
+                              aria-expanded={open}
+                              className={cn(
+                                "flex items-center gap-1 text-left font-medium capitalize hover:bg-muted",
+                                addApp ? "border-b px-4 py-2" : "rounded-lg px-2 py-1.5",
+                              )}
+                              onClick={() => toggleCategory(category)}
+                            >
+                              {!addApp && (
+                                <ChevronRight
                                   className={cn(
-                                    "flex items-center text-left hover:bg-muted",
-                                    addApp ? "gap-2.5 px-4 py-1.5" : "gap-3 rounded-lg px-2 py-2",
-                                    row.key === activeKey && "bg-muted",
+                                    "size-4 text-muted-foreground transition-transform duration-150 ease-out",
+                                    open && "rotate-90",
                                   )}
-                                  onMouseMove={() => {
-                                    const i = addFlat.findIndex((r) => r.key === row.key);
-                                    if (i >= 0) setAddActive(i);
-                                  }}
-                                  onClick={() => pickRow(row)}
-                                >
-                                  <NodeIcon
-                                    name={first.icon}
-                                    src={first.iconUrl}
-                                    category={first.category}
-                                    className={
-                                      addApp ? "size-6 [&>svg]:size-4" : "size-9 [&>svg]:size-5"
-                                    }
-                                  />
-                                  <span className="flex min-w-0 flex-1 flex-col">
-                                    <span className="flex items-center gap-2">
-                                      {row.kind === "app"
-                                        ? row.app
-                                        : (row.action?.label ?? row.entry.label)}
-                                      {row.kind === "node" && row.entry.category === "trigger" && (
-                                        <Zap className="size-3.5 fill-primary text-primary" />
+                                />
+                              )}
+                              {category} ({rows.length})
+                              {addApp && category === "triggers" && (
+                                <Zap className="size-3.5 fill-primary text-primary" />
+                              )}
+                              {addApp && (
+                                <ChevronRight
+                                  className={cn(
+                                    "ml-auto size-4 text-muted-foreground transition-transform duration-150 ease-out",
+                                    open ? "rotate-90" : "-rotate-90",
+                                  )}
+                                />
+                              )}
+                            </button>
+                            {open &&
+                              rows.map((row) => {
+                                const first = row.kind === "app" ? row.entries[0] : row.entry;
+                                if (!first) return null;
+                                const actions =
+                                  row.kind === "app"
+                                    ? row.entries
+                                        .filter((e) => e.category !== "trigger")
+                                        .reduce((sum, e) => sum + (e.actions?.length ?? 1), 0)
+                                    : 0;
+                                const triggers =
+                                  row.kind === "app" ? row.entries.length - actions : 0;
+                                return (
+                                  <button
+                                    key={row.key}
+                                    id={`add-node-${row.key}`}
+                                    type="button"
+                                    tabIndex={-1}
+                                    className={cn(
+                                      "flex items-center text-left hover:bg-muted",
+                                      addApp ? "gap-2.5 px-4 py-1.5" : "gap-3 rounded-lg px-2 py-2",
+                                      row.key === activeKey && "bg-muted",
+                                    )}
+                                    onMouseMove={() => {
+                                      const i = addFlat.findIndex((r) => r.key === row.key);
+                                      if (i >= 0) setAddActive(i);
+                                    }}
+                                    onClick={() => pickRow(row)}
+                                  >
+                                    <NodeIcon
+                                      name={first.icon}
+                                      src={first.iconUrl}
+                                      category={first.category}
+                                      className={
+                                        addApp ? "size-6 [&>svg]:size-4" : "size-9 [&>svg]:size-5"
+                                      }
+                                    />
+                                    <span className="flex min-w-0 flex-1 flex-col">
+                                      <span className="flex items-center gap-2">
+                                        {row.kind === "app"
+                                          ? row.app
+                                          : (row.action?.label ?? row.entry.label)}
+                                        {row.kind === "node" &&
+                                          row.entry.category === "trigger" && (
+                                            <Zap className="size-3.5 fill-primary text-primary" />
+                                          )}
+                                      </span>
+                                      {row.kind === "app" ? (
+                                        <span className="text-muted-foreground">
+                                          {[
+                                            actions > 0 &&
+                                              `${actions} ${actions === 1 ? "action" : "actions"}`,
+                                            triggers > 0 &&
+                                              `${triggers} ${triggers === 1 ? "trigger" : "triggers"}`,
+                                          ]
+                                            .filter(Boolean)
+                                            .join(", ")}
+                                        </span>
+                                      ) : (
+                                        !addApp &&
+                                        row.entry.description && (
+                                          <span className="text-muted-foreground">
+                                            {row.entry.description}
+                                          </span>
+                                        )
                                       )}
                                     </span>
-                                    {row.kind === "app" ? (
-                                      <span className="text-muted-foreground">
-                                        {[
-                                          actions > 0 &&
-                                            `${actions} ${actions === 1 ? "action" : "actions"}`,
-                                          triggers > 0 &&
-                                            `${triggers} ${triggers === 1 ? "trigger" : "triggers"}`,
-                                        ]
-                                          .filter(Boolean)
-                                          .join(", ")}
-                                      </span>
-                                    ) : (
-                                      !addApp &&
-                                      row.entry.description && (
-                                        <span className="text-muted-foreground">
-                                          {row.entry.description}
-                                        </span>
-                                      )
+                                    {row.kind === "app" && (
+                                      <ChevronRight className="size-4 text-muted-foreground" />
                                     )}
-                                  </span>
-                                  {row.kind === "app" && (
-                                    <ChevronRight className="size-4 text-muted-foreground" />
-                                  )}
-                                </button>
-                              );
-                            })}
-                        </div>
-                      );
-                    })}
-                    {!addApp && (
-                      <AvailableNodePackages
-                        query={addQuery}
-                        onInstalled={() => setCatalogTick((tick) => tick + 1)}
-                        showEmpty={addGroups.length === 0}
-                      />
-                    )}
-                    {addGroups.length === 0 && addApp && (
-                      <p className="px-2 text-muted-foreground">No nodes found</p>
-                    )}
-                  </div>
-                </SheetContent>
-              </Sheet>
-              <NodeDialog
-                tables={tables}
-                workflows={otherWorkflows}
-                defaultTimezone={defaultTimezone}
-                projectSlug={projectSlug}
-                credentials={credentials}
-                onCredentialCreated={(created) =>
-                  setCredentials((all) => [...all.filter((c) => c.id !== created.id), created])
-                }
-                node={selected}
-                hasInput={selected !== null && edges.some((e) => e.target === selected.id)}
-                inputPorts={selectedInputPorts}
-                io={selectedIo}
-                webhookUrl={webhookUrl}
-                testUrl={selected ? (testUrls[selected.id] ?? null) : null}
-                listening={selected !== null && listeningId === selected.id}
-                onListen={() => listenForTestEvent()}
-                onStopListen={stopListening}
-                // Listening goes on after the dialog closes. The node shows it on the canvas.
-                onClose={() => setOpenId(null)}
-                onChange={updateSelected}
-                onExecuteStep={() => void executeStep()}
-                busy={runStatus === "queued" || runStatus === "running"}
-              />
-            </div>
-          </InputDataContext.Provider>
-        </NodeOutputsContext.Provider>
-      </NodeNamesContext.Provider>
+                                  </button>
+                                );
+                              })}
+                          </div>
+                        );
+                      })}
+                      {!addApp && (
+                        <AvailableNodePackages
+                          query={addQuery}
+                          onInstalled={() => setCatalogTick((tick) => tick + 1)}
+                          showEmpty={addGroups.length === 0}
+                        />
+                      )}
+                      {addGroups.length === 0 && addApp && (
+                        <p className="px-2 text-muted-foreground">No nodes found</p>
+                      )}
+                    </div>
+                  </SheetContent>
+                </Sheet>
+                <NodeDialog
+                  tables={tables}
+                  workflows={otherWorkflows}
+                  defaultTimezone={defaultTimezone}
+                  projectSlug={projectSlug}
+                  credentials={credentials}
+                  onCredentialCreated={(created) =>
+                    setCredentials((all) => [...all.filter((c) => c.id !== created.id), created])
+                  }
+                  node={selected}
+                  hasInput={selected !== null && edges.some((e) => e.target === selected.id)}
+                  inputPorts={selectedInputPorts}
+                  io={selectedIo}
+                  webhookUrl={webhookUrl}
+                  testUrl={selected ? (testUrls[selected.id] ?? null) : null}
+                  listening={selected !== null && listeningId === selected.id}
+                  onListen={() => listenForTestEvent()}
+                  onStopListen={stopListening}
+                  // Listening goes on after the dialog closes. The node shows it on the canvas.
+                  onClose={() => setOpenId(null)}
+                  onChange={updateSelected}
+                  onExecuteStep={() => void executeStep()}
+                  busy={runStatus === "queued" || runStatus === "running"}
+                />
+              </div>
+            </InputDataContext.Provider>
+          </NodeOutputsContext.Provider>
+        </NodeNamesContext.Provider>
+      </CredentialsContext.Provider>
     </VariablesContext.Provider>
   );
 }
