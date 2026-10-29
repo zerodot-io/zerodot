@@ -25,18 +25,22 @@ import {
   Braces,
   ChartColumn,
   CircleUser,
+  FolderOpen,
   KeyRound,
   ListChecks,
   LockKeyhole,
+  LogOut,
   type LucideIcon,
   PanelLeftClose,
   PanelLeftOpen,
+  Plus,
   Settings,
   Table2,
   Workflow,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { AboutDialog } from "../components/about-dialog";
+import { CommandPalette, type PaletteAction } from "../components/command-palette";
 import { ProjectDialog } from "../components/project-dialog";
 import { getIsInstanceAdmin, getProjectFn } from "../server/fns";
 
@@ -113,6 +117,61 @@ function ProjectLayout() {
     }
   }
 
+  const paletteActions: PaletteAction[] = [
+    ...navItems.map(({ to, label, icon: Icon }) => ({
+      id: `page:${to}`,
+      group: "Pages",
+      label,
+      icon: <Icon className="size-4" />,
+      run: () =>
+        navigate({
+          to,
+          params: { projectSlug: slug },
+          ...(to === "/p/$projectSlug/workflows" ? { search: { all: true } } : {}),
+        }),
+    })),
+    ...projects.map((p) => ({
+      id: `project:${p.slug}`,
+      group: `${PROJECT_LABEL[0]?.toUpperCase()}${PROJECT_LABEL.slice(1)}s`,
+      label: p.name,
+      icon: <FolderOpen className="size-4" />,
+      run: () =>
+        navigate({
+          to: "/p/$projectSlug/workflows",
+          params: { projectSlug: p.slug },
+          search: { all: true },
+        }),
+    })),
+    {
+      id: "new-project",
+      group: "Actions",
+      label: `New ${PROJECT_LABEL}`,
+      icon: <Plus className="size-4" />,
+      run: () => setNewProject(true),
+    },
+    ...(instanceAdmin
+      ? [
+          {
+            id: "system",
+            group: "Actions",
+            label: "System",
+            icon: <Settings className="size-4" />,
+            run: () => navigate({ to: "/system" }),
+          },
+        ]
+      : []),
+    {
+      id: "sign-out",
+      group: "Actions",
+      label: "Sign out",
+      icon: <LogOut className="size-4" />,
+      run: async () => {
+        await authClient.signOut();
+        await navigate({ to: "/sign-in" });
+      },
+    },
+  ];
+
   // The canvas goes edge to edge. The rail floats over it. Other pages leave room for it.
   const onCanvas = useMatchRoute()({ to: "/p/$projectSlug/workflows/$workflowId" });
   return (
@@ -181,7 +240,11 @@ function ProjectLayout() {
                   <DropdownMenuItem
                     key={p.slug}
                     onClick={() =>
-                      navigate({ to: "/p/$projectSlug/workflows", params: { projectSlug: p.slug } })
+                      navigate({
+                        to: "/p/$projectSlug/workflows",
+                        params: { projectSlug: p.slug },
+                        search: { all: true },
+                      })
                     }
                   >
                     {p.name}
@@ -214,6 +277,7 @@ function ProjectLayout() {
           </Tooltip>
         </nav>
       </div>
+      <CommandPalette slug={slug} actions={paletteActions} />
       {about && <AboutDialog project={project.name} onClose={() => setAbout(false)} />}
       {newProject && (
         <ProjectDialog
@@ -223,6 +287,7 @@ function ProjectLayout() {
             await navigate({
               to: "/p/$projectSlug/workflows",
               params: { projectSlug: newSlug },
+              search: { all: true },
             });
           }}
         />

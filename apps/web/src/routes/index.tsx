@@ -6,6 +6,10 @@ export const Route = createFileRoute("/")({
   beforeLoad: async () => {
     const home = await getHomeFn();
     if (!home.signedIn || !home.slug) throw redirect({ to: "/sign-in" });
-    throw redirect({ to: "/p/$projectSlug/workflows", params: { projectSlug: home.slug } });
+    throw redirect({
+      to: "/p/$projectSlug/workflows",
+      params: { projectSlug: home.slug },
+      search: { all: true },
+    });
   },
 });
