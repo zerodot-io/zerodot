@@ -94,7 +94,7 @@ Zerodot is owned and maintained by [7 Angle](https://7angle.com).
 
 - To send a pull request, sign the [CLA](CLA.md). Read [CONTRIBUTING.md](CONTRIBUTING.md).
 - Free support: [GitHub issues](https://github.com/zerodot-io/zerodot/issues).
-- Paid support: private Discord and priority help. Read [SUPPORT.md](SUPPORT.md).
+- Community Access: a private community Discord and roadmap voting. It is a digital product and does not include support. Read [SUPPORT.md](SUPPORT.md).
 
 ## More
 
