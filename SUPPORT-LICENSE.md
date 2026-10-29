@@ -59,8 +59,4 @@ We can change these terms for future orders. A change does not apply to an order
 
 ## 9. Law
 
-`<GOVERNING_LAW>` law applies to these terms.
-
----
-
-_Replace every `<...>` placeholder and have a lawyer review this document before you sell the first license._
+The laws of India apply to these terms.
