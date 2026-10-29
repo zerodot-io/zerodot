@@ -248,16 +248,16 @@ check_resources() {
   local cpus free_gb
   cpus=$(nproc)
   if ((MEM_MB < 1024)); then
-    bad "RAM ${MEM_MB} MB. The build needs 2 GB or more (swap can help)."
+    bad "RAM ${MEM_MB} MB. Zerodot needs 2 GB or more (swap can help)."
   elif ((MEM_MB < 2048)); then
-    note "RAM ${MEM_MB} MB. Enough to run, tight to build. The script adds swap."
+    note "RAM ${MEM_MB} MB. Enough to run, tight to build (native mode builds). The script adds swap."
   else
     ok "RAM ${MEM_MB} MB, ${cpus} CPU"
   fi
   if ((MEM_MB < 3900 && SWAP_MB == 0)); then tip "Add swap before building (the script does this for you)."; fi
   free_gb=$(df -Pk /var 2>/dev/null | awk 'NR==2 {print int($4/1024/1024)}')
   if ((free_gb < 4)); then bad "Disk: ${free_gb} GB free on /var. Need 8 GB or more."
-  elif ((free_gb < 8)); then note "Disk: ${free_gb} GB free on /var. Docker builds use about 6 GB."
+  elif ((free_gb < 8)); then note "Disk: ${free_gb} GB free on /var. Docker images and data use about 6 GB."
   else ok "Disk: ${free_gb} GB free on /var"; fi
   if [[ "$VIRT" == "openvz" || "$VIRT" == "lxc" ]]; then
     note "This server is a container ($VIRT). Docker may not work here."
@@ -600,9 +600,15 @@ PLAN=$(plan_text)
 say "Plan"
 echo "$PLAN"
 if ((TUI)); then
-  tui_yesno "Ready to start?" "$PLAN
+  if [[ "$MODE" == docker ]]; then
+    tui_yesno "Ready to start?" "$PLAN
+
+Docker mode pulls the images. The first start takes a few minutes." || tui_cancel
+  else
+    tui_yesno "Ready to start?" "$PLAN
 
 The first build takes about 10 minutes." || tui_cancel
+  fi
 else
   confirm "Continue?" || { echo "Stopped. Nothing was changed."; exit 0; }
 fi
@@ -637,34 +643,8 @@ if [[ -d "$DIR/.git" ]]; then
   git -C "$DIR" pull --ff-only
 else
   mkdir -p "$(dirname "$DIR")"
-    ssh_repo="git@github-zerodot:${ZERODOT_REPO#https://github.com/}"
-  if ! GIT_TERMINAL_PROMPT=0 git clone ${ZERODOT_BRANCH:+-b "$ZERODOT_BRANCH"} "$ZERODOT_REPO" "$DIR"; then
-    if grep -q '^Host github-zerodot' "$HOME/.ssh/config" 2>/dev/null \
-      && git clone ${ZERODOT_BRANCH:+-b "$ZERODOT_BRANCH"} "$ssh_repo" "$DIR"; then
-      echo "Cloned with the deploy key."
-    else
-      # The repository is private. Make a read-only deploy key and wait for the user to add it.
-      have_tty || die "Clone failed. If the repository is private, run this script from a terminal."
-      key="$HOME/.ssh/zerodot_deploy"
-      mkdir -p "$HOME/.ssh" && chmod 700 "$HOME/.ssh"
-      [[ -f "$key" ]] || ssh-keygen -t ed25519 -N "" -C zerodot-deploy -f "$key" -q
-      grep -q '^Host github-zerodot' "$HOME/.ssh/config" 2>/dev/null || cat >> "$HOME/.ssh/config" <<CONF
-
-Host github-zerodot
-  HostName github.com
-  User git
-  IdentityFile $key
-  IdentitiesOnly yes
-  StrictHostKeyChecking accept-new
-CONF
-      printf '\nThe clone failed. The repository may be private.\n'
-      printf 'Add this key in GitHub: repository > Settings > Deploy keys (leave write access off):\n\n'
-      cat "$key.pub"
-      printf '\nPress Enter when it is added... '
-      read -r _ </dev/tty
-      git clone ${ZERODOT_BRANCH:+-b "$ZERODOT_BRANCH"} "$ssh_repo" "$DIR" || die "Clone failed again. Check the deploy key."
-    fi
-  fi
+  GIT_TERMINAL_PROMPT=0 git clone ${ZERODOT_BRANCH:+-b "$ZERODOT_BRANCH"} "$ZERODOT_REPO" "$DIR" \
+    || die "Clone failed. Check the network and ZERODOT_REPO ($ZERODOT_REPO)."
 fi
 cd "$DIR"
 

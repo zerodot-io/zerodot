@@ -142,23 +142,6 @@ mkdir -p /var/www && cd /var/www
 git clone https://github.com/zerodot-io/zerodot.git zerodot && cd zerodot
 ```
 
-If the repository is private, make a deploy key first:
-
-```sh
-ssh-keygen -t ed25519 -N "" -C zerodot-deploy -f ~/.ssh/zerodot_deploy
-cat ~/.ssh/zerodot_deploy.pub
-cat >> ~/.ssh/config <<'CONF'
-Host github-zerodot
-  HostName github.com
-  User git
-  IdentityFile ~/.ssh/zerodot_deploy
-  IdentitiesOnly yes
-  StrictHostKeyChecking accept-new
-CONF
-```
-
-Add the public key in GitHub: repository **Settings > Deploy keys**. Do not give it write access. Then clone with `git clone git@github-zerodot:zerodot-io/zerodot.git zerodot`.
-
 ## 4. Settings
 
 ```sh
