@@ -22,13 +22,14 @@ export default defineNode({
     }),
     url: z.url(),
     sendQuery: z.boolean().default(false).meta({ title: "Send Query Parameters" }),
+    // An expression can return a number or a boolean (a chat id, for example). Make it a string.
     query: z
-      .record(z.string(), z.string())
+      .record(z.string(), z.coerce.string())
       .optional()
       .meta({ title: "Query Parameters", showWhen: { sendQuery: [true] } }),
     sendHeaders: z.boolean().default(false).meta({ title: "Send Headers" }),
     headers: z
-      .record(z.string(), z.string())
+      .record(z.string(), z.coerce.string())
       .optional()
       .meta({ showWhen: { sendHeaders: [true] } }),
     sendBody: z.boolean().default(false).meta({ title: "Send Body" }),
