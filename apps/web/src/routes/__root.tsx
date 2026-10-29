@@ -2,6 +2,7 @@
 
 import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
 import { Toaster, TooltipProvider } from "@zerodot/ui";
+import { useMemo } from "react";
 import appCss from "../app.css?url";
 import { FeedbackWidget } from "../components/feedback-widget";
 import { getFeedbackWidgetFn } from "../server/feedback-fns";
@@ -23,7 +24,8 @@ export const Route = createRootRoute({
 });
 
 function RootDocument() {
-  const { widgetId } = Route.useLoaderData();
+  const { widgetId, system } = Route.useLoaderData();
+  const properties = useMemo(() => ({ version: __APP_VERSION__, system }), [system]);
   return (
     <html lang="en">
       <head>
@@ -34,7 +36,7 @@ function RootDocument() {
           <Outlet />
         </TooltipProvider>
         <Toaster />
-        <FeedbackWidget widgetId={widgetId} />
+        <FeedbackWidget widgetId={widgetId} properties={properties} />
         <Scripts />
       </body>
     </html>

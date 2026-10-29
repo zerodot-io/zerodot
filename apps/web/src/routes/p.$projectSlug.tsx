@@ -41,6 +41,7 @@ import {
 import { useEffect, useState } from "react";
 import { AboutDialog } from "../components/about-dialog";
 import { CommandPalette, type PaletteAction } from "../components/command-palette";
+import { setFeedbackUser } from "../components/feedback-widget";
 import { ProjectDialog } from "../components/project-dialog";
 import { getIsInstanceAdmin, getProjectFn } from "../server/fns";
 
@@ -98,6 +99,15 @@ function ProjectLayout() {
       .then(setInstanceAdmin)
       .catch(() => setInstanceAdmin(false));
   }, []);
+
+  // The feedback widget gets the name and email of who sends feedback, and the role.
+  useEffect(() => {
+    setFeedbackUser(
+      { id: user.id, name: user.name, email: user.email },
+      instanceAdmin ? "instance admin" : "member",
+    );
+    return () => setFeedbackUser(null);
+  }, [user.id, user.name, user.email, instanceAdmin]);
 
   useEffect(() => {
     try {

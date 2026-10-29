@@ -13,7 +13,8 @@ The System page shows the queues, the workers and the counters of the whole serv
 
 The web app shows a feedback widget. A user can send a feature request to the Zerodot board on FeedbackJar.
 
-- **What loads:** the browser of each user loads `https://cdn.feedbackjar.com/sdk.js`. FeedbackJar sees what the widget sends and the usual request data of the browser. Zerodot sends no workflow data or credentials to it.
+- **What loads:** the browser of each user loads `https://cdn.feedbackjar.com/sdk.js`.
+- **What goes with a feedback:** the name and email of the signed-in user, the user role (`instance admin` or `member`), the Zerodot version, and the system of the server (for example `linux 6.8.0 x64`). FeedbackJar also sees the usual request data of the browser. Zerodot sends no workflow data and no credentials.
 - **Turn it off:** `ZERODOT_FEEDBACK_WIDGET=false` in the web app. Then the browser loads nothing from FeedbackJar.
 
 ## Retention
