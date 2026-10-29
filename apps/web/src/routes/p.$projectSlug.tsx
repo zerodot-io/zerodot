@@ -21,6 +21,7 @@ import {
   LogoMark,
   PROJECT_LABEL,
   Tooltip,
+  toast,
 } from "@zerodot/ui";
 import {
   Braces,
@@ -40,11 +41,11 @@ import {
   Workflow,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { AboutDialog } from "../components/about-dialog";
+import { AboutDialog, releaseUrl } from "../components/about-dialog";
 import { CommandPalette, type PaletteAction } from "../components/command-palette";
 import { FeedbackWidget, openFeedback, setFeedbackUser } from "../components/feedback-widget";
 import { ProjectDialog } from "../components/project-dialog";
-import { getIsInstanceAdmin, getProjectFn } from "../server/fns";
+import { getIsInstanceAdmin, getProjectFn, getUpdateFn } from "../server/fns";
 
 /** The root route has the feedback widget settings. */
 const rootRoute = getRouteApi("__root__");
@@ -86,6 +87,7 @@ const railInactive = { className: "text-muted-foreground hover:bg-muted hover:te
 const railButton = `${railItem} ${railInactive.className}`;
 
 const HIDDEN_KEY = "zerodot:sidebar-hidden";
+const UPDATE_SEEN_KEY = "zerodot:update-seen";
 
 function ProjectLayout() {
   const { user, project, projects } = Route.useRouteContext();
@@ -95,6 +97,7 @@ function ProjectLayout() {
   const [hidden, setHiddenState] = useState(false);
   const [animate, setAnimate] = useState(false);
   const [instanceAdmin, setInstanceAdmin] = useState(false);
+  const [update, setUpdate] = useState<string | null>(null);
   const slug = project.slug;
   const { widgetId, system } = rootRoute.useLoaderData();
   const feedbackProperties = useMemo(() => ({ version: __APP_VERSION__, system }), [system]);
@@ -105,6 +108,31 @@ function ProjectLayout() {
       .then(setInstanceAdmin)
       .catch(() => setInstanceAdmin(false));
   }, []);
+
+  // The instance admin sees a toast once for each new version. The About dialog keeps the link.
+  useEffect(() => {
+    if (!instanceAdmin) return;
+    getUpdateFn({ data: { current: __APP_VERSION__ } })
+      .then(({ latest }) => {
+        setUpdate(latest);
+        if (!latest) return;
+        try {
+          if (localStorage.getItem(UPDATE_SEEN_KEY) === latest) return;
+          localStorage.setItem(UPDATE_SEEN_KEY, latest);
+        } catch {
+          // storage blocked: the toast shows on each load
+        }
+        toast(`Update available: v${latest}`, {
+          description: "See what changed, then pull the new images.",
+          duration: 15_000,
+          action: {
+            label: "View",
+            onClick: () => window.open(releaseUrl(latest), "_blank", "noopener,noreferrer"),
+          },
+        });
+      })
+      .catch(() => undefined);
+  }, [instanceAdmin]);
 
   // The feedback widget gets the name and email of who sends feedback, and the role.
   useEffect(() => {
@@ -298,7 +326,9 @@ function ProjectLayout() {
       </div>
       <CommandPalette slug={slug} actions={paletteActions} />
       <FeedbackWidget widgetId={widgetId} properties={feedbackProperties} />
-      {about && <AboutDialog project={project.name} onClose={() => setAbout(false)} />}
+      {about && (
+        <AboutDialog project={project.name} update={update} onClose={() => setAbout(false)} />
+      )}
       {newProject && (
         <ProjectDialog
           onClose={() => setNewProject(false)}

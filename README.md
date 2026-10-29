@@ -21,6 +21,8 @@ The web app has a feedback widget (FeedbackJar). Signed-in users open it from **
 
 To run Zerodot on a VPS with a domain and HTTPS, see [docs/deploy-vps.md](docs/deploy-vps.md).
 
+The instance admin sees a notice when a new version is out. The web app reads the public GitHub tag list once a day and sends no data about your instance. Set `ZERODOT_UPDATE_CHECK=false` to turn it off.
+
 ## Develop
 
 In development, the apps run on your computer. Only Postgres and Valkey run in Docker.

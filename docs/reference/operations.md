@@ -9,6 +9,14 @@ The System page shows the queues, the workers and the counters of the whole serv
 - **What an admin can do:** cancel any run, retry, remove or promote a job, clean a queue, pause and resume a queue. Each change writes one row to the `admin_audit` table (who, what, which id). Rows hold ids and counts only.
 - **What it never shows:** job data, node input or node output.
 
+## Update notice
+
+The instance admin sees a toast when a new version is out, one time for each version. The About dialog keeps a link to the release.
+
+- **How it works:** the web app asks the GitHub tags API for the newest `vX.Y.Z` tag, at most once a day. A failed request waits one hour. The request has no cookie and no data about your instance. GitHub sees the IP address of the server.
+- **Turn it off:** `ZERODOT_UPDATE_CHECK=false` in the web app. Then Zerodot makes no call to GitHub.
+- **Who sees it:** the instance admin only. Other users see nothing.
+
 ## Feedback widget
 
 The web app has a feedback widget. A signed-in user opens it from **Send feedback** in the Account menu of the sidebar, and sends a feature request to the Zerodot board on FeedbackJar. There is no floating button, and the sign-in pages do not load it.

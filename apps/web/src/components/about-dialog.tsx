@@ -14,13 +14,26 @@ import {
   Logo,
 } from "@zerodot/ui";
 
+/** The page of a release on GitHub. */
+export const releaseUrl = (version: string) =>
+  `https://github.com/zerodot-io/zerodot/releases/tag/v${version}`;
+
 const INFO: { label: string; value: string }[] = [
   { label: "Version", value: __APP_VERSION__ },
   { label: "License", value: "AGPL-3.0-only" },
 ];
 
 /** The product name, the version, and the license. */
-export function AboutDialog({ project, onClose }: { project: string; onClose: () => void }) {
+export function AboutDialog({
+  project,
+  update,
+  onClose,
+}: {
+  project: string;
+  /** The newest version, when it is newer than this one. */
+  update?: string | null;
+  onClose: () => void;
+}) {
   const rows = [...INFO, { label: "Project", value: project }];
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -44,6 +57,16 @@ export function AboutDialog({ project, onClose }: { project: string; onClose: ()
             </div>
           ))}
         </ItemGroup>
+        {update && (
+          <a
+            href={releaseUrl(update)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm font-medium underline underline-offset-4"
+          >
+            Update available: v{update}
+          </a>
+        )}
       </DialogContent>
     </Dialog>
   );
