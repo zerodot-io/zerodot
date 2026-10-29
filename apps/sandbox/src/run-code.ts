@@ -58,6 +58,9 @@ async function execute(
   onLog: (level: CodeLog["level"], message: string) => void,
 ): Promise<unknown> {
   const isolate = new ivm.Isolate({ memoryLimit: MEMORY_LIMIT_MB });
+  // Each Context, Script, and Reference holds a native handle. Release all of them, or they stay
+  // in memory until the garbage collector runs.
+  const handles: { release(): void }[] = [];
   let timedOut = false;
   // `timeout` stops code that never ends in one step. This timer also stops waiting code.
   const timer = setTimeout(() => {
@@ -67,6 +70,7 @@ async function execute(
 
   try {
     const context = await isolate.createContext();
+    handles.push(context);
     await context.global.set("__scope", JSON.stringify(request.scope));
     await context.global.set(
       "__log",
@@ -123,14 +127,17 @@ async function execute(
     let userFunction: ivm.Script;
     try {
       userFunction = await isolate.compileScript(source, { filename: "code.js" });
+      handles.push(userFunction);
     } catch (error) {
       throw new CodeError(
         `SyntaxError: ${tidy(error instanceof Error ? error.message : String(error))}`,
       );
     }
     const fn = await userFunction.run(context, { reference: true, timeout: request.timeoutMs });
+    handles.push(fn);
     await context.global.set("__user", fn.derefInto());
     const script = await isolate.compileScript(bootstrap, { filename: "zerodot-bootstrap.js" });
+    handles.push(script);
     const text = (await script.run(context, {
       timeout: request.timeoutMs,
       promise: true,
@@ -147,6 +154,13 @@ async function execute(
     throw new CodeError(describe(error, timedOut, request.timeoutMs));
   } finally {
     clearTimeout(timer);
+    for (const handle of handles) {
+      try {
+        handle.release();
+      } catch {
+        // The isolate is already gone, so the handle is already free.
+      }
+    }
     if (!isolate.isDisposed) isolate.dispose();
   }
 }
