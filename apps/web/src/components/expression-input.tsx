@@ -12,6 +12,7 @@ import {
 } from "@zerodot/ui";
 import { Maximize2 } from "lucide-react";
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { helpersFor } from "../lib/expression-helpers";
 
 export type VariableHint = { key: string; preview: string };
 
@@ -164,13 +165,20 @@ export function ExpressionInput({
             : undefined;
       }
       typed = partial;
-      matches = keysAt(data, parts)
+      const keys = keysAt(data, parts)
         .filter((key) => key.startsWith(partial) && key !== partial)
         .map((key) => ({
           label: key,
           insert: key,
           hint: previewOf((target as Record<string, unknown>)[key]),
         }));
+      // After the keys, the helpers for the value: .toString(), .toNumber() and so on.
+      // Not for the bare "$input." or ".data.", where only the keys make sense.
+      const helpers =
+        parts.length > 0
+          ? helpersFor(target).filter((h) => h.label.startsWith(partial) && h.label !== partial)
+          : [];
+      matches = [...keys, ...helpers];
     } else if (credentialField) {
       const [, name = "", partial = ""] = credentialField;
       typed = partial;
