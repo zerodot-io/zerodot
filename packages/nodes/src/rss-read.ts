@@ -54,6 +54,7 @@ export function parseFeed(xml: string): Json[] {
 
 export default defineNode({
   type: "rss.read",
+  usableAsTool: true,
   label: "RSS Read",
   description: "Read the items of an RSS or Atom feed",
   category: "core",

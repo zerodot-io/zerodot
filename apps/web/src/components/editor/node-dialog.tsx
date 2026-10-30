@@ -36,7 +36,7 @@ import {
 import { type CSSProperties, type ReactNode, useRef, useState } from "react";
 import { catalogByType, type ZerodotFlowNode } from "../../lib/flow";
 import { CredentialDialog, type SavedCredential } from "../credential-dialog";
-import { ExpressionInput } from "../expression-input";
+import { ExpressionInput, FromAIContext } from "../expression-input";
 import { McpToolFields } from "../mcp-tool-fields";
 import { NodeIcon } from "../node-icon";
 import { OutputView } from "../output-view";
@@ -524,6 +524,8 @@ type Props = {
   node: ZerodotFlowNode | null;
   /** True when an edge leads into the node. */
   hasInput: boolean;
+  /** The node is on a tool port: it runs as a tool, not as a step. */
+  asTool?: boolean;
   /** For a node that joins several inputs (Merge): each input port and whether an edge leads into it. */
   inputPorts: { port: string; connected: boolean }[] | null;
   io: NodeIO | undefined;
@@ -552,6 +554,7 @@ export function NodeDialog({
   onCredentialCreated,
   node,
   hasInput,
+  asTool = false,
   inputPorts,
   io,
   webhookUrl,
@@ -585,6 +588,8 @@ export function NodeDialog({
   };
 
   const isTrigger = entry?.category === "trigger";
+  // A supply node is no step: it has no input, no output, and does not run alone.
+  const isSupply = entry?.supplies !== undefined || asTool;
   const isWebhookNode = graphNode?.type === "trigger.webhook";
   // A service calls the test URL of some triggers, not a person. The URL is not for them.
   const serviceHint = entry?.webhookTest?.hint;
@@ -630,14 +635,16 @@ export function NodeDialog({
                   className="h-6 w-72 border-transparent bg-transparent font-semibold shadow-none"
                   onChange={(event) => onChange((n) => ({ ...n, name: event.target.value }))}
                 />
-                <Button size="xs" className="ml-auto" disabled={busy} onClick={onExecuteStep}>
-                  {busy ? (
-                    <HugeiconsIcon icon={Loading03Icon} className="animate-spin" />
-                  ) : (
-                    <HugeiconsIcon icon={PlayIcon} />
-                  )}
-                  {busy ? "Running…" : "Execute step"}
-                </Button>
+                {!isSupply && (
+                  <Button size="xs" className="ml-auto" disabled={busy} onClick={onExecuteStep}>
+                    {busy ? (
+                      <HugeiconsIcon icon={Loading03Icon} className="animate-spin" />
+                    ) : (
+                      <HugeiconsIcon icon={PlayIcon} />
+                    )}
+                    {busy ? "Running…" : "Execute step"}
+                  </Button>
+                )}
               </DialogTitle>
             </DialogHeader>
             <div ref={panesRef} className="flex min-h-0 min-w-0 flex-1">
@@ -708,8 +715,15 @@ export function NodeDialog({
                       );
                     })}
                   </div>
-                ) : !hasInput ? (
+                ) : !hasInput && !isSupply ? (
                   <EmptyState icon={<NoInputArt />} title="No input connected" />
+                ) : io?.input === undefined && isSupply ? (
+                  <EmptyState
+                    icon={<HugeiconsIcon icon={Logout03Icon} className="size-5" />}
+                    title="No calls yet"
+                  >
+                    <p>Run the workflow. The last call from the node it supplies shows here.</p>
+                  </EmptyState>
                 ) : io?.input === undefined ? (
                   <EmptyState
                     icon={<HugeiconsIcon icon={Logout03Icon} className="size-5" />}
@@ -772,25 +786,44 @@ export function NodeDialog({
                           }
                         />
                       )}
+                      {asTool && (
+                        <Field>
+                          <FieldLabel htmlFor="tool-description">Tool description</FieldLabel>
+                          <Textarea
+                            id="tool-description"
+                            rows={2}
+                            placeholder={entry?.description ?? "What the tool does, for the model"}
+                            value={graphNode.toolDescription ?? ""}
+                            onChange={(event) =>
+                              onChange((n) => ({
+                                ...n,
+                                toolDescription: event.target.value || undefined,
+                              }))
+                            }
+                          />
+                        </Field>
+                      )}
                       {entry && !isWebhookNode && credentialTypes.length > 0 && picker}
                       {entry && (
-                        <SchemaForm
-                          tables={tables}
-                          workflows={workflows}
-                          defaultTimezone={defaultTimezone}
-                          after={
-                            isWebhookNode && credentialTypes.length > 0
-                              ? { authentication: picker }
-                              : undefined
-                          }
-                          schema={
-                            graphNode.type === MCP_NODE
-                              ? withoutProperties(entry.configSchema, ["tool", "arguments"])
-                              : entry.configSchema
-                          }
-                          value={graphNode.config}
-                          onChange={(config) => onChange((n) => ({ ...n, config }))}
-                        />
+                        <FromAIContext.Provider value={asTool}>
+                          <SchemaForm
+                            tables={tables}
+                            workflows={workflows}
+                            defaultTimezone={defaultTimezone}
+                            after={
+                              isWebhookNode && credentialTypes.length > 0
+                                ? { authentication: picker }
+                                : undefined
+                            }
+                            schema={
+                              graphNode.type === MCP_NODE
+                                ? withoutProperties(entry.configSchema, ["tool", "arguments"])
+                                : entry.configSchema
+                            }
+                            value={graphNode.config}
+                            onChange={(config) => onChange((n) => ({ ...n, config }))}
+                          />
+                        </FromAIContext.Provider>
                       )}
                       {graphNode.type === MCP_NODE && (
                         <McpToolFields
@@ -821,6 +854,11 @@ export function NodeDialog({
                       setMocking(false);
                     }}
                   />
+                ) : output === undefined && isSupply ? (
+                  <EmptyState
+                    icon={<HugeiconsIcon icon={Login03Icon} className="size-5" />}
+                    title="No calls yet"
+                  />
                 ) : output === undefined ? (
                   <EmptyState
                     icon={<HugeiconsIcon icon={Login03Icon} className="size-5" />}
@@ -848,18 +886,21 @@ export function NodeDialog({
                     <OutputView
                       value={output}
                       actions={
-                        <Button
-                          variant={pinned ? "default" : "outline"}
-                          size="xs"
-                          onClick={() =>
-                            onChange((n) => ({
-                              ...n,
-                              pinned: pinned ? null : { port: io?.port ?? "out", data: output },
-                            }))
-                          }
-                        >
-                          {pinned ? "Unpin" : "Pin"}
-                        </Button>
+                        // A supply node is no step, so its data cannot be pinned.
+                        isSupply ? undefined : (
+                          <Button
+                            variant={pinned ? "default" : "outline"}
+                            size="xs"
+                            onClick={() =>
+                              onChange((n) => ({
+                                ...n,
+                                pinned: pinned ? null : { port: io?.port ?? "out", data: output },
+                              }))
+                            }
+                          >
+                            {pinned ? "Unpin" : "Pin"}
+                          </Button>
+                        )
                       }
                     />
                   </>

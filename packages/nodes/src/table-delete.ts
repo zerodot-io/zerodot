@@ -5,6 +5,7 @@ import { readFilter, storeOf, tableRef } from "./table-common";
 
 export default defineNode({
   type: "table.delete",
+  usableAsTool: true,
   label: "Delete Rows",
   description: "Remove rows from a table that match a filter",
   category: "data",

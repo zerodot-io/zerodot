@@ -27,6 +27,7 @@ function read(
 
 export default defineNode({
   type: "data.html_extract",
+  usableAsTool: true,
   label: "HTML Extract",
   description: "Get data from HTML with CSS selectors",
   category: "data",

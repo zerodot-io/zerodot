@@ -7,13 +7,23 @@ import {
   ControlButton,
   Controls,
   type Edge,
+  type FinalConnectionState,
   ReactFlow,
   type ReactFlowInstance,
   useEdgesState,
   useNodesState,
 } from "@xyflow/react";
 import type { Graph } from "@zerodot/engine";
-import { inputPortsOf, isBackEdge, isTriggerType, outputPortsOf } from "@zerodot/engine";
+import {
+  inputPortsOf,
+  isBackEdge,
+  isTriggerType,
+  outputPortsOf,
+  SUPPLY_OUT_PORT,
+  SUPPLY_PORT_PREFIX,
+  type SupplyPort,
+  TOOL_KIND,
+} from "@zerodot/engine";
 import { catalog, registry } from "@zerodot/nodes";
 import type { RunEvent } from "@zerodot/queue";
 import {
@@ -64,17 +74,20 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   catalogByType,
   copyGraph,
+  isSupplyFlowEdge,
   type NodeRunStatus,
   newNode,
   parseGraph,
   pasteGraph,
+  portHandle,
+  supplyPortX,
   toFlow,
   toGraph,
   uniqueName,
   type ZerodotFlowNode,
 } from "../../lib/flow";
 import type { Json } from "../../lib/json";
-import { arrangeNodes } from "../../lib/layout";
+import { arrangeNodes, SUPPLY_GAP } from "../../lib/layout";
 import {
   cancelTestRunFn,
   exportWorkflowFn,
@@ -119,6 +132,8 @@ import {
 } from "./zerodot-node";
 
 const nodeTypes = { zerodot: ZerodotNode };
+/** Nodes that the tool port list shows with its supply nodes, at the top. */
+const RECOMMENDED_TOOLS = new Set(["http.request"]);
 const edgeTypes = { zerodot: ZerodotEdge };
 const EVENT_TYPES: RunEvent["type"][] = [
   "run.started",
@@ -128,6 +143,7 @@ const EVENT_TYPES: RunEvent["type"][] = [
   "node.succeeded",
   "node.failed",
   "node.skipped",
+  "supply.used",
   "run.finished",
 ];
 
@@ -299,6 +315,14 @@ export function Editor({
   const [insertEdgeId, setInsertEdgeId] = useState<string | null>(null);
   /** The output port that gets the new node. */
   const [addFrom, setAddFrom] = useState<{ nodeId: string; port: string } | null>(null);
+  /** The supply port that gets the new node. The Add node list shows its kind only. */
+  const [addSupply, setAddSupply] = useState<{ nodeId: string; port: SupplyPort } | null>(null);
+  /** The input port that gets the new node: the new node goes before it. */
+  const [addBefore, setAddBefore] = useState<{ nodeId: string; port: string } | null>(null);
+  /** A supply node that needs a parent. The Add node list shows the nodes that take its kind. */
+  const [addConsumer, setAddConsumer] = useState<{ nodeId: string; kind: string } | null>(null);
+  /** Where a drag from a port ended on the empty canvas. The new node goes there. */
+  const [addAt, setAddAt] = useState<{ x: number; y: number } | null>(null);
   const [statuses, setStatuses] = useState<Record<string, NodeRunStatus>>({});
   const [ios, setIos] = useState<Record<string, NodeIO>>({});
   const [saveState, setSaveState] = useState<"saved" | "saving" | "error">("saved");
@@ -343,10 +367,24 @@ export function Editor({
   useEffect(() => {
     const json = JSON.stringify(graph);
     if (json === lastSaved.current) return;
+    // A node type this server does not have (a package that did not load) has no ports on the
+    // canvas, so its edges can get lost. Save nothing until the type is back.
+    const unknown = [
+      ...new Set(graph.nodes.map((n) => n.type).filter((type) => !catalogByType.has(type))),
+    ];
+    if (unknown.length > 0) {
+      setSaveState("error");
+      setMessage(
+        `Changes are not saved. Unknown node ${unknown.length === 1 ? "type" : "types"}: ${unknown.join(", ")}. Install the package and reload.`,
+      );
+      return;
+    }
     setSaveState("saving");
     const timer = setTimeout(async () => {
       try {
-        await saveDraftFn({ data: { projectSlug, workflowId: workflow.id, graph } });
+        await saveDraftFn({
+          data: { projectSlug, workflowId: workflow.id, graph, base: lastSaved.current },
+        });
         lastSaved.current = json;
         setSaveState("saved");
         setMessage(null);
@@ -446,12 +484,59 @@ export function Editor({
 
   const onConnect = useCallback(
     (connection: Connection) =>
-      setEdges((current) => addEdge({ ...connection, type: "zerodot" }, current)),
+      setEdges((current) =>
+        addEdge(
+          {
+            ...connection,
+            sourceHandle: portHandle(connection.sourceHandle),
+            targetHandle: portHandle(connection.targetHandle),
+            type: "zerodot",
+          },
+          current,
+        ),
+      ),
     [setEdges],
   );
 
   const isValidConnection = useCallback(
-    (connection: Connection | Edge) => {
+    (raw: Connection | Edge) => {
+      const connection = {
+        ...raw,
+        sourceHandle: portHandle(raw.sourceHandle),
+        targetHandle: portHandle(raw.targetHandle),
+      };
+      const sourceNode = nodes.find((n) => n.id === connection.source);
+      const sourceEntry = sourceNode && catalogByType.get(sourceNode.data.graphNode.type);
+      // A node that can be a tool gives the tool kind from its supply handle.
+      const supplies =
+        sourceEntry?.supplies ??
+        (connection.sourceHandle === SUPPLY_OUT_PORT && sourceEntry?.usableAsTool
+          ? TOOL_KIND
+          : undefined);
+      // A supply node connects only to a supply port of its kind.
+      if (supplies !== undefined || isSupplyFlowEdge(connection)) {
+        const parent = nodes.find((n) => n.id === connection.target);
+        const portName = (connection.targetHandle ?? "").slice(SUPPLY_PORT_PREFIX.length);
+        const port = parent
+          ? catalogByType
+              .get(parent.data.graphNode.type)
+              ?.supplyPorts?.find((p) => p.name === portName)
+          : undefined;
+        if (
+          !port ||
+          connection.sourceHandle !== SUPPLY_OUT_PORT ||
+          !connection.targetHandle?.startsWith(SUPPLY_PORT_PREFIX) ||
+          port.kind !== supplies
+        ) {
+          return false;
+        }
+        return (
+          port.multiple === true ||
+          !edges.some(
+            (e) => e.target === connection.target && e.targetHandle === connection.targetHandle,
+          )
+        );
+      }
       // The target port must exist with the config of the node (a Merge node has 2 to 10 inputs).
       const targetNode = nodes.find((n) => n.id === connection.target);
       const targetDefinition = targetNode && registry.get(targetNode.data.graphNode.type);
@@ -477,7 +562,10 @@ export function Editor({
       }
       // Other nodes take one forward edge. A loop adds an edge that comes back, and a node can
       // connect to itself (the loop output of Loop Over Items). Join branches with a Merge node.
-      const all = [...edges, { id: "new", source: connection.source, target: connection.target }];
+      const all = [
+        ...edges.filter((e) => !isSupplyFlowEdge(e)),
+        { id: "new", source: connection.source, target: connection.target },
+      ];
       const graphEdges = all.map((e) => ({
         id: e.id,
         from: e.source,
@@ -506,6 +594,13 @@ export function Editor({
     }
   }
 
+  /** Moves a new node to where a drag from a port ended, when it ended on the canvas. */
+  function placeAtDrop(node: ZerodotFlowNode) {
+    if (!addAt) return;
+    node.position = addAt;
+    node.data.graphNode.position = addAt;
+  }
+
   function addNode(
     type: string,
     from?: { nodeId: string; port: string },
@@ -523,6 +618,7 @@ export function Editor({
       };
       node.data.graphNode.position = node.position;
     }
+    placeAtDrop(node);
     // A new loop comes with a placeholder node in the loop, wired back to the loop.
     const placeholder = type === LOOP_TYPE ? newNode(NOOP_TYPE, [...nodes, node]) : null;
     if (placeholder) {
@@ -573,6 +669,142 @@ export function Editor({
             },
           ]
         : []),
+    ]);
+  }
+
+  /** Add a node before an input port and connect its first output to it. */
+  function addBeforeNode(
+    type: string,
+    to: { nodeId: string; port: string },
+    config?: Record<string, unknown>,
+  ) {
+    const child = nodes.find((n) => n.id === to.nodeId);
+    if (!child) return;
+    const node = newNode(type, nodes, config);
+    node.position = { x: child.position.x - 220, y: child.position.y };
+    node.data.graphNode.position = node.position;
+    placeAtDrop(node);
+    setNodes((current) => [
+      ...current.map((n) => ({ ...n, selected: false })),
+      { ...node, selected: true },
+    ]);
+    setEdges((current) => [
+      ...current,
+      {
+        id: `e_${crypto.randomUUID().slice(0, 8)}`,
+        source: node.id,
+        sourceHandle: catalogByType.get(type)?.ports.out[0] ?? "out",
+        target: to.nodeId,
+        targetHandle: to.port,
+        type: "zerodot",
+      },
+    ]);
+  }
+
+  /** Add a node above a supply node and connect the supply node to its first port of that kind. */
+  function addConsumerNode(
+    type: string,
+    from: { nodeId: string; kind: string },
+    config?: Record<string, unknown>,
+  ) {
+    const supplier = nodes.find((n) => n.id === from.nodeId);
+    const port = catalogByType.get(type)?.supplyPorts?.find((p) => p.kind === from.kind);
+    if (!supplier || !port) return;
+    const node = newNode(type, nodes, config);
+    node.position = { x: supplier.position.x, y: supplier.position.y - 180 };
+    node.data.graphNode.position = node.position;
+    placeAtDrop(node);
+    setNodes((current) => [
+      ...current.map((n) => ({ ...n, selected: false })),
+      { ...node, selected: true },
+    ]);
+    setEdges((current) => [
+      ...current,
+      {
+        id: `e_${crypto.randomUUID().slice(0, 8)}`,
+        source: from.nodeId,
+        sourceHandle: SUPPLY_OUT_PORT,
+        target: node.id,
+        targetHandle: `${SUPPLY_PORT_PREFIX}${port.name}`,
+        type: "zerodot",
+      },
+    ]);
+  }
+
+  /**
+   * A drag from a port that ends on the empty canvas opens the Add node list for that port: after
+   * an output, before an input, a supply node for a supply port, or a parent for a supply node.
+   */
+  const onConnectEnd = useCallback(
+    (event: MouseEvent | TouchEvent, state: FinalConnectionState) => {
+      if (state.isValid || state.toNode || !state.fromNode || !state.fromHandle) return;
+      const point = "changedTouches" in event ? event.changedTouches[0] : event;
+      if (!point || !flowRef.current) return;
+      const nodeId = state.fromNode.id;
+      const handle =
+        portHandle(state.fromHandle.id) ?? (state.fromHandle.type === "source" ? "out" : "in");
+      const graphNode = nodes.find((n) => n.id === nodeId)?.data.graphNode;
+      const entry = graphNode && catalogByType.get(graphNode.type);
+      if (!entry) return;
+      if (handle === SUPPLY_OUT_PORT && (entry.supplies !== undefined || entry.usableAsTool)) {
+        setAddConsumer({ nodeId, kind: entry.supplies ?? TOOL_KIND });
+      } else if (handle.startsWith(SUPPLY_PORT_PREFIX)) {
+        const port = entry.supplyPorts?.find((p) => `${SUPPLY_PORT_PREFIX}${p.name}` === handle);
+        if (!port) return;
+        setAddSupply({ nodeId, port });
+      } else if (state.fromHandle.type === "source") {
+        setAddFrom({ nodeId, port: handle });
+      } else {
+        setAddBefore({ nodeId, port: handle });
+      }
+      setAddAt(flowRef.current.screenToFlowPosition({ x: point.clientX, y: point.clientY }));
+      setAddOpen(true);
+    },
+    [nodes],
+  );
+
+  /** Add a supply node under a node and connect it to the supply port. */
+  function addSupplyNode(
+    type: string,
+    to: { nodeId: string; port: SupplyPort },
+    config?: Record<string, unknown>,
+  ) {
+    const parent = nodes.find((n) => n.id === to.nodeId);
+    if (!parent) return;
+    const node = newNode(type, nodes, config);
+    const ports = catalogByType.get(parent.data.graphNode.type)?.supplyPorts ?? [];
+    const index = Math.max(
+      0,
+      ports.findIndex((p) => p.name === to.port.name),
+    );
+    const targetHandle = `${SUPPLY_PORT_PREFIX}${to.port.name}`;
+    const siblings = edges.filter((e) => e.target === to.nodeId && e.targetHandle === targetHandle);
+    // Under the port, and right of the nodes that are already on it. A supply node is 64px wide.
+    const parentWidth = parent.measured?.width ?? 240;
+    node.position = {
+      x:
+        parent.position.x +
+        parentWidth * supplyPortX(index, ports.length) -
+        32 +
+        siblings.length * (64 + SUPPLY_GAP),
+      y: parent.position.y + 180,
+    };
+    node.data.graphNode.position = node.position;
+    placeAtDrop(node);
+    setNodes((current) => [
+      ...current.map((n) => ({ ...n, selected: false })),
+      { ...node, selected: true },
+    ]);
+    setEdges((current) => [
+      ...current,
+      {
+        id: `e_${crypto.randomUUID().slice(0, 8)}`,
+        source: node.id,
+        sourceHandle: SUPPLY_OUT_PORT,
+        target: to.nodeId,
+        targetHandle,
+        type: "zerodot",
+      },
     ]);
   }
 
@@ -641,8 +873,9 @@ export function Editor({
       // port that is gone. Raising the count again does not bring them back (undo does).
       const inPorts = new Set(inputPortsOf(definition, next.config));
       const gone = (e: Edge) =>
-        (e.source === next.id && !ports.has(e.sourceHandle ?? "out")) ||
-        (e.target === next.id && !inPorts.has(e.targetHandle ?? "in"));
+        !isSupplyFlowEdge(e) &&
+        ((e.source === next.id && !ports.has(e.sourceHandle ?? "out")) ||
+          (e.target === next.id && !inPorts.has(e.targetHandle ?? "in")));
       const removed = edges.filter(gone).length;
       setEdges((all) => all.filter((e) => !gone(e)));
       if (removed > 0) {
@@ -686,6 +919,24 @@ export function Editor({
       case "node.skipped":
         setStatuses((s) => ({ ...s, [event.nodeId]: "skipped" }));
         break;
+      case "supply.used": {
+        setStatuses((s) => ({ ...s, [event.nodeId]: event.status }));
+        // The last call shows in the input and output panes of the supply node.
+        const used = event.call;
+        if (used) {
+          setIos((s) => ({
+            ...s,
+            [event.nodeId]: {
+              ...s[event.nodeId],
+              input: used.input,
+              output: used.output,
+              port: used.method,
+              error: used.error,
+            },
+          }));
+        }
+        break;
+      }
       case "run.finished":
         setRunStatus(event.status);
         // A stopped run leaves nodes that did not end. They do not spin any more.
@@ -954,7 +1205,10 @@ export function Editor({
   /** Saves the canvas now when autosave has not run yet, so an export matches the canvas. */
   async function saveNow() {
     if (JSON.stringify(graph) === lastSaved.current) return;
-    await saveDraftFn({ data: { projectSlug, workflowId: workflow.id, graph } });
+    if (graph.nodes.some((n) => !catalogByType.has(n.type))) return;
+    await saveDraftFn({
+      data: { projectSlug, workflowId: workflow.id, graph, base: lastSaved.current },
+    });
     lastSaved.current = JSON.stringify(graph);
     setSaveState("saved");
   }
@@ -980,7 +1234,9 @@ export function Editor({
   async function publish() {
     setMessage(null);
     try {
-      const result = await publishFn({ data: { projectSlug, workflowId: workflow.id, graph } });
+      const result = await publishFn({
+        data: { projectSlug, workflowId: workflow.id, graph, base: lastSaved.current },
+      });
       lastSaved.current = JSON.stringify(graph);
       setPublishedJson(lastSaved.current);
       setSaveState("saved");
@@ -1011,7 +1267,7 @@ export function Editor({
 
   /** The input of a node is the output of its parent. A trigger gets the test input. */
   function inputFor(node: ZerodotFlowNode): unknown {
-    const incoming = edges.filter((e) => e.target === node.id);
+    const incoming = edges.filter((e) => e.target === node.id && !isSupplyFlowEdge(e));
     if (incoming.length === 0) {
       try {
         return JSON.parse(triggerInput);
@@ -1044,6 +1300,17 @@ export function Editor({
   const addGroups = useMemo(() => {
     const query = addQuery.trim().toLowerCase();
     const visible = catalog.filter((entry) => {
+      if (addSupply) {
+        return (
+          entry.supplies === addSupply.port.kind ||
+          (addSupply.port.kind === TOOL_KIND && entry.usableAsTool)
+        );
+      }
+      if (addConsumer) return entry.supplyPorts?.some((p) => p.kind === addConsumer.kind) === true;
+      // A node before an input needs an output to connect.
+      if (addBefore && entry.ports.out.length === 0) return false;
+      // A supply node takes no data. It is added from the supply port of its parent only.
+      if (entry.supplies !== undefined) return false;
       return !((insertEdgeId || addFrom) && isTriggerType(entry.type));
     });
     if (addApp) {
@@ -1078,6 +1345,12 @@ export function Editor({
       if (app) apps.set(app, [...(apps.get(app) ?? []), entry]);
     }
     const groups = new Map<string, AddRow[]>();
+    // On a tool port, the nodes that run as tools sit in their own group.
+    const groupOf = (entry: CatalogEntry) => {
+      if (!addSupply) return entry.category;
+      if (entry.supplies !== undefined || RECOMMENDED_TOOLS.has(entry.type)) return "Recommended";
+      return "Action in an app";
+    };
     const add = (category: string, row: AddRow) =>
       groups.set(category, [...(groups.get(category) ?? []), row]);
     const placed = new Set<string>();
@@ -1086,12 +1359,12 @@ export function Editor({
       const members = app ? (apps.get(app) ?? []) : [];
       // A node with actions gets its own app row, so the user sees its operations.
       if (!app || (members.length < 2 && !entry.actions?.length)) {
-        add(entry.category, { kind: "node", key: entry.type, entry });
+        add(groupOf(entry), { kind: "node", key: entry.type, entry });
       } else if (!placed.has(app)) {
         placed.add(app);
         // The app sits with its actions. An app with triggers only sits with the triggers.
         const first = members.find((m) => m.category !== "trigger") ?? members[0] ?? entry;
-        add(first.category, {
+        add(groupOf(first), {
           kind: "app",
           key: `app:${app}`,
           app,
@@ -1099,8 +1372,11 @@ export function Editor({
         });
       }
     }
-    return [...groups];
-  }, [addQuery, addApp, insertEdgeId, addFrom, catalogTick]);
+    // The recommended group comes first.
+    return [...groups].sort(
+      ([a], [b]) => Number(b === "Recommended") - Number(a === "Recommended"),
+    );
+  }, [addQuery, addApp, insertEdgeId, addFrom, addSupply, addBefore, addConsumer, catalogTick]);
 
   async function commitRename() {
     const next = renaming?.trim();
@@ -1155,13 +1431,20 @@ export function Editor({
   }
 
   function pickNode(type: string, config?: Record<string, unknown>) {
-    if (insertEdgeId) insertNode(type, insertEdgeId, config);
+    if (addSupply) addSupplyNode(type, addSupply, config);
+    else if (addConsumer) addConsumerNode(type, addConsumer, config);
+    else if (addBefore) addBeforeNode(type, addBefore, config);
+    else if (insertEdgeId) insertNode(type, insertEdgeId, config);
     else addNode(type, addFrom ?? undefined, config);
     setAddOpen(false);
     setAddQuery("");
     setAddApp(null);
     setInsertEdgeId(null);
     setAddFrom(null);
+    setAddSupply(null);
+    setAddBefore(null);
+    setAddConsumer(null);
+    setAddAt(null);
   }
 
   useEffect(() => {
@@ -1610,6 +1893,10 @@ export function Editor({
                                 setAddFrom({ nodeId, port });
                                 setAddOpen(true);
                               },
+                              addSupply: (nodeId, port) => {
+                                setAddSupply({ nodeId, port });
+                                setAddOpen(true);
+                              },
                               executeNode: (nodeId) =>
                                 void executeStep(nodes.find((n) => n.id === nodeId) ?? null),
                               openNode: setOpenId,
@@ -1627,6 +1914,7 @@ export function Editor({
                               onNodesChange={onNodesChange}
                               onEdgesChange={onEdgesChange}
                               onConnect={onConnect}
+                              onConnectEnd={onConnectEnd}
                               // The plus button of a port is a handle. A click opens its menu, not a connection.
                               connectOnClick={false}
                               isValidConnection={isValidConnection}
@@ -1791,6 +2079,10 @@ export function Editor({
                         setAddApp(null);
                         setInsertEdgeId(null);
                         setAddFrom(null);
+                        setAddSupply(null);
+                        setAddBefore(null);
+                        setAddConsumer(null);
+                        setAddAt(null);
                       }
                       setAddActive(0);
                     }}
@@ -1978,14 +2270,15 @@ export function Editor({
                             </div>
                           );
                         })}
-                        {!addApp && (
+                        {/* The packages that are not installed have no supply kinds to filter by. */}
+                        {!addApp && !addSupply && !addConsumer && (
                           <AvailableNodePackages
                             query={addQuery}
                             onInstalled={() => setCatalogTick((tick) => tick + 1)}
                             showEmpty={addGroups.length === 0}
                           />
                         )}
-                        {addGroups.length === 0 && addApp && (
+                        {addGroups.length === 0 && (addApp || addSupply || addConsumer) && (
                           <p className="px-2 text-muted-foreground">No nodes found</p>
                         )}
                       </div>
@@ -2001,7 +2294,14 @@ export function Editor({
                       setCredentials((all) => [...all.filter((c) => c.id !== created.id), created])
                     }
                     node={selected}
-                    hasInput={selected !== null && edges.some((e) => e.target === selected.id)}
+                    hasInput={
+                      selected !== null &&
+                      edges.some((e) => e.target === selected.id && !isSupplyFlowEdge(e))
+                    }
+                    asTool={
+                      selected !== null &&
+                      edges.some((e) => e.source === selected.id && isSupplyFlowEdge(e))
+                    }
                     inputPorts={selectedInputPorts}
                     io={selectedIo}
                     webhookUrl={webhookUrl}

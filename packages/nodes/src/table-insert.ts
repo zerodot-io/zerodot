@@ -5,6 +5,7 @@ import { readRows, storeOf, tableRef } from "./table-common";
 
 export default defineNode({
   type: "table.insert",
+  usableAsTool: true,
   label: "Insert Rows",
   description: "Add new rows to a table",
   category: "data",

@@ -32,6 +32,8 @@ export const graphNodeSchema = z.object({
   notes: z.string().optional(),
   /** Show the note under the node on the canvas. */
   notesInFlow: z.boolean().optional(),
+  /** For a node that runs as a tool: what the tool does, for the model. */
+  toolDescription: z.string().optional(),
 });
 
 export const graphEdgeSchema = z.object({
@@ -60,10 +62,39 @@ export function isTriggerType(type: string) {
   return type.startsWith(TRIGGER_PREFIX);
 }
 
-/** The nodes that no edge leads into. A workflow with no trigger starts at one of them. */
+/** The output port of a supply node. A supply edge goes from it to a supply port of a node. */
+export const SUPPLY_OUT_PORT = "supply";
+/** The input port of a supply edge is this prefix and the name of the supply port. */
+export const SUPPLY_PORT_PREFIX = "supply:";
+
+/** True for an edge from a supply node into a supply port. It carries no data and is no step. */
+export function isSupplyEdge(edge: Pick<GraphEdge, "fromPort" | "toPort">): boolean {
+  return edge.fromPort === SUPPLY_OUT_PORT || edge.toPort.startsWith(SUPPLY_PORT_PREFIX);
+}
+
+/** The name of the supply port of a supply edge, for example "model" for "supply:model". */
+export function supplyPortOf(edge: Pick<GraphEdge, "toPort">): string {
+  return edge.toPort.slice(SUPPLY_PORT_PREFIX.length);
+}
+
+/** The edges that carry data. The step walk, roots, loops and joins use these only. */
+export function flowEdges(graph: Pick<Graph, "edges">): GraphEdge[] {
+  return graph.edges.filter((e) => !isSupplyEdge(e));
+}
+
+/** The nodes that an edge leaves through the supply port. They are never steps. */
+function supplySources(graph: Pick<Graph, "edges">): Set<string> {
+  return new Set(graph.edges.filter(isSupplyEdge).map((e) => e.from));
+}
+
+/**
+ * The nodes that no edge leads into. A workflow with no trigger starts at one of them. A node
+ * that gives a supply is not one.
+ */
 export function rootNodes(graph: Graph): GraphNode[] {
-  const targets = new Set(graph.edges.map((e) => e.to));
-  return graph.nodes.filter((n) => !targets.has(n.id) && !n.disabled);
+  const targets = new Set(flowEdges(graph).map((e) => e.to));
+  const supplies = supplySources(graph);
+  return graph.nodes.filter((n) => !targets.has(n.id) && !supplies.has(n.id) && !n.disabled);
 }
 
 export class GraphError extends Error {}
@@ -128,8 +159,9 @@ export function isBackEdge(edges: GraphEdge[], edge: GraphEdge): boolean {
  */
 export function fanInProblems(graph: Graph, isJoin: (node: GraphNode) => boolean): string[] {
   const problems: string[] = [];
+  const edges = flowEdges(graph);
   for (const node of graph.nodes) {
-    const incoming = graph.edges.filter((e) => e.to === node.id);
+    const incoming = edges.filter((e) => e.to === node.id);
     if (incoming.length < 2) continue;
     if (isJoin(node)) {
       const seen = new Set<string>();
@@ -141,7 +173,7 @@ export function fanInProblems(graph: Graph, isJoin: (node: GraphNode) => boolean
         }
         seen.add(edge.toPort);
       }
-    } else if (incoming.filter((e) => !isBackEdge(graph.edges, e)).length > 1) {
+    } else if (incoming.filter((e) => !isBackEdge(edges, e)).length > 1) {
       problems.push(
         `"${node.name}" has more than one incoming edge. Join the branches with a Merge node first.`,
       );

@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
+
 import { execFile } from "node:child_process";
 import {
   existsSync,
@@ -16,6 +17,7 @@ import { promisify } from "node:util";
 import { SDK_VERSION, satisfiesSdk } from "@zerodot/node-sdk";
 import { unregisterCredentialTypes } from "./credentials";
 import { importIsolated, stopIsolated } from "./isolated-packages";
+import { kept } from "./kept";
 import {
   loadNodePackages,
   type ManifestReader,
@@ -307,7 +309,7 @@ export const manifestReaderFor =
   };
 
 /** The last load report of each package in this process. */
-const lastReports = new Map<string, NodePackageReport>();
+const lastReports = kept("lastReports", () => new Map<string, NodePackageReport>());
 export const packageReports = (): NodePackageReport[] => [...lastReports.values()];
 
 type Loaded = {
@@ -321,7 +323,7 @@ type Loaded = {
 };
 
 /** What each loaded package added. A restart clears it. */
-const loaded = new Map<string, Loaded>();
+const loaded = kept("loaded", () => new Map<string, Loaded>());
 export const isLoaded = (name: string): boolean => loaded.has(name);
 
 /** The version of a package that this process runs, or null. */

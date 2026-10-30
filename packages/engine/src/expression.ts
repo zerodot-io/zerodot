@@ -3,8 +3,9 @@
 /**
  * Small safe expression evaluator. No eval, no new Function, no function calls.
  * Syntax: literals, paths (a.b, a["b"], a[0]), unary ! and -, arithmetic,
- * comparison, && || ??, the ternary operator, `.includes(value)` on lists and text, and the
- * type helpers `.toString()`, `.toNumber()` and `.toBoolean()`.
+ * comparison, && || ??, the ternary operator, `.includes(value)` on lists and text, the
+ * type helpers `.toString()`, `.toNumber()` and `.toBoolean()`, and `$fromAI("key")` in a node
+ * that runs as a tool.
  */
 
 export class ExpressionError extends Error {
@@ -49,6 +50,7 @@ const OPERATORS = [
   "]",
   "(",
   ")",
+  ",",
 ];
 
 function tokenize(source: string): Token[] {
@@ -98,7 +100,8 @@ type Node =
   | { type: "convert"; object: Node; to: Conversion }
   | { type: "unary"; op: string; arg: Node }
   | { type: "binary"; op: string; left: Node; right: Node }
-  | { type: "cond"; test: Node; yes: Node; no: Node };
+  | { type: "cond"; test: Node; yes: Node; no: Node }
+  | { type: "fromAI"; key: string };
 
 const CONVERSIONS = ["toString", "toNumber", "toBoolean"] as const;
 type Conversion = (typeof CONVERSIONS)[number];
@@ -210,6 +213,8 @@ class Parser {
           key,
           label: key.type === "lit" ? String(key.value) : "[…]",
         };
+      } else if (this.isOp("(") && node.type === "id" && node.name === FROM_AI) {
+        node = { type: "fromAI", key: this.fromAIArguments()[0] as string };
       } else if (this.isOp("(")) {
         if (node.type !== "member" || node.key.type !== "lit") {
           throw new ExpressionError("Function calls are not allowed. Use a code node.");
@@ -232,6 +237,22 @@ class Parser {
         return node;
       }
     }
+  }
+
+  /** The text arguments of `$fromAI(key, description?, type?)`. Each one must be literal text. */
+  private fromAIArguments(): string[] {
+    this.expectOp("(");
+    const args: string[] = [];
+    while (!this.isOp(")")) {
+      if (args.length > 0) this.expectOp(",");
+      const token = this.peek();
+      if (token.kind !== "str") throw new ExpressionError(FROM_AI_FORM);
+      args.push(token.value);
+      this.pos++;
+    }
+    this.pos++;
+    if (args.length < 1 || args.length > 3) throw new ExpressionError(FROM_AI_FORM);
+    return args;
   }
 
   private primary(): Node {
@@ -315,6 +336,41 @@ export function credentialRefsUsed(text: string): {
   return { refs, invalid: total !== refs.length };
 }
 
+const FROM_AI = "$fromAI";
+const FROM_AI_FORM =
+  'Write $fromAI("key", "description", "type") with text only. The description and the type are optional';
+export const FROM_AI_TYPES = ["string", "number", "boolean", "json"] as const;
+export type FromAIType = (typeof FROM_AI_TYPES)[number];
+
+/** What the model gives a node that runs as a tool. `$fromAI("key")` reads it. */
+export class ToolInput {
+  constructor(readonly values: Record<string, unknown>) {}
+}
+
+const FROM_AI_CALL =
+  /\$fromAI\(\s*(?:"([^"\\]*)"|'([^'\\]*)')\s*(?:,\s*(?:"([^"\\]*)"|'([^'\\]*)')\s*)?(?:,\s*(?:"([^"\\]*)"|'([^'\\]*)')\s*)?\)/g;
+
+/**
+ * The `$fromAI` calls in a text, found without running it, so the tool can tell the model what to
+ * fill before a call. `invalid` is true when a call is not in the literal form or has an
+ * unknown type.
+ */
+export function fromAICalls(text: string): {
+  calls: { key: string; description: string; type: FromAIType }[];
+  invalid: boolean;
+} {
+  const calls: { key: string; description: string; type: FromAIType }[] = [];
+  let invalid = false;
+  for (const match of text.matchAll(FROM_AI_CALL)) {
+    const key = match[1] ?? match[2] ?? "";
+    const type = (match[5] ?? match[6] ?? "string") as FromAIType;
+    if (key === "" || !FROM_AI_TYPES.includes(type)) invalid = true;
+    calls.push({ key, description: match[3] ?? match[4] ?? "", type });
+  }
+  const total = text.split(FROM_AI).length - 1;
+  return { calls, invalid: invalid || total !== calls.length };
+}
+
 const FORBIDDEN_KEYS = new Set(["__proto__", "constructor", "prototype"]);
 
 function readMember(object: unknown, key: unknown, path: string): unknown {
@@ -375,6 +431,16 @@ function evaluate(node: Node, scope: Record<string, unknown>, path: string): unk
     }
     case "convert":
       return convert(evaluate(node.object, scope, path), node.to, path);
+    case "fromAI": {
+      const input = scope.$fromAI;
+      if (!(input instanceof ToolInput)) {
+        throw new ExpressionError("$fromAI works only when the node runs as a tool", path);
+      }
+      if (!Object.hasOwn(input.values, node.key)) {
+        throw new ExpressionError(`The model did not give "${node.key}"`, path);
+      }
+      return input.values[node.key];
+    }
     case "unary": {
       const value = evaluate(node.arg, scope, path);
       return node.op === "!" ? !value : -numeric(value, "-");

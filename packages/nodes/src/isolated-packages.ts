@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
+
 import { type ChildProcess, spawn } from "node:child_process";
 import { realpathSync } from "node:fs";
 import type {
@@ -13,6 +14,7 @@ import type {
 } from "@zerodot/engine";
 import { z } from "zod";
 import { HOST_CODE } from "./isolated-host";
+import { kept } from "./kept";
 import { sentSchemas } from "./schema-copies";
 
 /**
@@ -39,6 +41,13 @@ export const allowedHosts = (env: Record<string, string | undefined> = process.e
     .split(",")
     .map((host) => host.trim().toLowerCase())
     .filter((host) => host !== "");
+
+/**
+ * True only when `ZERODOT_COMMUNITY_NODES_AS_TOOLS=true`. Off by default: as a tool, a community
+ * node runs with values that a model chose.
+ */
+export const communityTools = (env: Record<string, string | undefined> = process.env): boolean =>
+  (env.ZERODOT_COMMUNITY_NODES_AS_TOOLS ?? "").trim().toLowerCase() === "true";
 const LOAD_TIMEOUT_MS = 30_000;
 
 type NodeManifest = {
@@ -59,7 +68,10 @@ type NodeManifest = {
   stateful: boolean;
   rawConfigKeys?: string[];
   webhookTest?: NodeDefinition["webhookTest"];
+  usableAsTool?: boolean;
   hasRun: boolean;
+  /** The node gives a supply or has supply ports. */
+  hasSupply?: boolean;
   hasPoll: boolean;
   hasListen: boolean;
   webhook: { activate: boolean; deactivate: boolean } | null;
@@ -336,6 +348,8 @@ function nodeFrom(host: PackageHost, manifest: NodeManifest): NodeDefinition {
     credentialTypes: manifest.credentialTypes,
     credentialRules: manifest.credentialRules,
     ports: manifest.ports,
+    // False, not undefined: an integration node is a tool by default.
+    usableAsTool: communityTools() ? manifest.usableAsTool : false,
     join: manifest.join || undefined,
     stateful: manifest.stateful || undefined,
     rawConfigKeys: manifest.rawConfigKeys,
@@ -350,6 +364,9 @@ function nodeFrom(host: PackageHost, manifest: NodeManifest): NodeDefinition {
   };
   if (manifest.problem) definition.isolationProblem = manifest.problem;
   if (!manifest.hasRun) definition.isolationProblem = "no run()";
+  if (manifest.hasSupply) {
+    definition.isolationProblem = "supply nodes and ports need an official @zerodot package";
+  }
   if (manifest.hasPoll) {
     definition.poll = async (ctx: PollContext) =>
       (await host.call(type, "poll", plainContext(ctx), { signal: ctx.signal })) as Awaited<
@@ -407,7 +424,7 @@ function credentialTypeFrom(
   };
 }
 
-const hosts = new Map<string, PackageHost>();
+const hosts = kept("hosts", () => new Map<string, PackageHost>());
 
 /**
  * Starts a process for a community package and loads it there. Returns exports in the shape of a

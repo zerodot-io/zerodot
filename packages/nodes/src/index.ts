@@ -1,5 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-import { createRegistry, type Graph, type NodeDefinition, type ShowRules } from "@zerodot/engine";
+
+import {
+  canBeTool,
+  createRegistry,
+  type Graph,
+  type NodeDefinition,
+  type ShowRules,
+  type SupplyPort,
+} from "@zerodot/engine";
 import { z } from "zod";
 import codeJs from "./code-js";
 import coreExecuteCommand from "./core-execute-command";
@@ -28,6 +36,7 @@ import flowNoop from "./flow-noop";
 import flowRespond from "./flow-respond";
 import flowStopError from "./flow-stop-error";
 import httpRequest from "./http-request";
+import { kept } from "./kept";
 import logicIf from "./logic-if";
 import logicSwitch from "./logic-switch";
 import rssRead from "./rss-read";
@@ -116,6 +125,12 @@ export type NodeCatalogEntry = {
   icon: string;
   iconUrl?: string;
   ports: { in: string[]; out: string[] };
+  /** Ports at the bottom of the node for supply nodes. */
+  supplyPorts?: SupplyPort[];
+  /** The kind of value a supply node gives. Set only for a supply node. */
+  supplies?: string;
+  /** The node can connect to a tool port and run as a tool. */
+  usableAsTool: boolean;
   defaultConfig: unknown;
   credentialTypes: string[];
   /** A trigger that registers its test address at a service. The hint replaces the address in the editor. */
@@ -137,6 +152,9 @@ const catalogEntry = (node: NodeDefinition): NodeCatalogEntry => ({
   iconUrl: node.iconUrl,
   webhookTest: node.webhookTest,
   ports: node.ports,
+  supplyPorts: node.supplyPorts,
+  supplies: node.supplies,
+  usableAsTool: canBeTool(node),
   defaultConfig: node.defaultConfig,
   credentialTypes: node.credentialTypes ?? [],
   credentialRules: node.credentialRules ?? {},
@@ -168,21 +186,32 @@ export function registerNodes(definitions: NodeDefinition[]): string[] {
   const added: string[] = [];
   for (const definition of definitions) {
     if (registry.has(definition.type)) continue;
-    (registry as Map<string, NodeDefinition>).set(definition.type, definition);
-    nodes.push(definition);
-    const entry = catalogEntry(definition);
-    catalog.push(entry);
-    addedCatalog.push(entry);
+    addNode(definition);
+    addedNodes.push(definition);
     added.push(definition.type);
   }
   return added;
+}
+
+function addNode(definition: NodeDefinition): void {
+  (registry as Map<string, NodeDefinition>).set(definition.type, definition);
+  nodes.push(definition);
+  const entry = catalogEntry(definition);
+  catalog.push(entry);
+  addedCatalog.push(entry);
+}
+
+/** The nodes that packages added. They stay when this module runs again (see `kept`). */
+const addedNodes = kept("addedNodes", (): NodeDefinition[] => []);
+for (const definition of addedNodes) {
+  if (!registry.has(definition.type)) addNode(definition);
 }
 
 /** Removes nodes that `registerNodes` added, for example when a package is uninstalled. */
 export function unregisterNodes(types: string[]): void {
   for (const type of types) {
     (registry as Map<string, NodeDefinition>).delete(type);
-    for (const list of [nodes, catalog, addedCatalog] as { type: string }[][]) {
+    for (const list of [nodes, catalog, addedCatalog, addedNodes] as { type: string }[][]) {
       const at = list.findIndex((entry) => entry.type === type);
       if (at >= 0) list.splice(at, 1);
     }

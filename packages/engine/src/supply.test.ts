@@ -1,0 +1,281 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+import { z } from "zod";
+import { executeGraph, type NodeEndEvent } from "./execute";
+import { type Graph, rootNodes } from "./graph";
+import { canBeTool, createRegistry, defineNode, defineSupplyNode } from "./node";
+import { withoutBinary } from "./tool";
+
+const trigger = defineNode({
+  type: "trigger.test",
+  label: "Trigger",
+  category: "trigger",
+  icon: "CircleIcon",
+  config: z.object({}),
+  defaultConfig: {},
+  ports: { in: [], out: ["out"] },
+  run: ({ input }) => ({ port: "out", data: input }),
+});
+
+/** Gives a function that says its name and the `who` of its config. */
+const greeter = defineSupplyNode({
+  type: "test.greeter",
+  label: "Greeter",
+  category: "core",
+  icon: "CircleIcon",
+  config: z.object({ who: z.string() }),
+  defaultConfig: { who: "" },
+  supplies: "test.greet",
+  supply: ({ config, node, log }) => {
+    log?.([{ level: "log", message: "built" }]);
+    return () => `${node.name}:${config.who}`;
+  },
+});
+
+const broken = defineSupplyNode({
+  type: "test.broken",
+  label: "Broken",
+  category: "core",
+  icon: "CircleIcon",
+  config: z.object({}),
+  defaultConfig: {},
+  supplies: "test.greet",
+  supply: () => {
+    throw new Error("no key");
+  },
+});
+
+/** Calls each greeter it gets. */
+const host = defineNode({
+  type: "test.host",
+  label: "Host",
+  category: "core",
+  icon: "CircleIcon",
+  config: z.object({}),
+  defaultConfig: {},
+  ports: { in: ["in"], out: ["out"] },
+  supplyPorts: [
+    { name: "main", kind: "test.greet", label: "Main", required: true },
+    { name: "extra", kind: "test.greet", label: "Extra", multiple: true },
+  ],
+  run: ({ supplies }) => {
+    const main = supplies?.main as () => string;
+    const extra = supplies?.extra as (() => string)[];
+    return { port: "out", data: { main: main(), extra: extra.map((f) => f()) } };
+  },
+});
+
+const registry = createRegistry([trigger, greeter, broken, host]);
+
+const node = (id: string, type: string, config: Record<string, unknown> = {}, x = 0) => ({
+  id,
+  type,
+  name: id,
+  position: { x, y: 0 },
+  config,
+  credentialId: null,
+  pinned: null,
+  onError: "fail" as const,
+});
+
+function graphWith(extraNodes: Graph["nodes"], extraEdges: Graph["edges"]): Graph {
+  return {
+    schema: 1,
+    nodes: [node("t", "trigger.test"), node("h", "test.host"), ...extraNodes],
+    edges: [{ id: "e1", from: "t", fromPort: "out", to: "h", toPort: "in" }, ...extraEdges],
+  };
+}
+
+const supplyEdge = (from: string, port: string) => ({
+  id: `s-${from}`,
+  from,
+  fromPort: "supply",
+  to: "h",
+  toPort: `supply:${port}`,
+});
+
+async function run(graph: Graph) {
+  const ends: NodeEndEvent[] = [];
+  const result = await executeGraph({
+    graph,
+    registry,
+    triggerInput: { name: "Ada" },
+    mode: "production",
+    signal: new AbortController().signal,
+    hooks: [{ afterNode: (event) => void ends.push(event) }],
+  });
+  return { result, ends };
+}
+
+describe("supply nodes", () => {
+  it("builds supplies with the scope of the parent and orders a multiple port by x", async () => {
+    const { result, ends } = await run(
+      graphWith(
+        [
+          node("m", "test.greeter", { who: "{{ $input.name }}" }),
+          node("b", "test.greeter", { who: "b" }, 200),
+          node("a", "test.greeter", { who: "a" }, 100),
+        ],
+        [supplyEdge("m", "main"), supplyEdge("b", "extra"), supplyEdge("a", "extra")],
+      ),
+    );
+    assert.equal(result.status, "succeeded");
+    const hostEnd = ends.find((e) => e.node.id === "h");
+    assert.deepEqual(hostEnd?.output, { main: "m:Ada", extra: ["a:a", "b:b"] });
+    assert.ok(hostEnd?.logs?.some((l) => l.message === "[m] built"));
+    // Supply nodes are never steps.
+    assert.deepEqual(
+      ends.map((e) => e.node.id),
+      ["t", "h"],
+    );
+  });
+
+  it("fails the parent when a required port has no node", async () => {
+    const { result } = await run(graphWith([], []));
+    assert.equal(result.status, "failed");
+    assert.match(result.error?.message ?? "", /Connect a node to "Main"/);
+  });
+
+  it("counts a disabled supply node as not connected", async () => {
+    const off = { ...node("m", "test.greeter", { who: "x" }), disabled: true };
+    const { result } = await run(graphWith([off], [supplyEdge("m", "main")]));
+    assert.equal(result.status, "failed");
+    assert.match(result.error?.message ?? "", /Connect a node/);
+  });
+
+  it("names the supply node when supply() throws", async () => {
+    const { result } = await run(graphWith([node("k", "test.broken")], [supplyEdge("k", "main")]));
+    assert.equal(result.status, "failed");
+    assert.equal(result.error?.message, 'Supply "k" (Main): no key');
+  });
+
+  it("does not count a supply node as a root", () => {
+    const graph = graphWith([node("m", "test.greeter", { who: "x" })], [supplyEdge("m", "main")]);
+    assert.deepEqual(
+      rootNodes(graph).map((n) => n.id),
+      ["t"],
+    );
+  });
+});
+
+describe("node as tool", () => {
+  const slack = defineNode({
+    type: "test.slack",
+    label: "Send message",
+    description: "Sends a message",
+    category: "integration",
+    icon: "CircleIcon",
+    config: z.object({ channel: z.string(), text: z.string(), count: z.unknown() }),
+    defaultConfig: { channel: "", text: "", count: 0 },
+    ports: { in: ["in"], out: ["out"] },
+    run: ({ config, input }) => ({ port: "out", data: { sent: config, input } }),
+  });
+  /** Lists its tools and calls the first one with fixed input. */
+  const agent = defineNode({
+    type: "test.agent",
+    label: "Agent",
+    category: "core",
+    icon: "CircleIcon",
+    config: z.object({}),
+    defaultConfig: {},
+    ports: { in: ["in"], out: ["out"] },
+    supplyPorts: [{ name: "tools", kind: "ai.tool", label: "Tool", multiple: true }],
+    run: async ({ supplies }) => {
+      const tools = supplies?.tools as {
+        spec: { name: string; inputSchema: unknown };
+        call(input: unknown): Promise<unknown>;
+      }[];
+      const first = tools[0];
+      if (!first) throw new Error("no tool");
+      const result = await first.call({ text: "hi", count: 3 });
+      return {
+        port: "out",
+        data: { names: tools.map((t) => t.spec.name), schema: first.spec.inputSchema, result },
+      };
+    },
+  });
+  const toolRegistry = createRegistry([trigger, slack, agent]);
+  const toolGraph = (config: Record<string, unknown>): Graph => ({
+    schema: 1,
+    nodes: [
+      node("t", "trigger.test"),
+      node("a", "test.agent"),
+      { ...node("Send message", "test.slack", config), toolDescription: "" },
+      node("Send message!", "test.slack", { channel: "x", text: "y", count: 1 }, 100),
+    ],
+    edges: [
+      { id: "e1", from: "t", fromPort: "out", to: "a", toPort: "in" },
+      { id: "s1", from: "Send message", fromPort: "supply", to: "a", toPort: "supply:tools" },
+      { id: "s2", from: "Send message!", fromPort: "supply", to: "a", toPort: "supply:tools" },
+    ],
+  });
+
+  it("builds a tool from $fromAI and runs the node with the parent's input", async () => {
+    const ends: NodeEndEvent[] = [];
+    const result = await executeGraph({
+      graph: toolGraph({
+        channel: "{{ $input.name }}",
+        text: 'Say: {{ $fromAI("text", "The message") }}',
+        count: '{{ $fromAI("count", "", "number") }}',
+      }),
+      registry: toolRegistry,
+      triggerInput: { name: "Ada" },
+      mode: "production",
+      signal: new AbortController().signal,
+      hooks: [{ afterNode: (event) => void ends.push(event) }],
+    });
+    assert.equal(result.status, "succeeded", JSON.stringify(result.error));
+    const out = ends.find((e) => e.node.id === "a")?.output as Record<string, unknown>;
+    assert.deepEqual(out.names, ["Send_message", "Send_message_2"]);
+    assert.deepEqual(out.schema, {
+      type: "object",
+      properties: {
+        text: { type: "string", description: "The message" },
+        count: { type: "number" },
+      },
+      required: ["text", "count"],
+      additionalProperties: false,
+    });
+    assert.deepEqual(out.result, {
+      sent: { channel: "Ada", text: "Say: hi", count: 3 },
+      input: { name: "Ada" },
+    });
+  });
+
+  it("gives the model the type and size of binary data, not the data", () => {
+    assert.deepEqual(
+      withoutBinary({
+        ok: true,
+        binary: { file: { data: "aGVsbG8=", mimeType: "text/plain", fileName: "a.txt" } },
+        list: [{ data: "aGk=", mimeType: "text/plain" }],
+        other: { data: "x", mimeType: "y", extra: 1 },
+      }),
+      {
+        ok: true,
+        binary: { file: { mimeType: "text/plain", fileName: "a.txt", size: 5 } },
+        list: [{ mimeType: "text/plain", size: 2 }],
+        other: { data: "x", mimeType: "y", extra: 1 },
+      },
+    );
+  });
+
+  it("does not let a join node or a trigger be a tool", () => {
+    assert.equal(canBeTool({ category: "integration", join: true }), false);
+    assert.equal(canBeTool({ category: "trigger", usableAsTool: true }), false);
+    assert.equal(canBeTool({ category: "integration" }), true);
+    assert.equal(canBeTool({ category: "data" }), false);
+  });
+
+  it("fails a $fromAI key that is not literal text", async () => {
+    const result = await executeGraph({
+      graph: toolGraph({ channel: "", text: "{{ $fromAI($input.name) }}", count: 0 }),
+      registry: toolRegistry,
+      triggerInput: {},
+      mode: "production",
+      signal: new AbortController().signal,
+    });
+    assert.equal(result.status, "failed");
+    assert.match(result.error?.message ?? "", /Supply "Send message" \(Tool\): config.text/);
+  });
+});

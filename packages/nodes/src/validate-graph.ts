@@ -1,10 +1,16 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import {
+  canBeTool,
   fanInProblems,
+  fromAIInputs,
   type Graph,
   inputPortsOf,
+  isSupplyEdge,
   type NodeRegistry,
   outputPortsOf,
+  SUPPLY_OUT_PORT,
+  supplyPortOf,
+  TOOL_KIND,
 } from "@zerodot/engine";
 
 const EXPRESSION = "{{";
@@ -42,6 +48,7 @@ export function checkGraphNodes(graph: Graph, registry: NodeRegistry): string[] 
     }
   }
   for (const edge of graph.edges) {
+    if (isSupplyEdge(edge)) continue;
     const from = byId.get(edge.from);
     const to = byId.get(edge.to);
     const fromDefinition = from ? registry.get(from.type) : undefined;
@@ -65,5 +72,80 @@ export function checkGraphNodes(graph: Graph, registry: NodeRegistry): string[] 
     }
   }
   problems.push(...fanInProblems(graph, (node) => registry.get(node.type)?.join === true));
+  problems.push(...supplyProblems(graph, registry));
+  return problems;
+}
+
+/**
+ * Supply rules: a supply edge goes from a supply node into a supply port of the same kind, a
+ * single port takes one node, and a supply node has no data edges and no supply ports. A required
+ * port with no node is not checked here, so a draft can be saved. The run reports it.
+ */
+function supplyProblems(graph: Graph, registry: NodeRegistry): string[] {
+  const problems: string[] = [];
+  const byId = new Map(graph.nodes.map((n) => [n.id, n]));
+  const counts = new Map<string, number>();
+  // A node with a supply edge out of it is a supply node or a node tool. It takes no data.
+  const suppliers = new Set(graph.edges.filter(isSupplyEdge).map((e) => e.from));
+  for (const edge of graph.edges) {
+    const from = byId.get(edge.from);
+    const to = byId.get(edge.to);
+    const fromDefinition = from ? registry.get(from.type) : undefined;
+    const toDefinition = to ? registry.get(to.type) : undefined;
+    if (!isSupplyEdge(edge)) {
+      if (from && (fromDefinition?.supplies !== undefined || suppliers.has(from.id))) {
+        problems.push(`"${from.name}" gives a supply. Connect it to a supply port only`);
+      }
+      if (to && (toDefinition?.supplies !== undefined || suppliers.has(to.id))) {
+        problems.push(`"${to.name}" gives a supply. It cannot take data`);
+      }
+      continue;
+    }
+    if (!from || !to || !fromDefinition || !toDefinition) continue;
+    const port = toDefinition.supplyPorts?.find((p) => p.name === supplyPortOf(edge));
+    if (!port) {
+      problems.push(`Edge "${edge.id}": "${to.name}" has no supply port "${supplyPortOf(edge)}"`);
+      continue;
+    }
+    const asTool =
+      fromDefinition.supplies === undefined && port.kind === TOOL_KIND && canBeTool(fromDefinition);
+    if (edge.fromPort !== SUPPLY_OUT_PORT || (fromDefinition.supplies === undefined && !asTool)) {
+      problems.push(
+        port.kind === TOOL_KIND
+          ? `Edge "${edge.id}": "${from.name}" cannot be a tool`
+          : `Edge "${edge.id}": "${from.name}" gives no supply`,
+      );
+      continue;
+    }
+    if (!asTool && port.kind !== fromDefinition.supplies) {
+      problems.push(
+        `Edge "${edge.id}": "${port.label}" of "${to.name}" takes "${port.kind}", not "${fromDefinition.supplies}"`,
+      );
+      continue;
+    }
+    if (from.disabled) continue;
+    const key = `${to.id}:${port.name}`;
+    const count = (counts.get(key) ?? 0) + 1;
+    counts.set(key, count);
+    if (count === 2 && !port.multiple) {
+      problems.push(`"${port.label}" of "${to.name}" takes one node`);
+    }
+  }
+  for (const node of graph.nodes) {
+    const definition = registry.get(node.type);
+    if (!definition) continue;
+    if (definition.supplies !== undefined && definition.supplyPorts?.length) {
+      problems.push(`"${node.name}": a supply node cannot have supply ports`);
+    }
+    // $fromAI needs a node that runs as a tool, in the literal form.
+    try {
+      const inputs = fromAIInputs(node, definition);
+      if (inputs.size > 0 && (!suppliers.has(node.id) || definition.supplies !== undefined)) {
+        problems.push(`"${node.name}": $fromAI works only in a node connected as a tool`);
+      }
+    } catch (error) {
+      problems.push(`"${node.name}": ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
   return problems;
 }

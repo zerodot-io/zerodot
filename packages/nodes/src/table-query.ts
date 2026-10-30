@@ -5,6 +5,7 @@ import { readFilter, readSort, storeOf, tableRef } from "./table-common";
 
 export default defineNode({
   type: "table.query",
+  usableAsTool: true,
   label: "Query Rows",
   description: "Read rows from a table with filters and sort",
   category: "data",

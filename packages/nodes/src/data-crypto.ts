@@ -7,6 +7,7 @@ const ENCODINGS = ["hex", "base64"] as const;
 
 export default defineNode({
   type: "data.crypto",
+  usableAsTool: true,
   label: "Crypto",
   description: "Hash, sign, or make random values",
   category: "data",

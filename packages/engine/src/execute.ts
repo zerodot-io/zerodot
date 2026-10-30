@@ -1,8 +1,24 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { type BlobStore, containsBlobRef, hydrate } from "./blob";
-import { credentialRefsUsed, ExpressionError, resolveConfig, StrictRecord } from "./expression";
-import { type Graph, type GraphEdge, type GraphNode, isTriggerType, validateGraph } from "./graph";
 import {
+  credentialRefsUsed,
+  ExpressionError,
+  resolveConfig,
+  StrictRecord,
+  ToolInput,
+} from "./expression";
+import {
+  flowEdges,
+  type Graph,
+  type GraphEdge,
+  type GraphNode,
+  isSupplyEdge,
+  isTriggerType,
+  supplyPortOf,
+  validateGraph,
+} from "./graph";
+import {
+  canBeTool,
   inputPortsOf,
   type NodeDefinition,
   type NodeRegistry,
@@ -10,9 +26,12 @@ import {
   type ResolvedCredential,
   type RunResponse,
   type SubWorkflowRunner,
+  TOOL_KIND,
 } from "./node";
 import type { CodeLog, SandboxClient } from "./sandbox";
+import { type SupplyCall, type SupplyUseStatus, trackUse } from "./supply-use";
 import type { TableStore } from "./tables";
+import { fromAIInputs, type NodeTool, toolInputSchema, toolName, withoutBinary } from "./tool";
 
 export type NodeStatus = "running" | "waiting" | "succeeded" | "failed" | "skipped";
 
@@ -51,6 +70,17 @@ export type ExecutionHooks = {
   onRunStart?(): void | Promise<void>;
   beforeNode?(event: NodeEvent & { input: unknown }): void | Promise<void>;
   afterNode?(event: NodeEndEvent): void | Promise<void>;
+  /**
+   * A supply node or a tool of a running node is in use: its value got a call ("running"), or
+   * its last open call ended. Supply nodes are no steps, so this is their only live status.
+   */
+  onSupplyUse?(event: {
+    node: GraphNode;
+    parentId: string;
+    status: SupplyUseStatus;
+    /** The call that ended, with its input and output. Not set when a call starts. */
+    call?: SupplyCall;
+  }): void | Promise<void>;
   /** The run stops here and the worker resumes it at `resumeAt` (epoch ms). */
   onRunWait?(event: { resumeAt: number; nodeId: string }): void | Promise<void>;
   onRunEnd?(event: {
@@ -194,8 +224,12 @@ function defaultSleep(ms: number) {
 }
 
 export async function executeGraph(options: ExecuteOptions): Promise<ExecuteResult> {
-  const { graph, registry, signal } = options;
-  validateGraph(graph);
+  const { registry, signal } = options;
+  validateGraph(options.graph);
+  // Supply edges carry no data. The walk sees the flow edges only, so a supply node never runs
+  // as a step. Its parent builds its value (see `suppliesFor`).
+  const graph: Graph = { ...options.graph, edges: flowEdges(options.graph) };
+  const supplyEdges = options.graph.edges.filter(isSupplyEdge);
   const hooks = options.hooks ?? [];
   const sleep = options.sleep ?? defaultSleep;
   const nodesById = new Map(graph.nodes.map((n) => [n.id, n]));
@@ -354,6 +388,245 @@ export async function executeGraph(options: ExecuteOptions): Promise<ExecuteResu
     $run: scope.$run,
     $resumeUrl: resumeUrls,
   });
+
+  /**
+   * The config and the credential of a node, with `scope`. Adds the values of `$credentials`
+   * fields to `masked` and each credential value to `secrets`.
+   */
+  const resolveNode = async (
+    node: GraphNode,
+    definition: NodeDefinition,
+    scope: Record<string, unknown>,
+    secrets: string[],
+    masked: string[],
+  ) => {
+    const refs = new Map<string, Set<string>>();
+    const rawKeys = new Set(definition.rawConfigKeys ?? []);
+    for (const [key, value] of Object.entries(node.config)) {
+      if (rawKeys.has(key)) continue;
+      for (const text of configTexts(value)) {
+        const found = credentialRefsUsed(text);
+        if (found.invalid) {
+          // A credential with no field: name the fields it has. Names only, no values.
+          const bare = /\$credentials\[\s*(?:"([^"]+)"|'([^']+)')\s*\](?!\s*(?:\.|\[))/.exec(text);
+          const bareName = bare?.[1] ?? bare?.[2];
+          const opened = bareName ? await options.credentials?.(bareName, "idOrName") : null;
+          if (bareName && opened) {
+            throw new Error(
+              `Add a field to $credentials["${bareName}"]. Fields: ${Object.keys(opened.data).join(", ")}`,
+            );
+          }
+          throw new Error(
+            'Write a credential field as $credentials["name"].field. The name must be text, not an expression',
+          );
+        }
+        for (const ref of found.refs) {
+          refs.set(ref.name, (refs.get(ref.name) ?? new Set()).add(ref.field));
+        }
+      }
+    }
+    let configScope = scope;
+    if (refs.size > 0) {
+      const byName: Record<string, StrictRecord> = {};
+      const added: string[] = [];
+      for (const [name, fields] of refs) {
+        const opened = await options.credentials?.(name, "idOrName");
+        if (!opened) throw new Error(`The credential "${name}" does not exist`);
+        const values: Record<string, unknown> = {};
+        for (const field of fields) {
+          if (!Object.hasOwn(opened.data, field)) continue;
+          const value = opened.data[field];
+          values[field] = value;
+          if (typeof value === "string" && value.length >= 4) added.push(...secretForms(value));
+        }
+        byName[name] = new StrictRecord(`Field of credential "${name}"`, values);
+      }
+      masked.push(...added);
+      masked.sort((a, b) => b.length - a.length);
+      secrets.push(...added);
+      configScope = { ...scope, $credentials: new StrictRecord("Credential", byName) };
+    }
+    const config = configFor(node, definition, configScope);
+    let credential: ResolvedCredential | null = null;
+    if (node.credentialExpression || node.credentialId) {
+      if (node.credentialExpression) {
+        const ref = resolveConfig(node.credentialExpression, scope, "credentialExpression");
+        if (typeof ref !== "string" || ref.trim() === "") {
+          throw new Error("The credential expression must give the id or the name of a credential");
+        }
+        credential = (await options.credentials?.(ref.trim(), "idOrName")) ?? null;
+        if (!credential) throw new Error(`The credential "${ref.trim()}" does not exist`);
+      } else {
+        credential = (await options.credentials?.(node.credentialId as string, "id")) ?? null;
+        if (!credential) throw new Error("The credential of this node does not exist");
+      }
+      const allowed = definition.credentialTypes;
+      if (!allowed?.includes(credential.type)) {
+        throw new Error(`This node does not accept a credential of type "${credential.type}"`);
+      }
+      secrets.push(...secretValues(credential.data));
+    }
+    return { config, credential };
+  };
+
+  /**
+   * Builds the values of the supply nodes connected to the supply ports of a node. The config of
+   * a supply node resolves with the scope of the parent. Undefined for a node with no supply ports.
+   */
+  const suppliesFor = async (
+    parent: GraphNode,
+    definition: NodeDefinition,
+    scope: Record<string, unknown>,
+    input: unknown,
+    sink: { secrets: string[]; masked: string[]; logs: CodeLog[] },
+  ): Promise<Record<string, unknown> | undefined> => {
+    if (!definition.supplyPorts?.length) return undefined;
+    const supplies: Record<string, unknown> = {};
+    for (const port of definition.supplyPorts) {
+      // Left to right on the canvas, so the order is the one a person sees.
+      const connected = supplyEdges
+        .filter((e) => e.to === parent.id && supplyPortOf(e) === port.name)
+        .map((e) => nodesById.get(e.from))
+        .filter((n): n is GraphNode => n !== undefined && !n.disabled)
+        .sort((a, b) => a.position.x - b.position.x || a.id.localeCompare(b.id));
+      if (connected.length === 0 && port.required) {
+        throw new Error(`Connect a node to "${port.label}"`);
+      }
+      if (connected.length > 1 && !port.multiple) {
+        throw new Error(`"${port.label}" takes one node. ${connected.length} are connected`);
+      }
+      const values: unknown[] = [];
+      const toolNames = new Set<string>();
+      for (const node of connected) {
+        const supplier = registry.get(node.type);
+        try {
+          if (!supplier) throw new Error(`Unknown node type "${node.type}"`);
+          if (!supplier.supply && port.kind === TOOL_KIND && canBeTool(supplier)) {
+            values.push(
+              track(nodeTool(node, supplier, scope, input, toolNames, sink.logs), node, parent),
+            );
+            continue;
+          }
+          if (!supplier.supply || supplier.supplies !== port.kind) {
+            throw new Error(`The node does not give "${port.kind}"`);
+          }
+          const { config, credential } = await resolveNode(
+            node,
+            supplier,
+            scope,
+            sink.secrets,
+            sink.masked,
+          );
+          const value = await supplier.supply({
+            config,
+            credential,
+            signal,
+            scope: runScope(scope, input),
+            log: (entries) => {
+              const named = entries.map((entry) => ({
+                ...entry,
+                message: `[${node.name}] ${entry.message}`,
+              }));
+              sink.logs.push(...(sink.masked.length > 0 ? maskSecrets(named, sink.masked) : named));
+            },
+            sandbox: options.sandbox ?? null,
+            tables: options.tables ?? null,
+            runWorkflow: options.runWorkflow ?? null,
+            node: { id: node.id, name: node.name },
+          });
+          values.push(track(value, node, parent));
+        } catch (error) {
+          const { message } = toError(error);
+          throw new Error(`Supply "${node.name}" (${port.label}): ${message}`);
+        }
+      }
+      if (port.multiple) supplies[port.name] = values;
+      else if (values.length === 1) supplies[port.name] = values[0];
+    }
+    return supplies;
+  };
+
+  /** A supply value that reports its use through the `onSupplyUse` hook. */
+  const track = <T>(value: T, node: GraphNode, parent: GraphNode): T =>
+    trackUse(value, (status, used) => {
+      void call("onSupplyUse", {
+        node,
+        parentId: parent.id,
+        status,
+        ...(used ? { call: used } : {}),
+      });
+    });
+
+  /**
+   * A node that runs as a tool. Each call resolves its config with the scope of the parent and the
+   * values the model gave for `$fromAI`, then runs the node with the input of the parent.
+   */
+  const nodeTool = (
+    node: GraphNode,
+    definition: NodeDefinition,
+    scope: Record<string, unknown>,
+    input: unknown,
+    used: Set<string>,
+    logs: CodeLog[],
+  ): NodeTool => {
+    const name = toolName(node.name, used);
+    const subtitle = definition.subtitle?.(node.config);
+    const description =
+      node.toolDescription?.trim() ||
+      [definition.description, subtitle].filter(Boolean).join(". ") ||
+      definition.label;
+    const spec = {
+      name,
+      description,
+      inputSchema: toolInputSchema(fromAIInputs(node, definition)),
+    };
+    return {
+      spec,
+      call: async (given, callSignal) => {
+        const secrets: string[] = [];
+        const masked: string[] = [];
+        try {
+          const values =
+            given !== null && typeof given === "object" && !Array.isArray(given)
+              ? (given as Record<string, unknown>)
+              : {};
+          const toolScope = { ...scope, $fromAI: new ToolInput(values) };
+          const { config, credential } = await resolveNode(
+            node,
+            definition,
+            toolScope,
+            secrets,
+            masked,
+          );
+          const ran = await definition.run({
+            config,
+            input,
+            credential,
+            signal: callSignal ? AbortSignal.any([signal, callSignal]) : signal,
+            scope: runScope(scope, input),
+            log: (entries) => {
+              const named = entries.map((entry) => ({
+                ...entry,
+                message: `[${node.name}] ${entry.message}`,
+              }));
+              logs.push(...(masked.length > 0 ? maskSecrets(named, masked) : named));
+            },
+            sandbox: options.sandbox ?? null,
+            tables: options.tables ?? null,
+            resumeUrl: null,
+            runWorkflow: options.runWorkflow ?? null,
+            loopBack: false,
+          });
+          if (ran.waitUntil !== undefined) throw new Error("A node that waits cannot be a tool");
+          const data = withoutBinary(ran.data);
+          return masked.length > 0 ? maskSecrets(data, masked) : data;
+        } catch (error) {
+          const { message } = scrubError(toError(error), secrets);
+          throw new Error(`Tool "${name}": ${message}`);
+        }
+      },
+    };
+  };
 
   /** The nodes that a node feeds, directly or through other nodes. */
   const downstreamCache = new Map<string, Set<string>>();
@@ -581,7 +854,8 @@ export async function executeGraph(options: ExecuteOptions): Promise<ExecuteResu
       if (signal.aborted) throw new Error("Run cancelled");
       await call("beforeNode", { node, attempt, input });
       const startedAt = Date.now();
-      let secrets: string[] = [];
+      /** Credential values. They must not appear in a stored error. */
+      const secrets: string[] = [];
       /** Values of `$credentials` fields. They are removed from the output and the logs too. */
       const masked: string[] = [];
       const logs: CodeLog[] = [];
@@ -592,76 +866,12 @@ export async function executeGraph(options: ExecuteOptions): Promise<ExecuteResu
         const fullInput =
           node.executeOnce && Array.isArray(hydrated) ? hydrated.slice(0, 1) : hydrated;
         const scope = scopeFor(fullInput);
-        const refs = new Map<string, Set<string>>();
-        const rawKeys = new Set(definition.rawConfigKeys ?? []);
-        for (const [key, value] of Object.entries(node.config)) {
-          if (rawKeys.has(key)) continue;
-          for (const text of configTexts(value)) {
-            const found = credentialRefsUsed(text);
-            if (found.invalid) {
-              // A credential with no field: name the fields it has. Names only, no values.
-              const bare = /\$credentials\[\s*(?:"([^"]+)"|'([^']+)')\s*\](?!\s*(?:\.|\[))/.exec(
-                text,
-              );
-              const bareName = bare?.[1] ?? bare?.[2];
-              const opened = bareName ? await options.credentials?.(bareName, "idOrName") : null;
-              if (bareName && opened) {
-                throw new Error(
-                  `Add a field to $credentials["${bareName}"]. Fields: ${Object.keys(opened.data).join(", ")}`,
-                );
-              }
-              throw new Error(
-                'Write a credential field as $credentials["name"].field. The name must be text, not an expression',
-              );
-            }
-            for (const ref of found.refs) {
-              refs.set(ref.name, (refs.get(ref.name) ?? new Set()).add(ref.field));
-            }
-          }
-        }
-        let configScope = scope;
-        if (refs.size > 0) {
-          const byName: Record<string, StrictRecord> = {};
-          for (const [name, fields] of refs) {
-            const opened = await options.credentials?.(name, "idOrName");
-            if (!opened) throw new Error(`The credential "${name}" does not exist`);
-            const values: Record<string, unknown> = {};
-            for (const field of fields) {
-              if (!Object.hasOwn(opened.data, field)) continue;
-              const value = opened.data[field];
-              values[field] = value;
-              if (typeof value === "string" && value.length >= 4) {
-                masked.push(...secretForms(value));
-              }
-            }
-            byName[name] = new StrictRecord(`Field of credential "${name}"`, values);
-          }
-          masked.sort((a, b) => b.length - a.length);
-          secrets = [...masked];
-          configScope = { ...scope, $credentials: new StrictRecord("Credential", byName) };
-        }
-        const config = configFor(node, definition, configScope);
-        let credential: ResolvedCredential | null = null;
-        if (node.credentialExpression || node.credentialId) {
-          if (node.credentialExpression) {
-            const ref = resolveConfig(node.credentialExpression, scope, "credentialExpression");
-            if (typeof ref !== "string" || ref.trim() === "") {
-              throw new Error(
-                "The credential expression must give the id or the name of a credential",
-              );
-            }
-            credential = (await options.credentials?.(ref.trim(), "idOrName")) ?? null;
-            if (!credential) throw new Error(`The credential "${ref.trim()}" does not exist`);
-          } else {
-            credential = (await options.credentials?.(node.credentialId as string, "id")) ?? null;
-            if (!credential) throw new Error("The credential of this node does not exist");
-          }
-          const allowed = definition.credentialTypes;
-          if (!allowed?.includes(credential.type)) {
-            throw new Error(`This node does not accept a credential of type "${credential.type}"`);
-          }
-          secrets = [...secrets, ...secretValues(credential.data)];
-        }
+        const { config, credential } = await resolveNode(node, definition, scope, secrets, masked);
+        const supplies = await suppliesFor(node, definition, scope, fullInput, {
+          secrets,
+          masked,
+          logs,
+        });
         const ran = await definition.run({
           config,
           input: fullInput,
@@ -676,6 +886,7 @@ export async function executeGraph(options: ExecuteOptions): Promise<ExecuteResu
           runWorkflow: options.runWorkflow ?? null,
           loopBack,
           state: nodeState.get(node.id),
+          ...(supplies ? { supplies } : {}),
         });
         const raw = masked.length > 0 ? maskSecrets(ran, masked) : ran;
         const empty =

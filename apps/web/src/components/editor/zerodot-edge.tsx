@@ -13,6 +13,7 @@ import {
   useInternalNode,
   useReactFlow,
 } from "@xyflow/react";
+import { SUPPLY_OUT_PORT } from "@zerodot/engine";
 import { useContext, useRef, useState } from "react";
 import { EdgeCountContext, EditorActionsContext, NodeStatusContext } from "./zerodot-node";
 
@@ -159,8 +160,10 @@ export function ZerodotEdge({
     const otherY = portY(source, other.sourceHandle);
     return otherY > ownPortY || (otherY === ownPortY && other.id > id);
   }).length;
+  // A supply edge runs from the top of a supply node up to the bottom of its parent.
+  const supply = sourceHandleId === SUPPLY_OUT_PORT;
   const [path, labelX, labelY] =
-    targetX < sourceX
+    targetX < sourceX && !supply
       ? backPath(sourceX, sourceY, targetX, targetY, outerX, outerLeftX, nodesBottom, lane)
       : getBezierPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition });
 
@@ -183,6 +186,7 @@ export function ZerodotEdge({
           stroke:
             hovered || selected ? EDGE_COLOR_ACTIVE : ran ? "var(--color-emerald-500)" : EDGE_COLOR,
           strokeWidth: hovered || selected ? 1.5 : 1.25,
+          strokeDasharray: supply ? "4 3" : undefined,
           transition: "stroke 150ms, stroke-width 150ms",
         }}
         markerEnd={markerEnd}
@@ -219,7 +223,7 @@ export function ZerodotEdge({
           onMouseEnter={enter}
           onMouseLeave={leave}
         >
-          {insertOnEdge && !readOnly && (
+          {insertOnEdge && !readOnly && !supply && (
             <button
               type="button"
               aria-label="Add node"

@@ -22,6 +22,15 @@ export type RunEvent =
       error: { message: string; path?: string };
     }
   | { type: "node.skipped"; runId: string; nodeId: string }
+  /** A supply node or a tool is in use by the node it supplies. It is no step and has no row. */
+  | {
+      type: "supply.used";
+      runId: string;
+      nodeId: string;
+      status: "running" | "succeeded" | "failed";
+      /** The call that ended: its method, input, and output or error. */
+      call?: { method: string; input: unknown; output?: unknown; error?: { message: string } };
+    }
   | { type: "node.waiting"; runId: string; nodeId: string; attempt: number; resumeAt: number }
   | { type: "run.waiting"; runId: string; resumeAt: number }
   | {

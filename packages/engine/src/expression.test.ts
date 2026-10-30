@@ -105,3 +105,24 @@ describe("expressions", () => {
     assert.equal(evaluateExpression('$vars["teamId"]', withVars), 7);
   });
 });
+
+describe("$fromAI", () => {
+  it("reads the tool input, and fails outside a tool", async () => {
+    const { ToolInput, fromAICalls } = await import("./expression");
+    assert.equal(
+      resolveTemplate('{{ $fromAI("to", "Who") }}', { $fromAI: new ToolInput({ to: "Ada" }) }),
+      "Ada",
+    );
+    assert.throws(() => resolveTemplate('{{ $fromAI("to") }}', {}), /works only when the node/);
+    assert.throws(
+      () => resolveTemplate('{{ $fromAI("to") }}', { $fromAI: new ToolInput({}) }),
+      /did not give "to"/,
+    );
+    assert.deepEqual(fromAICalls(`a {{ $fromAI('x', "d", "json") }}`), {
+      calls: [{ key: "x", description: "d", type: "json" }],
+      invalid: false,
+    });
+    assert.equal(fromAICalls('{{ $fromAI("x", "d", "date") }}').invalid, true);
+    assert.equal(fromAICalls("{{ $fromAI($input.a) }}").invalid, true);
+  });
+});

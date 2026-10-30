@@ -88,6 +88,8 @@ The process of a community package:
 - has 256 MB of memory. When it stops, zerodot starts it again on the next call.
 - gets only what one call needs: the config, the input, and the credential of that node. It gets no expression scope (`$vars`, `$node`), no data tables, no code sandbox, and no sub-workflows.
 
+A community node cannot be a tool of an AI Agent by default, because a model then picks its values. Set `ZERODOT_COMMUNITY_NODES_AS_TOOLS=true` on web, api and worker to allow it. Nodes of official `@zerodot/*` packages are not affected.
+
 zerodot keeps a copy of the config schema of each node. It checks the config first, and the package checks it again with its own schema.
 
 A community package cannot use these parts of the node contract. A node or a credential type that uses one is skipped, and System > Nodes shows why:

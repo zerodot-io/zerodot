@@ -244,15 +244,38 @@ export const getWorkflowFn = createServerFn({ method: "GET" })
     };
   });
 
+/** The message of a save that would replace a draft that changed since the editor loaded it. */
+export const DRAFT_CHANGED =
+  "This workflow changed in another tab or through the API. Reload to get the new version. Your changes are not saved";
+
+/**
+ * True when the saved draft is still `base`, the draft JSON that the editor last loaded or saved.
+ * Both sides parse the graph first, so the defaults and the key order are the same.
+ */
+function draftIs(saved: unknown, base: string): boolean {
+  const parsed = graphSchema.safeParse(saved);
+  return parsed.success && JSON.stringify(parsed.data) === base;
+}
+
 export const saveDraftFn = createServerFn({ method: "POST" })
-  .validator(workflowInput.extend({ graph: graphSchema }))
+  .validator(workflowInput.extend({ graph: graphSchema, base: z.string().optional() }))
   .handler(async ({ data }) => {
     const ctx = await projectOrThrow(data.projectSlug);
-    const row = await (await orgScope(ctx)).workflows.saveDraft(
-      data.workflowId,
-      checkedGraph(data.graph),
-    );
-    if (!row) throw new Error("Not found");
+    const workflows = (await orgScope(ctx)).workflows;
+    const graph = checkedGraph(data.graph);
+    if (data.base === undefined) {
+      const row = await workflows.saveDraft(data.workflowId, graph);
+      if (!row) throw new Error("Not found");
+      return { savedAt: row.updatedAt };
+    }
+    // A tab with an old draft must not replace a newer one.
+    const current = await workflows.get(data.workflowId);
+    if (!current) throw new Error("Not found");
+    if (!draftIs(current.draftGraph, data.base)) throw new Error(DRAFT_CHANGED);
+    const row = await workflows.saveDraft(data.workflowId, graph, {
+      ifUpdatedAt: current.updatedAt,
+    });
+    if (!row) throw new Error(DRAFT_CHANGED);
     return { savedAt: row.updatedAt };
   });
 
@@ -391,9 +414,13 @@ export const takeTestEventFn = createServerFn({ method: "POST" })
   });
 
 export const publishFn = createServerFn({ method: "POST" })
-  .validator(workflowInput.extend({ graph: graphSchema }))
+  .validator(workflowInput.extend({ graph: graphSchema, base: z.string().optional() }))
   .handler(async ({ data }) => {
     const ctx = await serviceContext(data.projectSlug);
+    if (data.base !== undefined) {
+      const current = await ctx.scope.workflows.get(data.workflowId);
+      if (current && !draftIs(current.draftGraph, data.base)) throw new Error(DRAFT_CHANGED);
+    }
     const { publishWorkflow } = await import("@zerodot/server/api/service.server");
     const version = await plain(
       publishWorkflow(ctx, data.workflowId, { graph: data.graph, nodes: false }),

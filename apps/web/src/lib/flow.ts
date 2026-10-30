@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import type { Edge, Node } from "@xyflow/react";
-import { type Graph, type GraphNode, graphSchema } from "@zerodot/engine";
+import { type Graph, type GraphNode, graphSchema, isSupplyEdge } from "@zerodot/engine";
 import {
   type CredentialTypeCatalogEntry,
   catalog,
@@ -22,6 +22,57 @@ export function addServerCatalog(extra: { nodes: unknown; credentialTypes: unkno
   mergeCatalog(nodes);
   mergeCredentialTypeCatalog(extra.credentialTypes as CredentialTypeCatalogEntry[]);
   for (const entry of nodes) catalogByType.set(entry.type, entry);
+}
+
+/**
+ * The plus button under a supply port holds a second handle, so a drag can start from it. Its id
+ * is the port handle id and this suffix. An edge always uses the port handle id.
+ */
+export const ADD_HANDLE_SUFFIX = "#add";
+
+/** The port handle id of a handle id: the plus button handle gives its port handle. */
+export function portHandle<T extends string | null | undefined>(handle: T): T {
+  return (
+    typeof handle === "string" && handle.endsWith(ADD_HANDLE_SUFFIX)
+      ? handle.slice(0, -ADD_HANDLE_SUFFIX.length)
+      : handle
+  ) as T;
+}
+
+/** True for an edge from a supply node into a supply port. It carries no data. */
+export const isSupplyFlowEdge = (edge: Pick<Edge, "sourceHandle" | "targetHandle">) =>
+  isSupplyEdge({ fromPort: edge.sourceHandle ?? "out", toPort: edge.targetHandle ?? "in" });
+
+/**
+ * Where a supply port sits along the bottom of its node, from 0 (left) to 1 (right). One port
+ * sits in the middle. With more, the first one (the main supply) sits on the left, and the others
+ * sit together on the right.
+ */
+export function supplyPortX(index: number, count: number): number {
+  if (count <= 1) return 0.5;
+  if (index === 0) return 0.18;
+  const first = count === 2 ? 0.7 : 0.6;
+  const last = 0.84;
+  return count === 2 ? first : first + ((last - first) * (index - 1)) / (count - 2);
+}
+
+/**
+ * Supply nodes and tools are no steps, so a run gives them no status. They take the status of the
+ * node they supply while it runs or after it succeeded, so the run shows the whole chain.
+ */
+export function withSupplyStatuses(
+  statuses: Record<string, NodeRunStatus>,
+  edges: Pick<Edge, "source" | "target" | "sourceHandle" | "targetHandle">[],
+): Record<string, NodeRunStatus> {
+  const next = { ...statuses };
+  for (const edge of edges) {
+    if (!isSupplyFlowEdge(edge) || statuses[edge.source]) continue;
+    const parent = statuses[edge.target];
+    if (parent === "running" || parent === "waiting" || parent === "succeeded") {
+      next[edge.source] = parent;
+    }
+  }
+  return next;
 }
 
 export function toFlow(graph: Graph): { nodes: ZerodotFlowNode[]; edges: Edge[] } {
