@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import type { Edge, Node } from "@xyflow/react";
-import { type Graph, type GraphNode, graphSchema, isSupplyEdge } from "@zerodot/engine";
+import { actionOf, type Graph, type GraphNode, graphSchema, isSupplyEdge } from "@zerodot/engine";
 import {
   type CredentialTypeCatalogEntry,
   catalog,
@@ -129,11 +129,13 @@ export function newNode(
   const entry = catalogByType.get(type);
   if (!entry) throw new Error(`Unknown node type "${type}"`);
   const last = existing.at(-1);
+  // A node added for one action is named after it, for example "Create spreadsheet".
+  const action = Object.keys(config).length > 0 ? actionOf(entry, config) : undefined;
   const graphNode: GraphNode = {
     id: `n_${crypto.randomUUID().slice(0, 8)}`,
     type,
     name: uniqueName(
-      entry.label,
+      action?.label ?? entry.label,
       existing.map((n) => n.data.graphNode.name),
     ),
     position: last ? { x: last.position.x + 260, y: last.position.y } : { x: 40, y: 120 },
