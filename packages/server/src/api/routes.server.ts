@@ -8,7 +8,7 @@ import { buildInsights } from "../insights.server";
 import { catalogPackagesForTypes } from "../node-catalog";
 import { streamEvents } from "../stream.server";
 import type { ApiContext } from "./context.server";
-import { badRequest, conflict, notFound } from "./errors";
+import { badRequest, conflict, forbidden, notFound } from "./errors";
 import {
   presentCredential,
   presentRow,
@@ -860,6 +860,81 @@ const insights: Route[] = [
   }),
 ];
 
+// ---- API keys ----
+
+const DAY_MS = 86_400_000;
+
+const presentApiKey = (key: {
+  id: string;
+  name: string;
+  prefix: string;
+  role: "admin" | "member";
+  expiresAt: Date | null;
+  lastUsedAt: Date | null;
+  createdAt: Date;
+}) => ({
+  ...key,
+  expiresAt: key.expiresAt ? iso(key.expiresAt) : null,
+  lastUsedAt: key.lastUsedAt ? iso(key.lastUsedAt) : null,
+  createdAt: iso(key.createdAt),
+});
+
+/** A key must not make more keys: a leaked key would then keep access after its removal. */
+function requireSession(ctx: ApiContext) {
+  if (ctx.principal.apiKeyId !== null) {
+    throw forbidden("Create and delete API keys with a web session, not with an API key");
+  }
+}
+
+const apiKeys: Route[] = [
+  defineRoute({
+    method: "GET",
+    path: "/api-keys",
+    summary: "List API keys",
+    tag: "API keys",
+    role: "admin",
+    response: z.object({ items: z.array(s.apiKeyOut) }),
+    async handler(ctx) {
+      return { items: (await ctx.scope.apiKeys.list()).map(presentApiKey) };
+    },
+  }),
+  defineRoute({
+    method: "POST",
+    path: "/api-keys",
+    summary: "Create an API key",
+    description:
+      "Needs a web session (cookie) and the x-zerodot-project header. Sign in with /api/auth/sign-in/email. The full key is in the answer once.",
+    tag: "API keys",
+    role: "admin",
+    status: 201,
+    body: s.apiKeyCreate,
+    response: s.apiKeyCreated,
+    async handler(ctx, { body }) {
+      requireSession(ctx);
+      const { key, summary } = await ctx.scope.apiKeys.create({
+        name: body.name,
+        role: body.role,
+        expiresAt: body.expiresInDays ? new Date(Date.now() + body.expiresInDays * DAY_MS) : null,
+        userId: ctx.principal.userId,
+      });
+      return new Reply(201, { ...presentApiKey(summary), key });
+    },
+  }),
+  defineRoute({
+    method: "DELETE",
+    path: "/api-keys/:id",
+    summary: "Delete an API key",
+    tag: "API keys",
+    role: "admin",
+    params: s.idParam,
+    response: s.deleted,
+    async handler(ctx, { params }) {
+      requireSession(ctx);
+      return { deleted: await ctx.scope.apiKeys.remove(params.id) };
+    },
+  }),
+];
+
 export const routes: Route[] = [
   ...workflows,
   ...runs,
@@ -867,4 +942,5 @@ export const routes: Route[] = [
   ...variables,
   ...tables,
   ...insights,
+  ...apiKeys,
 ];

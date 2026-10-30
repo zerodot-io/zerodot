@@ -1,5 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-import { type Db, findApiKey, forOrganization, type OrganizationScope } from "@zerodot/db";
+
+import { timingSafeEqual } from "node:crypto";
+import {
+  type Db,
+  findApiKey,
+  forOrganization,
+  type OrganizationScope,
+  seedApiKey,
+} from "@zerodot/db";
+import type { RunWaiter } from "@zerodot/queue";
 import type { Redis } from "ioredis";
 import type { HeldLimiter } from "../held-limit";
 import { ApiError, forbidden, unauthorized } from "./errors";
@@ -24,6 +33,10 @@ export type ApiServices = {
   /** Caps the requests that wait for a run (`wait=true`). Without it there is no cap. */
   heldLimiter?: HeldLimiter;
   rateLimitPerMinute: number;
+  /** Wakes `wait=true` calls when a run ends. Without it they poll. */
+  runWaiter?: RunWaiter;
+  /** An admin key from the environment. The first call with it saves it. */
+  bootstrap?: { key: string; project: string | undefined };
   enqueue(input: {
     runId: string;
     organizationId: string;
@@ -67,13 +80,27 @@ export function requireAdmin(ctx: ApiContext): void {
 
 const BEARER = /^Bearer\s+(\S+)$/i;
 
+function sameKey(a: string, b: string): boolean {
+  const left = Buffer.from(a);
+  const right = Buffer.from(b);
+  return left.length === right.length && timingSafeEqual(left, right);
+}
+
+/** The key from the environment is not in the database until the first call with it. */
+async function seedBootstrap(services: ApiServices, key: string) {
+  const { bootstrap } = services;
+  if (!bootstrap || !sameKey(key, bootstrap.key)) return null;
+  if (!(await seedApiKey(services.db, key, bootstrap.project))) return null;
+  return findApiKey(services.db, key);
+}
+
 /** API key in `Authorization: Bearer`, or a web session. Throws `ApiError` for 401. */
 export async function authenticate(services: ApiServices, request: Request): Promise<Principal> {
   const header = request.headers.get("authorization");
   if (header) {
     const key = BEARER.exec(header)?.[1];
     if (!key) throw unauthorized();
-    const found = await findApiKey(services.db, key);
+    const found = (await findApiKey(services.db, key)) ?? (await seedBootstrap(services, key));
     if (!found) throw unauthorized();
     if (found.expiresAt && found.expiresAt.getTime() <= Date.now()) {
       throw unauthorized("This API key has expired");

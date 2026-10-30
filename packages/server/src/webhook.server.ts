@@ -51,19 +51,8 @@ export function parseBody(text: string, contentType: string): unknown {
   return text;
 }
 
-const POLL_MS = 200;
-/** Waits `ms`. Ends early when the signal aborts. */
-const sleep = (ms: number, signal?: AbortSignal) =>
-  new Promise<void>((resolve) => {
-    const timer = setTimeout(done, ms);
-    function done() {
-      clearTimeout(timer);
-      signal?.removeEventListener("abort", done);
-      resolve();
-    }
-    if (signal?.aborted) return done();
-    signal?.addEventListener("abort", done, { once: true });
-  });
+/** The worker wakes a waiter when a run has news. This poll only covers a lost wake. */
+const FALLBACK_POLL_MS = 1_000;
 
 type Trigger = NonNullable<Awaited<ReturnType<typeof findWebhookTrigger>>>;
 
@@ -179,7 +168,7 @@ export async function holdForAnswer(input: {
   /** Stops the wait when the client closes the connection. The result is then null. */
   signal?: AbortSignal;
 }): Promise<Response | null> {
-  const { redis } = await getServices();
+  const { redis, runWaiter } = await getServices();
   const { mode, runId, scope, extra } = input;
   const deadline = Date.now() + input.timeoutMs;
   const saved = async () => {
@@ -193,51 +182,57 @@ export async function holdForAnswer(input: {
   };
   for (;;) {
     if (input.signal?.aborted) return null;
-    if (mode === "respondNode") {
-      const answer = await saved();
-      if (answer) return answer;
-    }
-    const latest = await scope.runs.get(runId);
-    if (latest && ["succeeded", "failed", "cancelled"].includes(latest.status)) {
-      if (latest.status !== "succeeded") {
-        return bodyResponse(
-          500,
-          {
-            error: {
-              code: "run_failed",
-              message: (latest.error as { message?: string } | null)?.message ?? "The run failed",
-              runId,
-            },
-          },
-          extra,
-        );
-      }
+    // Arm before the reads, so a wake that comes during them is not lost.
+    const wake = runWaiter.arm(runId, input.signal);
+    try {
       if (mode === "respondNode") {
-        // The node can write its answer just before the run ends.
         const answer = await saved();
         if (answer) return answer;
-        return bodyResponse(
-          500,
-          {
-            error: {
-              code: "no_response",
-              message: "The workflow ended without a Respond to Webhook node",
-              runId,
-            },
-          },
-          extra,
-        );
       }
-      const results = await scope.runs.results(runId);
-      const last = results
-        .filter((r) => r.status === "succeeded" && r.finishedAt)
-        .sort((a, b) => (b.finishedAt?.getTime() ?? 0) - (a.finishedAt?.getTime() ?? 0))[0];
-      return input.none
-        ? new Response(null, { status: input.code ?? 200, headers: extra })
-        : bodyResponse(input.code ?? 200, last?.output ?? null, extra);
+      const latest = await scope.runs.get(runId);
+      if (latest && ["succeeded", "failed", "cancelled"].includes(latest.status)) {
+        if (latest.status !== "succeeded") {
+          return bodyResponse(
+            500,
+            {
+              error: {
+                code: "run_failed",
+                message: (latest.error as { message?: string } | null)?.message ?? "The run failed",
+                runId,
+              },
+            },
+            extra,
+          );
+        }
+        if (mode === "respondNode") {
+          // The node can write its answer just before the run ends.
+          const answer = await saved();
+          if (answer) return answer;
+          return bodyResponse(
+            500,
+            {
+              error: {
+                code: "no_response",
+                message: "The workflow ended without a Respond to Webhook node",
+                runId,
+              },
+            },
+            extra,
+          );
+        }
+        const results = await scope.runs.results(runId);
+        const last = results
+          .filter((r) => r.status === "succeeded" && r.finishedAt)
+          .sort((a, b) => (b.finishedAt?.getTime() ?? 0) - (a.finishedAt?.getTime() ?? 0))[0];
+        return input.none
+          ? new Response(null, { status: input.code ?? 200, headers: extra })
+          : bodyResponse(input.code ?? 200, last?.output ?? null, extra);
+      }
+      if (Date.now() >= deadline) return null;
+      await wake.wait(Math.min(FALLBACK_POLL_MS, deadline - Date.now()));
+    } finally {
+      wake.disarm();
     }
-    if (Date.now() >= deadline) return null;
-    await sleep(Math.min(POLL_MS, deadline - Date.now()), input.signal);
   }
 }
 
@@ -252,14 +247,17 @@ export async function handleWebhook(request: Request, token: string): Promise<Re
 async function answerWebhook(request: Request, token: string): Promise<Response> {
   const { db, redis, queue, config, secretKey, heldLimiter } = await getServices();
 
-  // Fixed window rate limit per token.
+  // Fixed window rate limit per token. 0 turns it off.
+  const limit = config.ZERODOT_WEBHOOK_RATE_LIMIT_PER_MINUTE;
   const windowKey = `rl:hook:${token}:${Math.floor(Date.now() / 60_000)}`;
-  const hits = await redis.incr(windowKey);
-  if (hits === 1) await redis.expire(windowKey, 120);
-  if (hits > config.ZERODOT_WEBHOOK_RATE_LIMIT_PER_MINUTE) {
-    return json({ error: { code: "rate_limited", message: "Too many requests" } }, 429, {
-      "retry-after": "60",
-    });
+  if (limit > 0) {
+    const hits = await redis.incr(windowKey);
+    if (hits === 1) await redis.expire(windowKey, 120);
+    if (hits > limit) {
+      return json({ error: { code: "rate_limited", message: "Too many requests" } }, 429, {
+        "retry-after": "60",
+      });
+    }
   }
 
   const trigger = await lookupTrigger(db, config.ZERODOT_WEBHOOK_CACHE_MS, token);
