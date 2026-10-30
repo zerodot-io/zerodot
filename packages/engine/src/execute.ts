@@ -29,6 +29,7 @@ import {
   TOOL_KIND,
 } from "./node";
 import type { CodeLog, SandboxClient } from "./sandbox";
+import { type SupplyUseStatus, trackUse } from "./supply-use";
 import type { TableStore } from "./tables";
 import { fromAIInputs, type NodeTool, toolInputSchema, toolName } from "./tool";
 
@@ -69,6 +70,15 @@ export type ExecutionHooks = {
   onRunStart?(): void | Promise<void>;
   beforeNode?(event: NodeEvent & { input: unknown }): void | Promise<void>;
   afterNode?(event: NodeEndEvent): void | Promise<void>;
+  /**
+   * A supply node or a tool of a running node is in use: its value got a call ("running"), or
+   * its last open call ended. Supply nodes are no steps, so this is their only live status.
+   */
+  onSupplyUse?(event: {
+    node: GraphNode;
+    parentId: string;
+    status: SupplyUseStatus;
+  }): void | Promise<void>;
   /** The run stops here and the worker resumes it at `resumeAt` (epoch ms). */
   onRunWait?(event: { resumeAt: number; nodeId: string }): void | Promise<void>;
   onRunEnd?(event: {
@@ -490,7 +500,9 @@ export async function executeGraph(options: ExecuteOptions): Promise<ExecuteResu
         try {
           if (!supplier) throw new Error(`Unknown node type "${node.type}"`);
           if (!supplier.supply && port.kind === TOOL_KIND && canBeTool(supplier)) {
-            values.push(nodeTool(node, supplier, scope, input, toolNames, sink.logs));
+            values.push(
+              track(nodeTool(node, supplier, scope, input, toolNames, sink.logs), node, parent),
+            );
             continue;
           }
           if (!supplier.supply || supplier.supplies !== port.kind) {
@@ -503,27 +515,24 @@ export async function executeGraph(options: ExecuteOptions): Promise<ExecuteResu
             sink.secrets,
             sink.masked,
           );
-          values.push(
-            await supplier.supply({
-              config,
-              credential,
-              signal,
-              scope: runScope(scope, input),
-              log: (entries) => {
-                const named = entries.map((entry) => ({
-                  ...entry,
-                  message: `[${node.name}] ${entry.message}`,
-                }));
-                sink.logs.push(
-                  ...(sink.masked.length > 0 ? maskSecrets(named, sink.masked) : named),
-                );
-              },
-              sandbox: options.sandbox ?? null,
-              tables: options.tables ?? null,
-              runWorkflow: options.runWorkflow ?? null,
-              node: { id: node.id, name: node.name },
-            }),
-          );
+          const value = await supplier.supply({
+            config,
+            credential,
+            signal,
+            scope: runScope(scope, input),
+            log: (entries) => {
+              const named = entries.map((entry) => ({
+                ...entry,
+                message: `[${node.name}] ${entry.message}`,
+              }));
+              sink.logs.push(...(sink.masked.length > 0 ? maskSecrets(named, sink.masked) : named));
+            },
+            sandbox: options.sandbox ?? null,
+            tables: options.tables ?? null,
+            runWorkflow: options.runWorkflow ?? null,
+            node: { id: node.id, name: node.name },
+          });
+          values.push(track(value, node, parent));
         } catch (error) {
           const { message } = toError(error);
           throw new Error(`Supply "${node.name}" (${port.label}): ${message}`);
@@ -534,6 +543,10 @@ export async function executeGraph(options: ExecuteOptions): Promise<ExecuteResu
     }
     return supplies;
   };
+
+  /** A supply value that reports its use through the `onSupplyUse` hook. */
+  const track = <T>(value: T, node: GraphNode, parent: GraphNode): T =>
+    trackUse(value, (status) => void call("onSupplyUse", { node, parentId: parent.id, status }));
 
   /**
    * A node that runs as a tool. Each call resolves its config with the scope of the parent and the

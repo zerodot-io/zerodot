@@ -83,7 +83,6 @@ import {
   toFlow,
   toGraph,
   uniqueName,
-  withSupplyStatuses,
   type ZerodotFlowNode,
 } from "../../lib/flow";
 import type { Json } from "../../lib/json";
@@ -141,6 +140,7 @@ const EVENT_TYPES: RunEvent["type"][] = [
   "node.succeeded",
   "node.failed",
   "node.skipped",
+  "supply.used",
   "run.finished",
 ];
 
@@ -347,7 +347,6 @@ export function Editor({
   }, [edges, ios]);
 
   const graph: Graph = useMemo(() => toGraph(nodes, edges), [nodes, edges]);
-  const shownStatuses = useMemo(() => withSupplyStatuses(statuses, edges), [statuses, edges]);
 
   // Publish stays off while the canvas equals the published version.
   const [publishedJson, setPublishedJson] = useState(
@@ -908,6 +907,9 @@ export function Editor({
         break;
       case "node.skipped":
         setStatuses((s) => ({ ...s, [event.nodeId]: "skipped" }));
+        break;
+      case "supply.used":
+        setStatuses((s) => ({ ...s, [event.nodeId]: event.status }));
         break;
       case "run.finished":
         setRunStatus(event.status);
@@ -1848,7 +1850,7 @@ export function Editor({
                   <div className="flex min-h-0 flex-1">
                     <div ref={setCanvasEl} className="relative min-w-0 flex-1 overflow-clip">
                       <EdgeCountContext.Provider value={edgeCounts}>
-                        <NodeStatusContext.Provider value={shownStatuses}>
+                        <NodeStatusContext.Provider value={statuses}>
                           <EditorActionsContext.Provider
                             value={{
                               addAfter: (nodeId, port) => {

@@ -385,6 +385,9 @@ export async function processRun(
       // so a resumed run starts it again. Rows are written when a node ends.
       void publish({ type: "node.started", runId: job.runId, nodeId: node.id, attempt });
     },
+    onSupplyUse({ node, status }) {
+      void publish({ type: "supply.used", runId: job.runId, nodeId: node.id, status });
+    },
     async afterNode(e) {
       const result: NodeResultInput = {
         nodeId: e.node.id,

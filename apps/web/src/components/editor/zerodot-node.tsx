@@ -283,7 +283,7 @@ export function ZerodotNode({ id, data, selected }: NodeProps<ZerodotFlowNode>) 
             id={SUPPLY_OUT_PORT}
             isConnectable={!readOnly}
             style={{ top: -1, transform: "translate(-50%, -50%) rotate(45deg)" }}
-            className="size-3! rounded-none! border-2! border-card! bg-muted-foreground/70!"
+            className="z-10 size-3! rounded-none! border-2! border-card! bg-[color-mix(in_oklab,var(--color-muted-foreground)_70%,var(--color-card))]!"
           />
         )}
         {supplyPorts.map((port, index) => (
@@ -301,7 +301,7 @@ export function ZerodotNode({ id, data, selected }: NodeProps<ZerodotFlowNode>) 
               bottom: -1,
               transform: "translate(-50%, 50%) rotate(45deg)",
             }}
-            className="size-3! rounded-none! border-2! border-card! bg-muted-foreground/70!"
+            className="z-10 size-3! rounded-none! border-2! border-card! bg-[color-mix(in_oklab,var(--color-muted-foreground)_70%,var(--color-card))]!"
           />
         ))}
         {graphNode.pinned && (
