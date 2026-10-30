@@ -35,6 +35,12 @@ Official packages: `@zerodot/redis`, `@zerodot/mysql`, `@zerodot/postgres`, `@ze
 
 A package has `"zerodot": { "sdk": "^1.0" }` in its `package.json`: the range of node contract versions it works with. `SDK_VERSION` in `@zerodot/node-sdk` is the version of this zerodot. zerodot checks the range before it runs any package code. A package with no range, or with a range that does not fit, is not loaded. The package exports `nodes`, a list of node definitions, and can export `credentialTypes`. A package can not replace a built-in node type. A package that fails to load is logged and skipped.
 
+### SDK and zerodot versions
+
+- An SDK release that adds to the contract (for example 1.4 to 1.5) ships together with a zerodot release that contains it. A fix or a readme change (1.4.x) does not need a zerodot release.
+- A package that uses new SDK features sets `zerodot.sdk` to the new minor version (for example `^1.5`). Release it only after the zerodot release that has that SDK.
+- When the range of a package is newer than this zerodot, the error tells the user to update zerodot. When it is older, the error tells the user to ask the author for an update.
+
 ## Community registries
 
 > **Warning:** zerodot does not check community packages, except verified versions. A package runs in its own process, so it cannot read the secret keys, the database, or the files of zerodot, and it cannot reach addresses inside the network of the server. But it gets the credentials and the data that your workflows give to its nodes, and it can send them to any server on the internet. Add a registry and install a package only when you trust the author.

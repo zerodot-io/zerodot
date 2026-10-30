@@ -167,7 +167,7 @@ export async function resolveVersion(
   const version = pickVersion(await fetchPackument(name, fetchImpl));
   if (!version) {
     throw new Error(
-      `No version of "${name}" works with this zerodot (node contract ${SDK_VERSION})`,
+      `No version of ${name} works with this version of zerodot. Update zerodot, then try again. (This zerodot has node SDK ${SDK_VERSION}.)`,
     );
   }
   return version;
