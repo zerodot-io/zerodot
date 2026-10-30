@@ -86,6 +86,27 @@ export const readManifestFromDisk: ManifestReader = (name) => {
 };
 
 /**
+ * Why a package with the SDK range `sdk` does not load, for a person. A range above this zerodot
+ * needs a zerodot update, a range below it needs a package update. The versions are at the end,
+ * for support.
+ */
+export function sdkMismatch(name: string, sdk: string): string {
+  const parts = (text: string) => {
+    const match = /^\^?\s*(\d+)(?:\.(\d+))?(?:\.(\d+))?/.exec(text.trim());
+    return match ? [1, 2, 3].map((i) => Number(match[i] ?? 0)) : null;
+  };
+  const wanted = parts(sdk);
+  const have = parts(SDK_VERSION) ?? [0, 0, 0];
+  const diff = wanted?.map((value, i) => value - (have[i] ?? 0)).find((d) => d !== 0) ?? 0;
+  const versions = `(The package needs node SDK ${sdk}. This zerodot has ${SDK_VERSION}.)`;
+  // A range that is not a version cannot be compared. Asking for an update is the safe advice.
+  if (wanted === null || diff > 0) {
+    return `${name} needs a newer version of zerodot. Update zerodot, then install it again. ${versions}`;
+  }
+  return `${name} is too old for this version of zerodot. Ask its author for an update. ${versions}`;
+}
+
+/**
  * Loads node packages (for example `@zerodot/redis`) and adds their nodes. The `package.json` of
  * a package has `zerodot.sdk`, the range of node contract versions it works with (for example
  * "^1.4"). It is checked before the package code runs, and a package with another range is not
@@ -109,11 +130,11 @@ export async function loadNodePackages(
       if (manifest === null) throw new Error(`Cannot find package "${name}"`);
       const sdk = manifest.sdk;
       if (typeof sdk !== "string" || sdk === "") {
-        report.error = 'The package.json has no "zerodot.sdk", the contract versions it works with';
+        report.error = `${name} is not a zerodot node package: its package.json has no "zerodot.sdk".`;
         continue;
       }
       if (!satisfiesSdk(sdk)) {
-        report.error = `The package needs node contract ${sdk}. This zerodot has ${SDK_VERSION}`;
+        report.error = sdkMismatch(name, sdk);
         continue;
       }
       const loaded = await importer(name);

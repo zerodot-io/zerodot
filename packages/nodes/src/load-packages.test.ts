@@ -119,8 +119,14 @@ describe("loadNodePackages", () => {
       (name) => (name in ranges ? (ranges[name] ? { sdk: ranges[name] } : {}) : null),
     );
     assert.match(reports[0]?.error ?? "", /no "zerodot\.sdk"/);
-    assert.match(reports[1]?.error ?? "", /needs node contract \^0\.1/);
-    assert.match(reports[2]?.error ?? "", /needs node contract \^2\.0/);
+    assert.match(
+      reports[1]?.error ?? "",
+      /old is too old for this version of zerodot\. Ask its author for an update\. \(The package needs node SDK \^0\.1\./,
+    );
+    assert.match(
+      reports[2]?.error ?? "",
+      /future needs a newer version of zerodot\. Update zerodot, then install it again\. \(The package needs node SDK \^2\.0\./,
+    );
     assert.match(reports[3]?.error ?? "", /Cannot find package/);
     assert.equal(imported, 0);
     assert.equal(registry.has("ext.versioned"), false);

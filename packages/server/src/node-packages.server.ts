@@ -40,7 +40,7 @@ import {
   type VerifiedPackage,
   withInstallLock,
 } from "@zerodot/nodes/install";
-import { parseNodePackages } from "@zerodot/nodes/load";
+import { parseNodePackages, sdkMismatch } from "@zerodot/nodes/load";
 import { listenForNodesChanged, publishNodesChanged } from "@zerodot/queue";
 import type { Redis } from "ioredis";
 import { isInstanceAdmin, requireInstanceAdmin } from "./admin.server";
@@ -110,6 +110,8 @@ export type NodePackageView = {
   latest: string | null;
   /** False when `latest` needs a newer zerodot, so the update badge must not show. */
   compatible: boolean;
+  /** Why `latest` does not work with this zerodot, for a tooltip. Null when it works. */
+  incompatible: string | null;
   icon: string | null;
   iconUrl: string | null;
   nodes: { type: string; label: string; description?: string }[];
@@ -159,6 +161,7 @@ const viewOf = (
   status: "available",
   latest: item.version,
   compatible: satisfiesSdk(item.sdk, SDK_VERSION),
+  incompatible: satisfiesSdk(item.sdk, SDK_VERSION) ? null : sdkMismatch(item.label, item.sdk),
   icon: item.icon ?? null,
   iconUrl: item.iconUrl ?? null,
   nodes: item.nodes,
@@ -230,6 +233,7 @@ export async function nodePackagesOverview(headers: Headers): Promise<NodePackag
       status: "not-loaded" as const,
       latest: null,
       compatible: false,
+      incompatible: null,
       icon: null,
       iconUrl: null,
       nodes: [],
@@ -584,6 +588,8 @@ export type AvailableNodePackage = {
   credentialTypes: string[];
   /** False when the newest version needs a newer zerodot. */
   compatible: boolean;
+  /** Why the newest version does not work with this zerodot, for a tooltip. Null when it works. */
+  incompatible: string | null;
 };
 
 export type AvailableNodePackages = {
@@ -615,6 +621,9 @@ export async function availableNodePackages(headers: Headers): Promise<Available
         nodes: item.nodes,
         credentialTypes: item.credentialTypes ?? [],
         compatible: satisfiesSdk(item.sdk, SDK_VERSION),
+        incompatible: satisfiesSdk(item.sdk, SDK_VERSION)
+          ? null
+          : sdkMismatch(item.label, item.sdk),
       }));
   } catch (error) {
     catalogError = error instanceof Error ? error.message : "The catalog is not reachable";
@@ -733,6 +742,9 @@ async function packagesFor(
           nodes: item.nodes,
           credentialTypes: item.credentialTypes ?? [],
           compatible: satisfiesSdk(item.sdk, SDK_VERSION),
+          incompatible: satisfiesSdk(item.sdk, SDK_VERSION)
+            ? null
+            : sdkMismatch(item.label, item.sdk),
           types: given,
           registry: { url: registry.url, name: registry.name },
           verified: isVerified(verified, item.name, item.version, item.integrity),

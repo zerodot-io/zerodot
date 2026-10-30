@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { RefreshIcon } from "@hugeicons/core-free-icons";
+import { Alert02Icon, RefreshIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
   Badge,
@@ -21,6 +21,7 @@ import {
   SelectValue,
   Skeleton,
   Spinner,
+  Tooltip,
   toast,
 } from "@zerodot/ui";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
@@ -39,6 +40,27 @@ import {
 } from "../server/fns";
 import { ConfirmDialog } from "./confirm-dialog";
 import { NodeIcon } from "./node-icon";
+
+/** A small warning icon. The tooltip tells what is wrong and what to do. */
+export function Warning({
+  label,
+  tone = "warning",
+}: {
+  label: string;
+  tone?: "warning" | "error";
+}) {
+  return (
+    <Tooltip label={label}>
+      <span
+        // biome-ignore lint/a11y/noNoninteractiveTabindex: a keyboard user must reach the tooltip.
+        tabIndex={0}
+        className={`inline-flex rounded-sm ${tone === "error" ? "text-destructive" : "text-amber-600"}`}
+      >
+        <HugeiconsIcon icon={Alert02Icon} className="size-4" />
+      </span>
+    </Tooltip>
+  );
+}
 
 function errorText(error: unknown): string {
   return error instanceof Error ? error.message : "Something went wrong";
@@ -491,6 +513,8 @@ function PackageRow({
             {status.text}
             {installed && <span className="tabular-nums">· {item.version}</span>}
           </span>
+          {item.error && <Warning label={item.error} tone="error" />}
+          {!installed && item.incompatible && <Warning label={item.incompatible} />}
           {hasUpdate && <Badge variant="secondary">Update {item.latest}</Badge>}
           {item.source === "env" && <Badge variant="outline">ZERODOT_NODE_PACKAGES</Badge>}
           {item.registry && (
@@ -535,7 +559,6 @@ function PackageRow({
             )}
           </div>
         )}
-        {item.error && <span className="text-destructive">{item.error}</span>}
       </div>
       {canChange &&
         (installed ? (
@@ -558,7 +581,7 @@ function PackageRow({
             </Button>
           </div>
         ) : (
-          <Button disabled={busy} onClick={onInstall}>
+          <Button disabled={busy || !item.compatible} onClick={onInstall}>
             {busy ? "Installing" : "Install"}
           </Button>
         ))}
@@ -1038,19 +1061,19 @@ export function AvailableNodePackages({
         <div key={item.name} className="flex items-center gap-3 rounded-lg px-2 py-2">
           <NodeIcon name={item.icon ?? "PackageIcon"} src={item.iconUrl ?? undefined} />
           <span className="flex min-w-0 flex-1 flex-col">
-            <span>{item.label}</span>
-            <span className="text-muted-foreground">
-              {item.compatible ? item.summary || item.description : "Needs a newer zerodot"}
+            <span className="flex items-center gap-1.5">
+              {item.label}
+              {item.incompatible && <Warning label={item.incompatible} />}
             </span>
+            <span className="text-muted-foreground">{item.summary || item.description}</span>
           </span>
-          {item.compatible &&
-            (available.canInstall ? (
-              <Button disabled={busy !== null} onClick={() => setConfirm(item)}>
-                {busy === item.name ? "Installing" : "Install"}
-              </Button>
-            ) : (
-              <span className="text-muted-foreground">Ask an admin</span>
-            ))}
+          {available.canInstall ? (
+            <Button disabled={busy !== null || !item.compatible} onClick={() => setConfirm(item)}>
+              {busy === item.name ? "Installing" : "Install"}
+            </Button>
+          ) : (
+            item.compatible && <span className="text-muted-foreground">Ask an admin</span>
+          )}
         </div>
       ))}
       {confirm && (

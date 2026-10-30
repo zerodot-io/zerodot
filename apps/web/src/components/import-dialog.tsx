@@ -16,7 +16,7 @@ import {
 import { type ChangeEvent, type FormEvent, useRef, useState } from "react";
 import { importWorkflowFn, installNodePackageFn, previewImportFn } from "../server/fns";
 import { NodeIcon } from "./node-icon";
-import { CommunityInstallConfirm, refreshServerCatalog } from "./node-packages";
+import { CommunityInstallConfirm, refreshServerCatalog, Warning } from "./node-packages";
 
 export type ImportResult = Awaited<ReturnType<typeof importWorkflowFn>>;
 type Preview = Awaited<ReturnType<typeof previewImportFn>>;
@@ -315,8 +315,9 @@ function MissingNodesDialog({
               <li key={item.name} className="flex items-center gap-3 py-2">
                 <NodeIcon name={item.icon ?? "PackageIcon"} src={item.iconUrl ?? undefined} />
                 <span className="flex min-w-0 flex-1 flex-col">
-                  <span>
+                  <span className="flex items-center gap-1.5">
                     {item.label}
+                    {item.incompatible && <Warning label={item.incompatible} />}
                     {item.registry && (
                       <span className={item.verified ? undefined : "text-destructive"}>
                         {" "}
@@ -324,9 +325,7 @@ function MissingNodesDialog({
                       </span>
                     )}
                   </span>
-                  <span className="truncate text-muted-foreground">
-                    {item.compatible ? labels.join(", ") : "Needs a newer zerodot"}
-                  </span>
+                  <span className="truncate text-muted-foreground">{labels.join(", ")}</span>
                 </span>
                 {installing === item.name ? (
                   <Spinner />

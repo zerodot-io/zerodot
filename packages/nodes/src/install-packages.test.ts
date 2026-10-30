@@ -267,7 +267,7 @@ describe("packages in the nodes folder", () => {
     try {
       writePackage(dir, "@zerodot/demo-new", "1.0.0", "^9.0", "demo.new");
       const [report] = await loadInstalled(dir, ["@zerodot/demo-new"]);
-      assert.match(report?.error ?? "", /needs node contract \^9\.0/);
+      assert.match(report?.error ?? "", /needs a newer version of zerodot.*node SDK \^9\.0/);
       assert.equal(registry.has("demo.new"), false);
     } finally {
       rmSync(dir, { recursive: true });
