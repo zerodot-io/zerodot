@@ -1,0 +1,25 @@
+name: pr-label
+# Label a pull request from the type prefix of its title, so the release notes put it in the
+# correct section (see .github/release.yml). The job does not check out code from the pull request.
+on:
+  pull_request_target:
+    types: [opened, edited, reopened]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Label from title
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          case "$TITLE" in
+            feat:*|feat\(*|feat!:*) gh pr edit "$PR" --add-label enhancement ;;
+            fix:*|fix\(*|fix!:*) gh pr edit "$PR" --add-label bug ;;
+          esac
