@@ -376,7 +376,9 @@ export function Editor({
     setSaveState("saving");
     const timer = setTimeout(async () => {
       try {
-        await saveDraftFn({ data: { projectSlug, workflowId: workflow.id, graph } });
+        await saveDraftFn({
+          data: { projectSlug, workflowId: workflow.id, graph, base: lastSaved.current },
+        });
         lastSaved.current = json;
         setSaveState("saved");
         setMessage(null);
@@ -1152,7 +1154,9 @@ export function Editor({
   async function saveNow() {
     if (JSON.stringify(graph) === lastSaved.current) return;
     if (graph.nodes.some((n) => !catalogByType.has(n.type))) return;
-    await saveDraftFn({ data: { projectSlug, workflowId: workflow.id, graph } });
+    await saveDraftFn({
+      data: { projectSlug, workflowId: workflow.id, graph, base: lastSaved.current },
+    });
     lastSaved.current = JSON.stringify(graph);
     setSaveState("saved");
   }
@@ -1178,7 +1182,9 @@ export function Editor({
   async function publish() {
     setMessage(null);
     try {
-      const result = await publishFn({ data: { projectSlug, workflowId: workflow.id, graph } });
+      const result = await publishFn({
+        data: { projectSlug, workflowId: workflow.id, graph, base: lastSaved.current },
+      });
       lastSaved.current = JSON.stringify(graph);
       setPublishedJson(lastSaved.current);
       setSaveState("saved");

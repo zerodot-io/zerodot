@@ -55,6 +55,18 @@ describe("forOrganization", { skip: !url }, () => {
     assert.equal((await a.workflows.get(wf.id))?.name, "one");
   });
 
+  it("saves a draft only when the row did not change since ifUpdatedAt", async () => {
+    const a = forOrganization(db, "o1");
+    // A new row has microseconds (defaultNow). A JS date has milliseconds.
+    const wf = await a.workflows.create({ name: "draft check" });
+    const first = await a.workflows.saveDraft(wf.id, { v: 1 }, { ifUpdatedAt: wf.updatedAt });
+    assert.ok(first);
+    // The other tab still holds the first time.
+    assert.equal(await a.workflows.saveDraft(wf.id, { v: 2 }, { ifUpdatedAt: wf.updatedAt }), null);
+    assert.deepEqual((await a.workflows.get(wf.id))?.draftGraph, { v: 1 });
+    assert.ok(await a.workflows.saveDraft(wf.id, { v: 3 }, { ifUpdatedAt: first.updatedAt }));
+  });
+
   it("finds names with a number after them", async () => {
     const a = forOrganization(db, "o1");
     for (const n of ["Sync", "Sync 2", "Syncer", "Other"]) await a.workflows.create({ name: n });
