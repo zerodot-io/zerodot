@@ -24,7 +24,7 @@ To install packages at start (for example in Docker or GitOps), list them:
 ZERODOT_NODE_PACKAGES=@zerodot/redis,@zerodot/github
 ```
 
-Official packages: `@zerodot/redis`, `@zerodot/mysql`, `@zerodot/postgres`, `@zerodot/mongodb`, `@zerodot/email` (send and IMAP trigger), `@zerodot/ssh` (SSH, FTP, SFTP), `@zerodot/s3`, `@zerodot/edit-image`, `@zerodot/mcp`, `@zerodot/telegram`, and `@zerodot/github`. Each package documents its nodes in [nodes](https://github.com/zerodot-io/nodes).
+Official packages: `@zerodot/redis`, `@zerodot/mysql`, `@zerodot/postgres`, `@zerodot/mongodb`, `@zerodot/email` (send and IMAP trigger), `@zerodot/ssh` (SSH, FTP, SFTP), `@zerodot/s3`, `@zerodot/edit-image`, `@zerodot/mcp`, `@zerodot/telegram`, `@zerodot/github`, and `@zerodot/ai-agent` (AI Agent with chat models, memory, and tools; needs zerodot 0.2.9 or later). Each package documents its nodes in [nodes](https://github.com/zerodot-io/nodes).
 
 - Packages live in `ZERODOT_NODES_DIR` (default `./.zerodot/nodes`; `/nodes` in the Docker image, on the `node-packages` volume). web, API, and worker share it.
 - `ZERODOT_NODES_INSTALL=false` turns off installing and removing in the app.
