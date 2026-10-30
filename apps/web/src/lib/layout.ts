@@ -31,36 +31,9 @@ export function arrangeNodes(nodes: ZerodotFlowNode[], edges: Edge[]): ZerodotFl
     h: n.measured?.height ?? FALLBACK_HEIGHT,
   });
 
-  // The supply nodes of each parent, in port order, then left to right as they are now.
+  // The step nodes. A node that gives a supply is not one: it goes in the row of a parent.
   const supplied = new Set(supplyEdges.map((e) => e.source));
-  const rows = new Map<string, { n: ZerodotFlowNode; port: number }[]>();
-  for (const parentNode of nodes) {
-    const ports = catalogByType.get(parentNode.data.graphNode.type)?.supplyPorts ?? [];
-    const row = supplyEdges
-      .filter((e) => e.target === parentNode.id)
-      .flatMap((e) => {
-        const n = nodes.find((m) => m.id === e.source);
-        const port = ports.findIndex((p) => `supply:${p.name}` === e.targetHandle);
-        return n ? [{ n, port: Math.max(0, port) }] : [];
-      })
-      .sort((a, b) => a.port - b.port || a.n.position.x - b.n.position.x);
-    if (row.length > 0) rows.set(parentNode.id, row);
-  }
-  const rowWidth = (row: { n: ZerodotFlowNode }[]) =>
-    row.reduce((sum, { n }) => sum + baseSize(n).w, 0) + SUPPLY_GAP * (row.length - 1);
-
-  // The layout sees a parent with its row of supply nodes as one tall block.
   const layoutNodes = nodes.filter((n) => !supplied.has(n.id));
-  const size = (n: ZerodotFlowNode) => {
-    const own = baseSize(n);
-    const row = rows.get(n.id);
-    if (!row) return own;
-    return {
-      w: Math.max(own.w, rowWidth(row)),
-      h: own.h + SUPPLY_DROP + Math.max(...row.map(({ n: m }) => baseSize(m).h)),
-    };
-  };
-
   const ids = new Set(layoutNodes.map((n) => n.id));
   const links = flowEdges.filter(
     (e) => ids.has(e.source) && ids.has(e.target) && e.source !== e.target,
@@ -85,75 +58,153 @@ export function arrangeNodes(nodes: ZerodotFlowNode[], edges: Edge[]): ZerodotFl
     groups.set(root, [...(groups.get(root) ?? []), n]);
   }
 
+  // Groups that share a supply node stand side by side in one band, so the supply edges stay short.
+  const parentsOf = new Map<string, string[]>();
+  for (const e of supplyEdges) {
+    if (!ids.has(e.target)) continue;
+    parentsOf.set(e.source, [...new Set([...(parentsOf.get(e.source) ?? []), e.target])]);
+  }
+  const band = new Map<string, string>([...groups.keys()].map((g) => [g, g]));
+  const findBand = (id: string): string => {
+    let root = id;
+    while (band.get(root) !== root) root = band.get(root) ?? root;
+    band.set(id, root);
+    return root;
+  };
+  for (const parents of parentsOf.values()) {
+    const [first, ...rest] = parents.map(find);
+    for (const g of rest) if (first !== undefined) band.set(findBand(g), findBand(first));
+  }
+  const minOf = (group: ZerodotFlowNode[], axis: "x" | "y") =>
+    Math.min(...group.map((n) => n.position[axis]));
+  const bands = new Map<string, ZerodotFlowNode[][]>();
+  for (const [root, group] of groups) {
+    const b = findBand(root);
+    bands.set(b, [...(bands.get(b) ?? []), group]);
+  }
+  // Bands go top to bottom, and the groups of a band left to right, as they are now.
+  const orderedBands = [...bands.values()]
+    .map((list) => list.sort((a, b) => minOf(a, "x") - minOf(b, "x")))
+    .sort(
+      (a, b) => Math.min(...a.map((g) => minOf(g, "y"))) - Math.min(...b.map((g) => minOf(g, "y"))),
+    );
+  const groupOrder = new Map<string, number>();
+  for (const group of orderedBands.flat()) {
+    const first = group[0];
+    if (first) groupOrder.set(find(first.id), groupOrder.size);
+  }
+
+  // A supply node with more than one parent goes in the row of one parent only: the first group,
+  // then the leftmost parent. The edges of the other parents go to it there.
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const owner = new Map<string, string>();
+  for (const [supplyId, parents] of parentsOf) {
+    const [first] = [...parents].sort(
+      (a, b) =>
+        (groupOrder.get(find(a)) ?? 0) - (groupOrder.get(find(b)) ?? 0) ||
+        (byId.get(a)?.position.x ?? 0) - (byId.get(b)?.position.x ?? 0),
+    );
+    if (first !== undefined) owner.set(supplyId, first);
+  }
+
+  // The supply nodes of each parent, in port order, then left to right as they are now.
+  const rows = new Map<string, { n: ZerodotFlowNode; port: number }[]>();
+  for (const parentNode of layoutNodes) {
+    const ports = catalogByType.get(parentNode.data.graphNode.type)?.supplyPorts ?? [];
+    const row = supplyEdges
+      .filter((e) => e.target === parentNode.id && owner.get(e.source) === parentNode.id)
+      .flatMap((e) => {
+        const n = byId.get(e.source);
+        const port = ports.findIndex((p) => `supply:${p.name}` === e.targetHandle);
+        return n ? [{ n, port: Math.max(0, port) }] : [];
+      })
+      .sort((a, b) => a.port - b.port || a.n.position.x - b.n.position.x);
+    if (row.length > 0) rows.set(parentNode.id, row);
+  }
+  const rowWidth = (row: { n: ZerodotFlowNode }[]) =>
+    row.reduce((sum, { n }) => sum + baseSize(n).w, 0) + SUPPLY_GAP * (row.length - 1);
+
+  // The layout sees a parent with its row of supply nodes as one tall block.
+  const size = (n: ZerodotFlowNode) => {
+    const own = baseSize(n);
+    const row = rows.get(n.id);
+    if (!row) return own;
+    return {
+      w: Math.max(own.w, rowWidth(row)),
+      h: own.h + SUPPLY_DROP + Math.max(...row.map(({ n: m }) => baseSize(m).h)),
+    };
+  };
+
   const next = new Map<string, { x: number; y: number }>();
   let top = 0;
-  const ordered = [...groups.values()].sort(
-    (a, b) => Math.min(...a.map((n) => n.position.y)) - Math.min(...b.map((n) => n.position.y)),
-  );
 
-  for (const group of ordered) {
-    const inGroup = new Set(group.map((n) => n.id));
-    const own = links.filter((e) => inGroup.has(e.source));
-
-    // Depth is the longest path from a start. The pass limit stops loops.
-    const depth = new Map<string, number>(group.map((n) => [n.id, 0]));
-    for (let pass = 0; pass < group.length; pass++) {
-      let changed = false;
-      for (const e of own) {
-        const d = (depth.get(e.source) ?? 0) + 1;
-        if (d > (depth.get(e.target) ?? 0) && d < group.length) {
-          depth.set(e.target, d);
-          changed = true;
-        }
-      }
-      if (!changed) break;
-    }
-
-    const columns: ZerodotFlowNode[][] = [];
-    for (const n of group) {
-      const d = depth.get(n.id) ?? 0;
-      columns[d] = [...(columns[d] ?? []), n];
-    }
-
-    // Order each column by the height of its parents, so lines cross less.
-    const centerY = new Map<string, number>();
+  for (const bandGroups of orderedBands) {
     let left = 0;
-    let groupHeight = 0;
-    const placed: { n: ZerodotFlowNode; y: number }[][] = [];
-    for (const column of columns) {
-      if (!column) continue;
-      const score = (n: ZerodotFlowNode) => {
-        const above = own.filter((e) => e.target === n.id && centerY.has(e.source));
-        if (above.length === 0) return n.position.y;
-        return above.reduce((sum, e) => sum + (centerY.get(e.source) ?? 0), 0) / above.length;
-      };
-      const sorted = [...column].sort((a, b) => score(a) - score(b));
-      let y = 0;
-      const col: { n: ZerodotFlowNode; y: number }[] = [];
-      for (const n of sorted) {
-        col.push({ n, y });
-        centerY.set(n.id, y + size(n).h / 2);
-        y += size(n).h + ROW_GAP;
-      }
-      groupHeight = Math.max(groupHeight, y - ROW_GAP);
-      placed.push(col);
-    }
+    let bandHeight = 0;
+    for (const group of bandGroups) {
+      const inGroup = new Set(group.map((n) => n.id));
+      const own = links.filter((e) => inGroup.has(e.source));
 
-    for (const [index, col] of placed.entries()) {
-      const colHeight = col.length
-        ? (col.at(-1)?.y ?? 0) + size(col.at(-1)?.n as ZerodotFlowNode).h
-        : 0;
-      const offset = (groupHeight - colHeight) / 2;
-      const colWidth = Math.max(...col.map(({ n }) => size(n).w));
-      for (const { n, y } of col) {
-        // A node with a wide row of supply nodes sits in the middle of its block.
-        next.set(n.id, { x: left + (size(n).w - baseSize(n).w) / 2, y: top + offset + y });
+      // Depth is the longest path from a start. The pass limit stops loops.
+      const depth = new Map<string, number>(group.map((n) => [n.id, 0]));
+      for (let pass = 0; pass < group.length; pass++) {
+        let changed = false;
+        for (const e of own) {
+          const d = (depth.get(e.source) ?? 0) + 1;
+          if (d > (depth.get(e.target) ?? 0) && d < group.length) {
+            depth.set(e.target, d);
+            changed = true;
+          }
+        }
+        if (!changed) break;
       }
-      const stubs = col.some(({ n }) => namedPorts.has(n.id)) ? PORT_OVERHANG : 0;
-      const loops = placed[index + 1]?.some(({ n }) => looping.has(n.id)) ? LOOP_OVERHANG : 0;
-      left += colWidth + COLUMN_GAP + stubs + loops;
+
+      const columns: ZerodotFlowNode[][] = [];
+      for (const n of group) {
+        const d = depth.get(n.id) ?? 0;
+        columns[d] = [...(columns[d] ?? []), n];
+      }
+
+      // Order each column by the height of its parents, so lines cross less.
+      const centerY = new Map<string, number>();
+      let groupHeight = 0;
+      const placed: { n: ZerodotFlowNode; y: number }[][] = [];
+      for (const column of columns) {
+        if (!column) continue;
+        const score = (n: ZerodotFlowNode) => {
+          const above = own.filter((e) => e.target === n.id && centerY.has(e.source));
+          if (above.length === 0) return n.position.y;
+          return above.reduce((sum, e) => sum + (centerY.get(e.source) ?? 0), 0) / above.length;
+        };
+        const sorted = [...column].sort((a, b) => score(a) - score(b));
+        let y = 0;
+        const col: { n: ZerodotFlowNode; y: number }[] = [];
+        for (const n of sorted) {
+          col.push({ n, y });
+          centerY.set(n.id, y + size(n).h / 2);
+          y += size(n).h + ROW_GAP;
+        }
+        groupHeight = Math.max(groupHeight, y - ROW_GAP);
+        placed.push(col);
+      }
+
+      for (const [index, col] of placed.entries()) {
+        const colHeight = col.length
+          ? (col.at(-1)?.y ?? 0) + size(col.at(-1)?.n as ZerodotFlowNode).h
+          : 0;
+        const offset = (groupHeight - colHeight) / 2;
+        const colWidth = Math.max(...col.map(({ n }) => size(n).w));
+        for (const { n, y } of col) {
+          // A node with a wide row of supply nodes sits in the middle of its block.
+          next.set(n.id, { x: left + (size(n).w - baseSize(n).w) / 2, y: top + offset + y });
+        }
+        const stubs = col.some(({ n }) => namedPorts.has(n.id)) ? PORT_OVERHANG : 0;
+        const loops = placed[index + 1]?.some(({ n }) => looping.has(n.id)) ? LOOP_OVERHANG : 0;
+        left += colWidth + COLUMN_GAP + stubs + loops;
+      }
+      bandHeight = Math.max(bandHeight, groupHeight);
     }
-    top += groupHeight + COMPONENT_GAP;
+    top += bandHeight + COMPONENT_GAP;
   }
 
   // Each group of a port is centered under its diamond. A group that would overlap the group
