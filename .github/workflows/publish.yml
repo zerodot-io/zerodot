@@ -55,7 +55,7 @@ jobs:
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release create "$GITHUB_REF_NAME" --generate-notes --verify-tag --title "$GITHUB_REF_NAME"
+        run: gh release create "$GITHUB_REF_NAME" --generate-notes --verify-tag --title "zerodot@${GITHUB_REF_NAME#v}"
       - name: Announce on Discord
         if: env.DISCORD_WEBHOOK_URL != ''
         env:
@@ -65,7 +65,7 @@ jobs:
         # ends. Headings become bold lines. A single heading goes away.
         run: |
           gh release view "$GITHUB_REF_NAME" --json body,url,publishedAt \
-            | jq --arg title "zerodot $GITHUB_REF_NAME" '
+            | jq --arg title "zerodot@${GITHUB_REF_NAME#v}" '
               (.body
                 | gsub("<!--[\\s\\S]*?-->"; "") | gsub("\r"; "") | split("\n")
                 | map(select(test("^#+\\s+what.s changed\\s*$"; "i") | not))
