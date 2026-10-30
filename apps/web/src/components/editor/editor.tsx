@@ -48,7 +48,6 @@ import {
   Download01Icon,
   FlashIcon,
   FullScreenIcon,
-  Loading03Icon,
   MinusSignIcon,
   MoreVerticalIcon,
   PlayIcon,
@@ -77,6 +76,7 @@ import {
 import type { Json } from "../../lib/json";
 import { arrangeNodes } from "../../lib/layout";
 import {
+  cancelTestRunFn,
   exportWorkflowFn,
   getWorkflowFn,
   linkTestRunFn,
@@ -688,6 +688,17 @@ export function Editor({
         break;
       case "run.finished":
         setRunStatus(event.status);
+        // A stopped run leaves nodes that did not end. They do not spin any more.
+        if (event.status === "cancelled") {
+          setStatuses((s) =>
+            Object.fromEntries(
+              Object.entries(s).map(([id, status]) => [
+                id,
+                status === "running" || status === "waiting" ? "idle" : status,
+              ]),
+            ),
+          );
+        }
         source.current?.close();
         break;
     }
@@ -754,6 +765,19 @@ export function Editor({
     );
     if (listenable) return void listenForTestEvent(listenable.id, true);
     return startRun();
+  }
+
+  const runActive = runStatus === "queued" || runStatus === "running" || runStatus === "waiting";
+
+  /** The Stop button. The run.finished event updates the canvas. */
+  async function stopRun() {
+    if (!runId) return;
+    try {
+      const { status } = await cancelTestRunFn({ data: { projectSlug, runId } });
+      setRunStatus(status);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not stop the run");
+    }
   }
 
   /** Last known output of each node. Pinned data fills in for a node that has not run. */
@@ -1680,21 +1704,28 @@ export function Editor({
                             inert={!!listeningId}
                           >
                             <div className="flex items-center gap-2 overflow-hidden p-1 -m-1">
-                              <Button
-                                size="icon-lg"
-                                className="shrink-0 rounded-full shadow-md"
-                                disabled={runStatus === "queued" || runStatus === "running"}
-                                aria-label="Execute workflow"
-                                title="Execute workflow"
-                                onClick={testRun}
-                              >
-                                {runStatus === "queued" || runStatus === "running" ? (
-                                  <HugeiconsIcon icon={Loading03Icon} className="animate-spin" />
-                                ) : (
+                              {runActive ? (
+                                <Button
+                                  size="icon-lg"
+                                  className="shrink-0 rounded-full shadow-md"
+                                  aria-label="Stop workflow"
+                                  title="Stop workflow"
+                                  onClick={stopRun}
+                                >
+                                  <HugeiconsIcon icon={StopIcon} className="fill-current" />
+                                </Button>
+                              ) : (
+                                <Button
+                                  size="icon-lg"
+                                  className="shrink-0 rounded-full shadow-md"
+                                  aria-label="Execute workflow"
+                                  title="Execute workflow"
+                                  onClick={testRun}
+                                >
                                   <HugeiconsIcon icon={PlayIcon} />
-                                )}
-                              </Button>
-                              {(runId || Object.keys(ios).length > 0) && (
+                                </Button>
+                              )}
+                              {!runActive && (runId || Object.keys(ios).length > 0) && (
                                 <Button
                                   size="icon-lg"
                                   variant="outline"

@@ -50,6 +50,8 @@ export type ApiServices = {
   syncSchedules(organizationId: string, workflowId: string): Promise<void>;
   /** Tell open editors that the draft of a workflow changed. */
   draftChanged(organizationId: string, workflowId: string): Promise<void>;
+  /** Tell open editors and the worker that holds the run that it is cancelled. */
+  runCancelled(organizationId: string, runId: string, error: { message: string }): Promise<void>;
   /** A new Valkey connection for one SSE reader. The caller closes it. */
   reader(): Redis;
 };

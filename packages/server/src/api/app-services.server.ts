@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { resolveMembership } from "@zerodot/db";
-import { enqueueRun, publishWorkflowEvent } from "@zerodot/queue";
+import {
+  enqueueRun,
+  publishRunCancel,
+  publishRunEvent,
+  publishWorkflowEvent,
+} from "@zerodot/queue";
 import { syncWorkflowSchedules } from "../schedules.server";
 import { getServices } from "../services.server";
 import { isAdmin } from "../session.server";
@@ -52,6 +57,15 @@ async function build(): Promise<ApiServices> {
     syncSchedules: syncWorkflowSchedules,
     draftChanged: (organizationId, workflowId) =>
       publishWorkflowEvent(app.redis, organizationId, { type: "workflow.draft", workflowId }),
+    async runCancelled(organizationId, runId, error) {
+      await publishRunEvent(app.redis, organizationId, {
+        type: "run.finished",
+        runId,
+        status: "cancelled",
+        error,
+      });
+      await publishRunCancel(app.redis, runId);
+    },
     reader: app.readerConnection,
   };
 }
