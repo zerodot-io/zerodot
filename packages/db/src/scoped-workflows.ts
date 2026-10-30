@@ -178,11 +178,27 @@ export function workflows(db: Db, organizationId: string) {
       return row ?? null;
     },
 
-    async saveDraft(id: string, draftGraph: unknown): Promise<WorkflowRow | null> {
+    /**
+     * With `ifUpdatedAt`, the draft is saved only when the row did not change since then. Null when
+     * the workflow does not exist, or it changed.
+     */
+    async saveDraft(
+      id: string,
+      draftGraph: unknown,
+      options: { ifUpdatedAt?: Date } = {},
+    ): Promise<WorkflowRow | null> {
       const [row] = await db
         .update(workflow)
         .set({ draftGraph, updatedAt: new Date() })
-        .where(owned(id))
+        .where(
+          options.ifUpdatedAt
+            ? and(
+                owned(id),
+                // A JS date has milliseconds. Postgres can keep microseconds (defaultNow).
+                sql`date_trunc('milliseconds', ${workflow.updatedAt}) = ${options.ifUpdatedAt.toISOString()}`,
+              )
+            : owned(id),
+        )
         .returning();
       return row ?? null;
     },
