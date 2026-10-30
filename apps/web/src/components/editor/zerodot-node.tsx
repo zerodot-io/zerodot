@@ -175,13 +175,10 @@ export function ZerodotNode({ id, data, selected }: NodeProps<ZerodotFlowNode>) 
     incoming.filter((c) => c.targetHandle === `${SUPPLY_PORT_PREFIX}${port.name}`).length;
   const supplyLeftFor = (index: number) => `${supplyPortX(index, supplyPorts.length) * 100}%`;
   // The action that the config selects reads better than a raw subtitle like "message: send".
-  // It is left out when the node name says it already.
-  const action = entry ? actionOf(entry, graphNode.config)?.label : undefined;
-  const subtitle = action
-    ? graphNode.name.startsWith(action)
-      ? undefined
-      : action
-    : definition?.subtitle?.(graphNode.config);
+  // It always shows, so it stays right when a person renames the node.
+  const subtitle =
+    (entry ? actionOf(entry, graphNode.config)?.label : undefined) ??
+    definition?.subtitle?.(graphNode.config);
   // A port with an edge swaps its plus-button handle for a handle on the node edge.
   // React Flow must measure the new handle, or the edge starts at the old spot.
   const updateNodeInternals = useUpdateNodeInternals();
