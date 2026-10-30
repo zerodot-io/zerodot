@@ -648,102 +648,98 @@ export function NodeDialog({
               </DialogTitle>
             </DialogHeader>
             <div ref={panesRef} className="flex min-h-0 min-w-0 flex-1">
-              <>
-                <Pane
-                  title={isTrigger ? "Trigger" : "Input"}
-                  className="shrink-0 bg-muted/40"
-                  style={{ width: inputWidth }}
-                >
-                  {isTrigger ? (
-                    listening ? (
-                      <EmptyState
-                        icon={
-                          <HugeiconsIcon
-                            icon={FlashIcon}
-                            className="size-5 animate-pulse text-primary"
-                          />
-                        }
-                        title="Listening for test event"
-                      >
-                        {serviceHint && <p>{serviceHint}</p>}
-                        {testUrl && !serviceHint && (
-                          <>
-                            <p>Send a request to:</p>
-                            <code className="max-w-full break-all rounded-md bg-card p-2 text-xs">
-                              {testUrl}
-                            </code>
-                          </>
-                        )}
-                        <Button variant="outline" onClick={onStopListen}>
-                          Stop listening
-                        </Button>
-                      </EmptyState>
-                    ) : (
-                      <EmptyState
-                        icon={<HugeiconsIcon icon={FlashIcon} className="size-5" />}
-                        title={`Pull in events from ${entry?.label}`}
-                      >
-                        <Button disabled={busy || !testUrl} onClick={onListen}>
-                          Listen for test event
-                        </Button>
-                        <p className="max-w-xs">
-                          {serviceHint
-                            ? `${serviceHint}. The workflow does not need a publish.`
-                            : "Send one request to the test URL. The workflow does not need a publish."}
-                        </p>
-                      </EmptyState>
-                    )
-                  ) : inputPorts && inputPorts.length > 1 ? (
-                    <div className="flex flex-col gap-4 p-3" data-testid="join-inputs">
-                      {inputPorts.map(({ port, connected }, index) => {
-                        const value =
-                          io?.input !== null && typeof io?.input === "object"
-                            ? (io.input as Record<string, unknown>)[port]
-                            : undefined;
-                        return (
-                          <section key={port} className="flex flex-col gap-1.5">
-                            <h3 className="font-medium">Input {index + 1}</h3>
-                            {!connected ? (
-                              <p className="text-muted-foreground">Not connected</p>
-                            ) : value === undefined ? (
-                              <p className="text-muted-foreground">
-                                {io?.input === undefined
-                                  ? "Run a test to see the input"
-                                  : "No data"}
-                              </p>
-                            ) : (
-                              <OutputView value={value} />
-                            )}
-                          </section>
-                        );
-                      })}
-                    </div>
-                  ) : !hasInput && !isSupply ? (
-                    <EmptyState icon={<NoInputArt />} title="No input connected" />
-                  ) : io?.input === undefined && isSupply ? (
+              <Pane
+                title={isTrigger ? "Trigger" : "Input"}
+                className="shrink-0 bg-muted/40"
+                style={{ width: inputWidth }}
+              >
+                {isTrigger ? (
+                  listening ? (
                     <EmptyState
-                      icon={<HugeiconsIcon icon={Logout03Icon} className="size-5" />}
-                      title="No calls yet"
+                      icon={
+                        <HugeiconsIcon
+                          icon={FlashIcon}
+                          className="size-5 animate-pulse text-primary"
+                        />
+                      }
+                      title="Listening for test event"
                     >
-                      <p>Run the workflow. The last call from the node it supplies shows here.</p>
-                    </EmptyState>
-                  ) : io?.input === undefined ? (
-                    <EmptyState
-                      icon={<HugeiconsIcon icon={Logout03Icon} className="size-5" />}
-                      title="No input data"
-                    >
-                      <p>Run a test to see the input.</p>
+                      {serviceHint && <p>{serviceHint}</p>}
+                      {testUrl && !serviceHint && (
+                        <>
+                          <p>Send a request to:</p>
+                          <code className="max-w-full break-all rounded-md bg-card p-2 text-xs">
+                            {testUrl}
+                          </code>
+                        </>
+                      )}
+                      <Button variant="outline" onClick={onStopListen}>
+                        Stop listening
+                      </Button>
                     </EmptyState>
                   ) : (
-                    <OutputView value={io.input} dragRoot="$input" />
-                  )}
-                </Pane>
+                    <EmptyState
+                      icon={<HugeiconsIcon icon={FlashIcon} className="size-5" />}
+                      title={`Pull in events from ${entry?.label}`}
+                    >
+                      <Button disabled={busy || !testUrl} onClick={onListen}>
+                        Listen for test event
+                      </Button>
+                      <p className="max-w-xs">
+                        {serviceHint
+                          ? `${serviceHint}. The workflow does not need a publish.`
+                          : "Send one request to the test URL. The workflow does not need a publish."}
+                      </p>
+                    </EmptyState>
+                  )
+                ) : inputPorts && inputPorts.length > 1 ? (
+                  <div className="flex flex-col gap-4 p-3" data-testid="join-inputs">
+                    {inputPorts.map(({ port, connected }, index) => {
+                      const value =
+                        io?.input !== null && typeof io?.input === "object"
+                          ? (io.input as Record<string, unknown>)[port]
+                          : undefined;
+                      return (
+                        <section key={port} className="flex flex-col gap-1.5">
+                          <h3 className="font-medium">Input {index + 1}</h3>
+                          {!connected ? (
+                            <p className="text-muted-foreground">Not connected</p>
+                          ) : value === undefined ? (
+                            <p className="text-muted-foreground">
+                              {io?.input === undefined ? "Run a test to see the input" : "No data"}
+                            </p>
+                          ) : (
+                            <OutputView value={value} />
+                          )}
+                        </section>
+                      );
+                    })}
+                  </div>
+                ) : !hasInput && !isSupply ? (
+                  <EmptyState icon={<NoInputArt />} title="No input connected" />
+                ) : io?.input === undefined && isSupply ? (
+                  <EmptyState
+                    icon={<HugeiconsIcon icon={Logout03Icon} className="size-5" />}
+                    title="No calls yet"
+                  >
+                    <p>Run the workflow. The last call from the node it supplies shows here.</p>
+                  </EmptyState>
+                ) : io?.input === undefined ? (
+                  <EmptyState
+                    icon={<HugeiconsIcon icon={Logout03Icon} className="size-5" />}
+                    title="No input data"
+                  >
+                    <p>Run a test to see the input.</p>
+                  </EmptyState>
+                ) : (
+                  <OutputView value={io.input} dragRoot="$input" />
+                )}
+              </Pane>
 
-                <ResizeHandle
-                  label="Resize input pane"
-                  onDrag={(d) => resize(setInputWidth, paramsWidth, d)}
-                />
-              </>
+              <ResizeHandle
+                label="Resize input pane"
+                onDrag={(d) => resize(setInputWidth, paramsWidth, d)}
+              />
 
               <section className="flex min-h-0 shrink-0 flex-col" style={{ width: paramsWidth }}>
                 <div className="flex items-center gap-4 border-b px-4" role="tablist">
@@ -844,80 +840,78 @@ export function NodeDialog({
                 </div>
               </section>
 
-              <>
-                <ResizeHandle
-                  label="Resize parameters pane"
-                  onDrag={(d) => resize(setParamsWidth, inputWidth, d)}
-                />
+              <ResizeHandle
+                label="Resize parameters pane"
+                onDrag={(d) => resize(setParamsWidth, inputWidth, d)}
+              />
 
-                <Pane title="Output" className="min-w-0 flex-1 bg-muted/40">
-                  {mocking ? (
-                    <MockEditor
-                      onCancel={() => setMocking(false)}
-                      onSave={(data) => {
-                        onChange((n) => ({ ...n, pinned: { port: "out", data } }));
-                        setMocking(false);
-                      }}
-                    />
-                  ) : output === undefined && isSupply ? (
-                    <EmptyState
-                      icon={<HugeiconsIcon icon={Login03Icon} className="size-5" />}
-                      title="No calls yet"
-                    />
-                  ) : output === undefined ? (
-                    <EmptyState
-                      icon={<HugeiconsIcon icon={Login03Icon} className="size-5" />}
-                      title="No output data"
-                    >
-                      <p>
-                        Run a test, or{" "}
-                        <button
-                          type="button"
-                          className="font-medium text-foreground underline underline-offset-2"
-                          onClick={() => setMocking(true)}
-                        >
-                          set mock data
-                        </button>
-                        .
-                      </p>
-                    </EmptyState>
-                  ) : (
-                    <>
-                      {pinned && (
-                        <span className="text-muted-foreground">
-                          Pinned. Test runs skip this node.
-                        </span>
-                      )}
-                      <OutputView
-                        value={output}
-                        actions={
-                          // A supply node is no step, so its data cannot be pinned.
-                          isSupply ? undefined : (
-                            <Button
-                              variant={pinned ? "default" : "outline"}
-                              size="xs"
-                              onClick={() =>
-                                onChange((n) => ({
-                                  ...n,
-                                  pinned: pinned ? null : { port: io?.port ?? "out", data: output },
-                                }))
-                              }
-                            >
-                              {pinned ? "Unpin" : "Pin"}
-                            </Button>
-                          )
-                        }
-                      />
-                    </>
-                  )}
-                  {io?.error && (
-                    <p role="alert" className="text-destructive">
-                      {io.error.message}
-                      {io.error.path ? ` (at ${io.error.path})` : ""}
+              <Pane title="Output" className="min-w-0 flex-1 bg-muted/40">
+                {mocking ? (
+                  <MockEditor
+                    onCancel={() => setMocking(false)}
+                    onSave={(data) => {
+                      onChange((n) => ({ ...n, pinned: { port: "out", data } }));
+                      setMocking(false);
+                    }}
+                  />
+                ) : output === undefined && isSupply ? (
+                  <EmptyState
+                    icon={<HugeiconsIcon icon={Login03Icon} className="size-5" />}
+                    title="No calls yet"
+                  />
+                ) : output === undefined ? (
+                  <EmptyState
+                    icon={<HugeiconsIcon icon={Login03Icon} className="size-5" />}
+                    title="No output data"
+                  >
+                    <p>
+                      Run a test, or{" "}
+                      <button
+                        type="button"
+                        className="font-medium text-foreground underline underline-offset-2"
+                        onClick={() => setMocking(true)}
+                      >
+                        set mock data
+                      </button>
+                      .
                     </p>
-                  )}
-                </Pane>
-              </>
+                  </EmptyState>
+                ) : (
+                  <>
+                    {pinned && (
+                      <span className="text-muted-foreground">
+                        Pinned. Test runs skip this node.
+                      </span>
+                    )}
+                    <OutputView
+                      value={output}
+                      actions={
+                        // A supply node is no step, so its data cannot be pinned.
+                        isSupply ? undefined : (
+                          <Button
+                            variant={pinned ? "default" : "outline"}
+                            size="xs"
+                            onClick={() =>
+                              onChange((n) => ({
+                                ...n,
+                                pinned: pinned ? null : { port: io?.port ?? "out", data: output },
+                              }))
+                            }
+                          >
+                            {pinned ? "Unpin" : "Pin"}
+                          </Button>
+                        )
+                      }
+                    />
+                  </>
+                )}
+                {io?.error && (
+                  <p role="alert" className="text-destructive">
+                    {io.error.message}
+                    {io.error.path ? ` (at ${io.error.path})` : ""}
+                  </p>
+                )}
+              </Pane>
             </div>
           </>
         )}
