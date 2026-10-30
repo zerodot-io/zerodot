@@ -84,11 +84,31 @@ jobs:
         if: env.DISCORD_WEBHOOK_URL != ''
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # Cleans the notes the same way as the update popover in the app: no HTML comments, no
+        # "What's Changed" or "Full Changelog" lines, no release chores, no "by @user in <url>"
+        # ends. Headings become bold lines. A single heading goes away.
         run: |
-          body=$(gh release view "$GITHUB_REF_NAME" --json body --jq .body | head -c 3500)
-          jq -n \
-            --arg title "zerodot $GITHUB_REF_NAME" \
-            --arg url "https://github.com/$GITHUB_REPOSITORY/releases/tag/$GITHUB_REF_NAME" \
-            --arg body "$body" \
-            '{embeds: [{title: $title, url: $url, description: $body, color: 16742656}]}' \
+          gh release view "$GITHUB_REF_NAME" --json body,url,publishedAt \
+            | jq --arg title "zerodot $GITHUB_REF_NAME" '
+              (.body
+                | gsub("<!--[\\s\\S]*?-->"; "") | gsub("\r"; "") | split("\n")
+                | map(select(test("^#+\\s+what.s changed\\s*$"; "i") | not))
+                | map(select(test("^\\**full changelog"; "i") | not))
+                | map(select(test("^\\s*[-*+]\\s+chore(\\([^)]*\\))?:\\s*release\\b"; "i") | not))
+                | map(if test("^\\s*[-*+]\\s+")
+                    then sub("\\s+by\\s+@[\\w-]+(\\s+in\\s+\\S+)?\\s*$"; "") | sub("^\\s*[-*+]\\s+"; "- ")
+                    else . end)
+              ) as $lines
+              | [$lines[] | select(test("^#+\\s+"))] as $heads
+              | ($lines
+                | if ($heads | length) == 1 then map(select(. != $heads[0])) else . end
+                | map(sub("^#+\\s+(?<h>.+)$"; "\n**\(.h)**"))
+                | join("\n") | gsub("\\A\\s+|\\s+\\z"; "") | .[0:4000]) as $notes
+              | {embeds: [{
+                  title: $title,
+                  url: .url,
+                  description: (if $notes == "" then null else $notes end),
+                  color: 16742656,
+                  timestamp: .publishedAt
+                }]}' \
             | curl -fsS -H "Content-Type: application/json" -d @- "$DISCORD_WEBHOOK_URL"
