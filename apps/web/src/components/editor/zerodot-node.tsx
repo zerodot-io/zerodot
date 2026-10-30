@@ -21,7 +21,13 @@ import {
   useReactFlow,
   useUpdateNodeInternals,
 } from "@xyflow/react";
-import { inputPortsOf, outputPortsOf } from "@zerodot/engine";
+import {
+  inputPortsOf,
+  outputPortsOf,
+  SUPPLY_OUT_PORT,
+  SUPPLY_PORT_PREFIX,
+  type SupplyPort,
+} from "@zerodot/engine";
 import { registry } from "@zerodot/nodes";
 import {
   cn,
@@ -50,6 +56,8 @@ export const EdgeCountContext = createContext<Record<string, number>>({});
 export const EditorActionsContext = createContext<{
   /** Open the add sheet. The new node goes after this output port. */
   addAfter: (nodeId: string, port: string) => void;
+  /** Open the add sheet with the supply nodes of this port's kind. */
+  addSupply?: (nodeId: string, port: SupplyPort) => void;
   /** Open the add sheet. The new node goes in the middle of this edge. */
   insertOnEdge?: (edgeId: string) => void;
   /** Run this node alone, with the last known input. */
@@ -93,7 +101,7 @@ function ToolbarButton({
 
 export function ZerodotNode({ id, data, selected }: NodeProps<ZerodotFlowNode>) {
   const status = useContext(NodeStatusContext)[id] ?? "idle";
-  const { addAfter, executeNode, openNode, readOnly } = useContext(EditorActionsContext);
+  const { addAfter, addSupply, executeNode, openNode, readOnly } = useContext(EditorActionsContext);
   const { deleteElements, getNodes, setNodes } = useReactFlow<ZerodotFlowNode>();
   const duplicate = () => {
     const all = getNodes();
@@ -139,6 +147,7 @@ export function ZerodotNode({ id, data, selected }: NodeProps<ZerodotFlowNode>) 
       ),
     );
   const connections = useNodeConnections({ handleType: "source" });
+  const incoming = useNodeConnections({ handleType: "target" });
   // The plus button turns into an arrow while the user drags a connection from it.
   const connection = useConnection();
   const draggingFrom =
@@ -151,14 +160,23 @@ export function ZerodotNode({ id, data, selected }: NodeProps<ZerodotFlowNode>) 
   const outPorts = portSource ? outputPortsOf(portSource, graphNode.config) : ["out"];
   const inPorts = portSource ? inputPortsOf(portSource, graphNode.config) : (entry?.ports.in ?? []);
   const isTrigger = entry?.category === "trigger";
+  const isSupply = entry?.supplies !== undefined;
+  const supplyPorts = entry?.supplyPorts ?? [];
+  const suppliedCount = (port: SupplyPort) =>
+    incoming.filter((c) => c.targetHandle === `${SUPPLY_PORT_PREFIX}${port.name}`).length;
+  const supplyLeftFor = (index: number) => `${((index + 1) / (supplyPorts.length + 1)) * 100}%`;
   const subtitle = definition?.subtitle?.(graphNode.config);
   // A port with an edge swaps its plus-button handle for a handle on the node edge.
   // React Flow must measure the new handle, or the edge starts at the old spot.
   const updateNodeInternals = useUpdateNodeInternals();
   const connectedPorts = outPorts.filter(isConnected).join(",");
   const inPortsKey = inPorts.join(",");
+  const supplyKey = supplyPorts.map((p) => p.name).join(",");
   // biome-ignore lint/correctness/useExhaustiveDependencies: the ports strings are the trigger.
-  useEffect(() => updateNodeInternals(id), [id, connectedPorts, inPortsKey, updateNodeInternals]);
+  useEffect(
+    () => updateNodeInternals(id),
+    [id, connectedPorts, inPortsKey, supplyKey, updateNodeInternals],
+  );
   const inTopFor = (index: number) => `${((index + 1) / (inPorts.length + 1)) * 100}%`;
   const topFor = (index: number) => `${((index + 1) / (outPorts.length + 1)) * 100}%`;
 
@@ -235,14 +253,39 @@ export function ZerodotNode({ id, data, selected }: NodeProps<ZerodotFlowNode>) 
         className={cn(
           "relative grid min-h-16 w-16 place-items-center rounded-xl border-2 bg-card transition-[border-color,opacity] duration-150 ease-out",
           isTrigger && "rounded-l-[2rem]",
+          isSupply && "rounded-full",
           BORDER[status],
           // Pinned data survives a reload, a run status does not. Keep the pinned look until a run sets one.
           graphNode.pinned && status === "idle" && "border-emerald-500",
           selected && "ring-2 ring-foreground/20",
           graphNode.disabled && "border-dashed opacity-50",
         )}
-        style={{ minHeight: `${Math.max(4, Math.max(outPorts.length, inPorts.length) * 1.5)}rem` }}
+        style={{
+          minHeight: `${Math.max(4, Math.max(outPorts.length, inPorts.length) * 1.5)}rem`,
+          // Each supply port needs room for its label under the node.
+          ...(supplyPorts.length > 0 ? { width: `${Math.max(8, supplyPorts.length * 4)}rem` } : {}),
+        }}
       >
+        {isSupply && (
+          <Handle
+            type="source"
+            position={Position.Top}
+            id={SUPPLY_OUT_PORT}
+            isConnectable={!readOnly}
+            className="size-2.5! rotate-45 rounded-none! border-2! border-card! bg-muted-foreground/70!"
+          />
+        )}
+        {supplyPorts.map((port, index) => (
+          <Handle
+            key={port.name}
+            type="target"
+            position={Position.Bottom}
+            id={`${SUPPLY_PORT_PREFIX}${port.name}`}
+            isConnectable={!readOnly}
+            style={{ left: supplyLeftFor(index) }}
+            className="size-2.5! rotate-45 rounded-none! border-2! border-card! bg-muted-foreground/70!"
+          />
+        ))}
         {graphNode.pinned && (
           <HugeiconsIcon
             icon={PinIcon}
@@ -267,12 +310,30 @@ export function ZerodotNode({ id, data, selected }: NodeProps<ZerodotFlowNode>) 
             className="size-3! rounded-full! border-2! border-card! bg-muted-foreground/70!"
           />
         ))}
-        <NodeIcon
-          name={entry?.icon ?? "CircleIcon"}
-          src={entry?.iconUrl}
-          variant="tile"
-          category={entry?.category}
-        />
+        {supplyPorts.length > 0 ? (
+          // The supply ports and their nodes are under the node, so the name goes inside it.
+          <div className="flex min-w-0 items-center gap-2 px-3">
+            <NodeIcon
+              name={entry?.icon ?? "CircleIcon"}
+              src={entry?.iconUrl}
+              variant="tile"
+              category={entry?.category}
+            />
+            <div className="min-w-0 text-xs">
+              <div className="truncate font-semibold leading-tight">{graphNode.name}</div>
+              {subtitle && (
+                <div className="truncate text-[9px] text-muted-foreground/70">{subtitle}</div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <NodeIcon
+            name={entry?.icon ?? "CircleIcon"}
+            src={entry?.iconUrl}
+            variant="tile"
+            category={entry?.category}
+          />
+        )}
         {outPorts.map((port, index) =>
           // A port with no edge has its handle in the plus button.
           isConnected(port) ? (
@@ -368,9 +429,46 @@ export function ZerodotNode({ id, data, selected }: NodeProps<ZerodotFlowNode>) 
         );
       })}
 
-      <div className="pointer-events-none absolute top-full left-1/2 mt-1.5 w-40 -translate-x-1/2 text-center text-xs">
-        <div className="font-semibold leading-tight">{graphNode.name}</div>
-        {subtitle && (
+      {supplyPorts.map((port, index) => {
+        const count = suppliedCount(port);
+        const canAdd = !readOnly && (port.multiple === true || count === 0);
+        return (
+          <div
+            key={port.name}
+            className="absolute top-full flex -translate-x-1/2 flex-col items-center pt-2"
+            style={{ left: supplyLeftFor(index) }}
+          >
+            {/* A long label wraps, so the ports can sit close. */}
+            <span className="pointer-events-none w-14 text-center text-2xs text-muted-foreground leading-tight">
+              {port.label}
+              {port.required && "*"}
+            </span>
+            {canAdd && (
+              <button
+                type="button"
+                aria-label={`Add ${port.label} to ${graphNode.name}`}
+                title={`Add ${port.label}`}
+                onClick={() => addSupply?.(id, port)}
+                className="nodrag nopan mt-1 grid size-5 place-items-center rounded text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground"
+              >
+                <HugeiconsIcon icon={PlusSignIcon} className="size-3" strokeWidth={2.5} />
+              </button>
+            )}
+          </div>
+        );
+      })}
+
+      <div
+        className={cn(
+          "pointer-events-none absolute top-full left-1/2 mt-1.5 w-40 -translate-x-1/2 text-center text-xs",
+          // The supply port labels and buttons sit under the node. The name goes below them.
+          supplyPorts.length > 0 && "mt-14",
+        )}
+      >
+        {supplyPorts.length === 0 && (
+          <div className="font-semibold leading-tight">{graphNode.name}</div>
+        )}
+        {supplyPorts.length === 0 && subtitle && (
           <div className="truncate text-[9px] font-normal text-muted-foreground/70">{subtitle}</div>
         )}
         {graphNode.notesInFlow && graphNode.notes && (

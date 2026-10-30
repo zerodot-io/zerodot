@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import type { Edge, Node } from "@xyflow/react";
-import { type Graph, type GraphNode, graphSchema } from "@zerodot/engine";
+import { type Graph, type GraphNode, graphSchema, isSupplyEdge } from "@zerodot/engine";
 import {
   type CredentialTypeCatalogEntry,
   catalog,
@@ -23,6 +23,10 @@ export function addServerCatalog(extra: { nodes: unknown; credentialTypes: unkno
   mergeCredentialTypeCatalog(extra.credentialTypes as CredentialTypeCatalogEntry[]);
   for (const entry of nodes) catalogByType.set(entry.type, entry);
 }
+
+/** True for an edge from a supply node into a supply port. It carries no data. */
+export const isSupplyFlowEdge = (edge: Pick<Edge, "sourceHandle" | "targetHandle">) =>
+  isSupplyEdge({ fromPort: edge.sourceHandle ?? "out", toPort: edge.targetHandle ?? "in" });
 
 export function toFlow(graph: Graph): { nodes: ZerodotFlowNode[]; edges: Edge[] } {
   return {

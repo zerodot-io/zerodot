@@ -57,6 +57,44 @@ export type NodeRunContext<Config> = {
    * `stateful: true`. It is not kept when the run stops, because the engine builds it again.
    */
   state?: unknown;
+  /**
+   * Values of the supply nodes connected to the `supplyPorts` of this node, by port name. A port
+   * with `multiple: true` gives a list (it can be empty). A single port with no node is not set.
+   */
+  supplies?: Record<string, unknown>;
+};
+
+/** A port at the bottom of a node. Supply nodes of the same `kind` connect to it. */
+export type SupplyPort = {
+  name: string;
+  /** The kind of value, for example "ai.model". It matches `supplies` of a supply node. */
+  kind: string;
+  label: string;
+  /** The node cannot run without a supply node here. */
+  required?: boolean;
+  /** More than one supply node can connect. The node then gets a list. */
+  multiple?: boolean;
+};
+
+/**
+ * What a supply node gets when its parent runs. Expressions in the config are resolved with the
+ * scope of the parent, so `$input` is the input of the parent.
+ */
+export type SupplyContext<Config> = {
+  config: Config;
+  /** The credential of the supply node. */
+  credential: ResolvedCredential | null;
+  /** The signal of the run. */
+  signal: AbortSignal;
+  /** The scope of the parent. */
+  scope: Record<string, unknown>;
+  /** Adds logs to the parent node, with the name of the supply node in front. */
+  log?: (logs: CodeLog[]) => void;
+  sandbox: SandboxClient | null;
+  tables: TableStore | null;
+  runWorkflow?: SubWorkflowRunner | null;
+  /** The supply node. */
+  node: { id: string; name: string };
 };
 
 export const FORM_FIELD_TYPES = [
@@ -297,7 +335,20 @@ export type NodeDefinition<Schema extends z.ZodType = z.ZodType> = {
   listen?(ctx: ListenContext<z.output<Schema>>): Promise<ListenHandle>;
   /** Output ports that depend on the config (a switch has one port for each case). */
   outPorts?(config: Record<string, unknown>): string[];
+  /**
+   * Ports at the bottom of the node. The values of the supply nodes connected to them are in
+   * `ctx.supplies` when the node runs.
+   */
+  supplyPorts?: SupplyPort[];
+  /**
+   * The kind of value this node gives, for example "ai.model". A supply node has no in or out
+   * ports and is never a step: it builds a value with `supply` each time its parent runs.
+   */
+  supplies?: string;
   // Method syntax keeps parameter bivariance, so a typed node fits the registry type.
+  /** Builds the value of a supply node. */
+  supply?(ctx: SupplyContext<z.output<Schema>>): unknown;
+  /** A supply node made with `defineSupplyNode` gets a `run` that throws. It is never called. */
   run(ctx: NodeRunContext<z.output<Schema>>): Promise<NodeResult> | NodeResult;
 };
 
@@ -329,6 +380,25 @@ export function defineNode<Schema extends z.ZodType>(
   definition: NodeDefinition<Schema>,
 ): NodeDefinition<Schema> {
   return definition;
+}
+
+/**
+ * Defines a supply node: it has no ports and no step. It gives a value of the kind `supplies`
+ * to the supply ports of other nodes (see `supply`).
+ */
+export function defineSupplyNode<Schema extends z.ZodType>(
+  definition: Omit<NodeDefinition<Schema>, "run" | "ports" | "supplies" | "supply"> & {
+    supplies: string;
+    supply(ctx: SupplyContext<z.output<Schema>>): unknown;
+  },
+): NodeDefinition<Schema> {
+  return {
+    ...definition,
+    ports: { in: [], out: [] },
+    run: () => {
+      throw new Error("A supply node does not run as a step");
+    },
+  };
 }
 
 export type NodeRegistry = ReadonlyMap<string, NodeDefinition>;

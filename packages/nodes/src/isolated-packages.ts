@@ -60,6 +60,8 @@ type NodeManifest = {
   rawConfigKeys?: string[];
   webhookTest?: NodeDefinition["webhookTest"];
   hasRun: boolean;
+  /** The node gives a supply or has supply ports. */
+  hasSupply?: boolean;
   hasPoll: boolean;
   hasListen: boolean;
   webhook: { activate: boolean; deactivate: boolean } | null;
@@ -350,6 +352,9 @@ function nodeFrom(host: PackageHost, manifest: NodeManifest): NodeDefinition {
   };
   if (manifest.problem) definition.isolationProblem = manifest.problem;
   if (!manifest.hasRun) definition.isolationProblem = "no run()";
+  if (manifest.hasSupply) {
+    definition.isolationProblem = "supply nodes and ports need an official @zerodot package";
+  }
   if (manifest.hasPoll) {
     definition.poll = async (ctx: PollContext) =>
       (await host.call(type, "poll", plainContext(ctx), { signal: ctx.signal })) as Awaited<

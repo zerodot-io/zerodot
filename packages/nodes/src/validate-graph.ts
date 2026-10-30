@@ -3,8 +3,11 @@ import {
   fanInProblems,
   type Graph,
   inputPortsOf,
+  isSupplyEdge,
   type NodeRegistry,
   outputPortsOf,
+  SUPPLY_OUT_PORT,
+  supplyPortOf,
 } from "@zerodot/engine";
 
 const EXPRESSION = "{{";
@@ -42,6 +45,7 @@ export function checkGraphNodes(graph: Graph, registry: NodeRegistry): string[] 
     }
   }
   for (const edge of graph.edges) {
+    if (isSupplyEdge(edge)) continue;
     const from = byId.get(edge.from);
     const to = byId.get(edge.to);
     const fromDefinition = from ? registry.get(from.type) : undefined;
@@ -65,5 +69,62 @@ export function checkGraphNodes(graph: Graph, registry: NodeRegistry): string[] 
     }
   }
   problems.push(...fanInProblems(graph, (node) => registry.get(node.type)?.join === true));
+  problems.push(...supplyProblems(graph, registry));
+  return problems;
+}
+
+/**
+ * Supply rules: a supply edge goes from a supply node into a supply port of the same kind, a
+ * single port takes one node, and a supply node has no data edges and no supply ports. A required
+ * port with no node is not checked here, so a draft can be saved. The run reports it.
+ */
+function supplyProblems(graph: Graph, registry: NodeRegistry): string[] {
+  const problems: string[] = [];
+  const byId = new Map(graph.nodes.map((n) => [n.id, n]));
+  const counts = new Map<string, number>();
+  for (const edge of graph.edges) {
+    const from = byId.get(edge.from);
+    const to = byId.get(edge.to);
+    const fromDefinition = from ? registry.get(from.type) : undefined;
+    const toDefinition = to ? registry.get(to.type) : undefined;
+    if (!isSupplyEdge(edge)) {
+      if (from && fromDefinition?.supplies !== undefined) {
+        problems.push(`"${from.name}" gives a supply. Connect it to a supply port only`);
+      }
+      if (to && toDefinition?.supplies !== undefined) {
+        problems.push(`"${to.name}" gives a supply. It cannot take data`);
+      }
+      continue;
+    }
+    if (!from || !to || !fromDefinition || !toDefinition) continue;
+    if (edge.fromPort !== SUPPLY_OUT_PORT || fromDefinition.supplies === undefined) {
+      problems.push(`Edge "${edge.id}": "${from.name}" gives no supply`);
+      continue;
+    }
+    const port = toDefinition.supplyPorts?.find((p) => p.name === supplyPortOf(edge));
+    if (!port) {
+      problems.push(`Edge "${edge.id}": "${to.name}" has no supply port "${supplyPortOf(edge)}"`);
+      continue;
+    }
+    if (port.kind !== fromDefinition.supplies) {
+      problems.push(
+        `Edge "${edge.id}": "${port.label}" of "${to.name}" takes "${port.kind}", not "${fromDefinition.supplies}"`,
+      );
+      continue;
+    }
+    if (from.disabled) continue;
+    const key = `${to.id}:${port.name}`;
+    const count = (counts.get(key) ?? 0) + 1;
+    counts.set(key, count);
+    if (count === 2 && !port.multiple) {
+      problems.push(`"${port.label}" of "${to.name}" takes one node`);
+    }
+  }
+  for (const node of graph.nodes) {
+    const definition = registry.get(node.type);
+    if (definition?.supplies !== undefined && definition.supplyPorts?.length) {
+      problems.push(`"${node.name}": a supply node cannot have supply ports`);
+    }
+  }
   return problems;
 }

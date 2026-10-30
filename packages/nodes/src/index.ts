@@ -1,5 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-import { createRegistry, type Graph, type NodeDefinition, type ShowRules } from "@zerodot/engine";
+import {
+  createRegistry,
+  type Graph,
+  type NodeDefinition,
+  type ShowRules,
+  type SupplyPort,
+} from "@zerodot/engine";
 import { z } from "zod";
 import codeJs from "./code-js";
 import coreExecuteCommand from "./core-execute-command";
@@ -116,6 +122,10 @@ export type NodeCatalogEntry = {
   icon: string;
   iconUrl?: string;
   ports: { in: string[]; out: string[] };
+  /** Ports at the bottom of the node for supply nodes. */
+  supplyPorts?: SupplyPort[];
+  /** The kind of value a supply node gives. Set only for a supply node. */
+  supplies?: string;
   defaultConfig: unknown;
   credentialTypes: string[];
   /** A trigger that registers its test address at a service. The hint replaces the address in the editor. */
@@ -137,6 +147,8 @@ const catalogEntry = (node: NodeDefinition): NodeCatalogEntry => ({
   iconUrl: node.iconUrl,
   webhookTest: node.webhookTest,
   ports: node.ports,
+  supplyPorts: node.supplyPorts,
+  supplies: node.supplies,
   defaultConfig: node.defaultConfig,
   credentialTypes: node.credentialTypes ?? [],
   credentialRules: node.credentialRules ?? {},
