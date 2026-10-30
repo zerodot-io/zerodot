@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
+
 import type {
   CredentialTypeDefinition,
   OAuth2Authentication,
@@ -6,6 +7,7 @@ import type {
   OAuth2Resolver,
 } from "@zerodot/engine";
 import { z } from "zod";
+import { kept } from "./kept";
 import { sentSchemas } from "./schema-copies";
 
 export type { CredentialTypeDefinition, OAuth2Authentication, OAuth2Config, OAuth2Resolver };
@@ -143,9 +145,10 @@ export const credentialTypeCatalog: CredentialTypeCatalogEntry[] =
 /** The entries that `registerCredentialType` added. The browser does not have them in its bundle. */
 export const addedCredentialTypeCatalog: CredentialTypeCatalogEntry[] = [];
 
-/** Adds a credential type at start-up, for example one that a node package brings. */
-export function registerCredentialType(definition: CredentialTypeDefinition): void {
-  if (credentialTypeByName.has(definition.type)) return;
+/** The credential types that packages added. They stay when this module runs again (see `kept`). */
+const addedCredentialTypes = kept("addedCredentialTypes", (): CredentialTypeDefinition[] => []);
+
+function addCredentialType(definition: CredentialTypeDefinition): void {
   credentialTypes.push(definition);
   credentialTypeByName.set(definition.type, definition);
   const entry = catalogEntry(definition);
@@ -153,12 +156,28 @@ export function registerCredentialType(definition: CredentialTypeDefinition): vo
   addedCredentialTypeCatalog.push(entry);
 }
 
+/** Adds a credential type at start-up, for example one that a node package brings. */
+export function registerCredentialType(definition: CredentialTypeDefinition): void {
+  if (credentialTypeByName.has(definition.type)) return;
+  addCredentialType(definition);
+  addedCredentialTypes.push(definition);
+}
+
+for (const definition of addedCredentialTypes) {
+  if (!credentialTypeByName.has(definition.type)) addCredentialType(definition);
+}
+
 /** Removes credential types that `registerCredentialType` added, for example on a package upgrade. */
 export function unregisterCredentialTypes(types: string[]): void {
   for (const type of types) {
     if (!addedCredentialTypeCatalog.some((entry) => entry.type === type)) continue;
     credentialTypeByName.delete(type);
-    for (const list of [credentialTypes, credentialTypeCatalog, addedCredentialTypeCatalog] as {
+    for (const list of [
+      credentialTypes,
+      credentialTypeCatalog,
+      addedCredentialTypeCatalog,
+      addedCredentialTypes,
+    ] as {
       type: string;
     }[][]) {
       const at = list.findIndex((entry) => entry.type === type);

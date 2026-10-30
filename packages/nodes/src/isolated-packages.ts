@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
+
 import { type ChildProcess, spawn } from "node:child_process";
 import { realpathSync } from "node:fs";
 import type {
@@ -13,6 +14,7 @@ import type {
 } from "@zerodot/engine";
 import { z } from "zod";
 import { HOST_CODE } from "./isolated-host";
+import { kept } from "./kept";
 import { sentSchemas } from "./schema-copies";
 
 /**
@@ -412,7 +414,7 @@ function credentialTypeFrom(
   };
 }
 
-const hosts = new Map<string, PackageHost>();
+const hosts = kept("hosts", () => new Map<string, PackageHost>());
 
 /**
  * Starts a process for a community package and loads it there. Returns exports in the shape of a

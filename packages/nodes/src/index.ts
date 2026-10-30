@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
+
 import {
   createRegistry,
   type Graph,
@@ -34,6 +35,7 @@ import flowNoop from "./flow-noop";
 import flowRespond from "./flow-respond";
 import flowStopError from "./flow-stop-error";
 import httpRequest from "./http-request";
+import { kept } from "./kept";
 import logicIf from "./logic-if";
 import logicSwitch from "./logic-switch";
 import rssRead from "./rss-read";
@@ -180,21 +182,32 @@ export function registerNodes(definitions: NodeDefinition[]): string[] {
   const added: string[] = [];
   for (const definition of definitions) {
     if (registry.has(definition.type)) continue;
-    (registry as Map<string, NodeDefinition>).set(definition.type, definition);
-    nodes.push(definition);
-    const entry = catalogEntry(definition);
-    catalog.push(entry);
-    addedCatalog.push(entry);
+    addNode(definition);
+    addedNodes.push(definition);
     added.push(definition.type);
   }
   return added;
+}
+
+function addNode(definition: NodeDefinition): void {
+  (registry as Map<string, NodeDefinition>).set(definition.type, definition);
+  nodes.push(definition);
+  const entry = catalogEntry(definition);
+  catalog.push(entry);
+  addedCatalog.push(entry);
+}
+
+/** The nodes that packages added. They stay when this module runs again (see `kept`). */
+const addedNodes = kept("addedNodes", (): NodeDefinition[] => []);
+for (const definition of addedNodes) {
+  if (!registry.has(definition.type)) addNode(definition);
 }
 
 /** Removes nodes that `registerNodes` added, for example when a package is uninstalled. */
 export function unregisterNodes(types: string[]): void {
   for (const type of types) {
     (registry as Map<string, NodeDefinition>).delete(type);
-    for (const list of [nodes, catalog, addedCatalog] as { type: string }[][]) {
+    for (const list of [nodes, catalog, addedCatalog, addedNodes] as { type: string }[][]) {
       const at = list.findIndex((entry) => entry.type === type);
       if (at >= 0) list.splice(at, 1);
     }
