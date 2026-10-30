@@ -447,7 +447,7 @@ export function ZerodotNode({ id, data, selected }: NodeProps<ZerodotFlowNode>) 
             style={{ left: supplyLeftFor(index) }}
           >
             {/* A long label wraps, so the ports can sit close. */}
-            <span className="pointer-events-none w-14 text-center text-2xs text-muted-foreground leading-tight">
+            <span className="pointer-events-none w-14 text-center text-[9px] text-muted-foreground leading-tight">
               {port.label}
               {port.required && <span className="text-destructive">*</span>}
             </span>
