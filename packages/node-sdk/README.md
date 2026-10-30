@@ -2,13 +2,89 @@
 
 The contract for [zerodot](https://github.com/zerodot-io/zerodot) node packages: `defineNode`, the node and credential types, helpers for items, binary data and icons, and `SDK_VERSION`.
 
-A node package depends on this package as a peer dependency and declares the contract versions it works with in its `package.json`:
+See [nodes](https://github.com/zerodot-io/nodes) for real packages.
 
-```json
-{ "zerodot": { "sdk": "^1.0" } }
+## Install
+
+```sh
+npm install --save-peer @zerodot/node-sdk zod
 ```
 
-zerodot checks the range before it runs any package code. See [nodes](https://github.com/zerodot-io/nodes) for examples.
+Declare the contract versions that your package works with in its `package.json`. zerodot checks the range before it runs any package code.
+
+```json
+{ "zerodot": { "sdk": "^1.4" } }
+```
+
+## A node
+
+```ts
+import { defineNode } from "@zerodot/node-sdk";
+import { z } from "zod";
+
+export default defineNode({
+  type: "acme.greet",
+  label: "Greet",
+  description: "Says hello to a person",
+  category: "integration",
+  icon: "UserIcon",
+  config: z.object({ name: z.string().min(1) }),
+  defaultConfig: { name: "" },
+  ports: { in: ["in"], out: ["out"] },
+  run: ({ config, input }) => ({ port: "out", data: { message: `Hello ${config.name}`, input } }),
+});
+```
+
+The config can hold expressions, for example `{{ $input.name }}`. zerodot resolves them before `run` gets the config.
+
+## Nodes as agent tools
+
+An AI Agent can use a node as a tool. Set `usableAsTool` to control this. If you do not set it, an `integration` node is a tool and other nodes are not. Trigger nodes, supply nodes and join nodes are never tools.
+
+```ts
+defineNode({ type: "acme.greet", usableAsTool: true /* ... */ });
+```
+
+In a tool node, `$fromAI` marks a value that the model gives. zerodot makes the input schema of the tool from these calls. The type is `string` (default), `number`, `boolean`, or `json`.
+
+```text
+{{ $fromAI("name", "The name of the person") }}
+{{ $fromAI("count", "How many times", "number") }}
+```
+
+The model gets the output of `run`. Binary data is sent as its type, file name and size only.
+
+Community packages (not `@zerodot/*`) are tools only when the server sets `ZERODOT_COMMUNITY_NODES_AS_TOOLS=true`.
+
+## Supply nodes
+
+A supply node gives a value (for example a chat model or a memory) to a supply port of another node. It has no ports and no step. Supply nodes and supply ports work only in official `@zerodot/*` packages.
+
+```ts
+import { defineSupplyNode } from "@zerodot/node-sdk";
+
+export default defineSupplyNode({
+  type: "acme.model",
+  label: "Acme Chat Model",
+  category: "integration",
+  icon: "AiBrain01Icon",
+  config: z.object({ model: z.string() }),
+  defaultConfig: { model: "" },
+  supplies: "ai.model",
+  supply: ({ config, credential }) => createModel(config.model, credential),
+});
+```
+
+A node that takes supplies declares `supplyPorts`, and `run` gets the values in `supplies`:
+
+```ts
+supplyPorts: [
+  { name: "model", kind: "ai.model", label: "Chat Model", required: true },
+  { name: "tools", kind: "ai.tool", label: "Tool", multiple: true },
+],
+```
+
+`TOOL_KIND` (`"ai.tool"`) is the kind of a tool port. A tool port also takes normal nodes that can be tools.
 
 ## Option icons
 
@@ -23,5 +99,13 @@ z.enum(["get", "put"]).meta({ icons: { get: { icon: "Download01Icon" }, put: { i
 ```
 
 The type is `ItemIcon`: `{ icon?: string; iconUrl?: string }`.
+
+## Versions
+
+`SDK_VERSION` is the version of the contract. A minor version only adds. A major version can break a package. `satisfiesSdk(range)` tells if the contract fits a range.
+
+| Contract | Adds                                                                            |
+| -------- | ------------------------------------------------------------------------------- |
+| 1.4      | Supply ports and supply nodes, nodes as agent tools (`usableAsTool`, `$fromAI`) |
 
 MIT license.
