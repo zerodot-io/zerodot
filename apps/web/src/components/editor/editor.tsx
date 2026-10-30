@@ -82,6 +82,7 @@ import {
   toFlow,
   toGraph,
   uniqueName,
+  withSupplyStatuses,
   type ZerodotFlowNode,
 } from "../../lib/flow";
 import type { Json } from "../../lib/json";
@@ -345,6 +346,7 @@ export function Editor({
   }, [edges, ios]);
 
   const graph: Graph = useMemo(() => toGraph(nodes, edges), [nodes, edges]);
+  const shownStatuses = useMemo(() => withSupplyStatuses(statuses, edges), [statuses, edges]);
 
   // Publish stays off while the canvas equals the published version.
   const [publishedJson, setPublishedJson] = useState(
@@ -1829,7 +1831,7 @@ export function Editor({
                   <div className="flex min-h-0 flex-1">
                     <div ref={setCanvasEl} className="relative min-w-0 flex-1 overflow-clip">
                       <EdgeCountContext.Provider value={edgeCounts}>
-                        <NodeStatusContext.Provider value={statuses}>
+                        <NodeStatusContext.Provider value={shownStatuses}>
                           <EditorActionsContext.Provider
                             value={{
                               addAfter: (nodeId, port) => {

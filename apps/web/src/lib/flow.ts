@@ -28,6 +28,25 @@ export function addServerCatalog(extra: { nodes: unknown; credentialTypes: unkno
 export const isSupplyFlowEdge = (edge: Pick<Edge, "sourceHandle" | "targetHandle">) =>
   isSupplyEdge({ fromPort: edge.sourceHandle ?? "out", toPort: edge.targetHandle ?? "in" });
 
+/**
+ * Supply nodes and tools are no steps, so a run gives them no status. They take the status of the
+ * node they supply while it runs or after it succeeded, so the run shows the whole chain.
+ */
+export function withSupplyStatuses(
+  statuses: Record<string, NodeRunStatus>,
+  edges: Pick<Edge, "source" | "target" | "sourceHandle" | "targetHandle">[],
+): Record<string, NodeRunStatus> {
+  const next = { ...statuses };
+  for (const edge of edges) {
+    if (!isSupplyFlowEdge(edge) || statuses[edge.source]) continue;
+    const parent = statuses[edge.target];
+    if (parent === "running" || parent === "waiting" || parent === "succeeded") {
+      next[edge.source] = parent;
+    }
+  }
+  return next;
+}
+
 export function toFlow(graph: Graph): { nodes: ZerodotFlowNode[]; edges: Edge[] } {
   return {
     nodes: graph.nodes.map((n) => ({

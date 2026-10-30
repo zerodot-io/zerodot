@@ -12,7 +12,7 @@ import {
 } from "../components/editor/zerodot-node";
 import { JsonView } from "../components/json-view";
 import { StatusLabel } from "../components/status-dot";
-import { type NodeRunStatus, parseGraph, toFlow } from "../lib/flow";
+import { type NodeRunStatus, parseGraph, toFlow, withSupplyStatuses } from "../lib/flow";
 import { formatDuration, formatTime } from "../lib/format";
 import { useRefreshOnEvents } from "../lib/use-event-source";
 import { getRunFn, retryRunFn } from "../server/fns";
@@ -121,7 +121,7 @@ function RunDetail() {
   return (
     <div className="flex h-[calc(100svh-3.5rem)] min-w-0 overflow-hidden">
       <div className="min-w-0 flex-1">
-        <NodeStatusContext.Provider value={statuses}>
+        <NodeStatusContext.Provider value={withSupplyStatuses(statuses, flow.edges)}>
           <EditorActionsContext.Provider value={{ addAfter: () => {}, readOnly: true }}>
             <ReactFlow
               nodes={flow.nodes.map((n) => ({ ...n, selected: n.id === selectedId }))}
