@@ -504,12 +504,16 @@ export function ZerodotNode({ id, data, selected }: NodeProps<ZerodotFlowNode>) 
       <div
         className={cn(
           "pointer-events-none absolute top-full left-1/2 mt-1.5 w-40 -translate-x-1/2 text-center text-xs",
+          // Supply nodes stand in a row. The label is narrower than the space between two of them.
+          isSupply && "w-28",
           // The supply port labels and buttons sit under the node. The name goes below them.
           supplyPorts.length > 0 && "mt-14",
         )}
       >
         {supplyPorts.length === 0 && (
-          <div className="font-semibold leading-tight">{graphNode.name}</div>
+          <div className={cn("font-semibold leading-tight", isSupply && "line-clamp-2")}>
+            {graphNode.name}
+          </div>
         )}
         {supplyPorts.length === 0 && subtitle && (
           <div className="truncate text-[9px] font-normal text-muted-foreground/70">{subtitle}</div>

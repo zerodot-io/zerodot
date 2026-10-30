@@ -80,13 +80,14 @@ import {
   parseGraph,
   pasteGraph,
   portHandle,
+  supplyPortX,
   toFlow,
   toGraph,
   uniqueName,
   type ZerodotFlowNode,
 } from "../../lib/flow";
 import type { Json } from "../../lib/json";
-import { arrangeNodes } from "../../lib/layout";
+import { arrangeNodes, SUPPLY_GAP } from "../../lib/layout";
 import {
   cancelTestRunFn,
   exportWorkflowFn,
@@ -776,8 +777,14 @@ export function Editor({
     );
     const targetHandle = `${SUPPLY_PORT_PREFIX}${to.port.name}`;
     const siblings = edges.filter((e) => e.target === to.nodeId && e.targetHandle === targetHandle);
+    // Under the port, and right of the nodes that are already on it. A supply node is 64px wide.
+    const parentWidth = parent.measured?.width ?? 240;
     node.position = {
-      x: parent.position.x + (index - (ports.length - 1) / 2) * 120 + siblings.length * 80,
+      x:
+        parent.position.x +
+        parentWidth * supplyPortX(index, ports.length) -
+        32 +
+        siblings.length * (64 + SUPPLY_GAP),
       y: parent.position.y + 180,
     };
     node.data.graphNode.position = node.position;

@@ -11,8 +11,8 @@ const PORT_OVERHANG = 96;
 const LOOP_OVERHANG = 64;
 /** Space between the bottom of a node and its supply nodes: the port labels and plus buttons. */
 const SUPPLY_DROP = 100;
-/** Space between two supply nodes in a row. */
-const SUPPLY_GAP = 40;
+/** Space between two supply nodes in a row. A supply node is 64px wide and its label 112px, so labels do not touch. */
+export const SUPPLY_GAP = 64;
 const FALLBACK_WIDTH = 240;
 const FALLBACK_HEIGHT = 80;
 
