@@ -24,6 +24,7 @@ import {
   type NodePackageReport,
   type PackageManifest,
 } from "./load-packages";
+import { linkSdk } from "./sdk-link";
 
 const run = promisify(execFile);
 
@@ -379,6 +380,7 @@ async function importPackage(dir: string, name: string): Promise<Record<string, 
     pending.set(name, { version, entry, format: "isolated" });
     return importIsolated(name, entry, isCommonJs(entry) ? "cjs" : "esm", [dir]);
   }
+  linkSdk(dir);
   if (isCommonJs(entry)) {
     // The cache has no entry for this file, so `require` reads the file from disk.
     const exports = createRequire(entry)(entry) as Record<string, unknown>;
@@ -422,6 +424,7 @@ export async function loadInstalled(dir: string, names: string[]): Promise<NodeP
     pending.delete(report.name);
     lastReports.set(report.name, report);
     if (report.error) {
+      console.error(`[nodes] The package ${report.name} did not load: ${report.error}`);
       // The files are loaded. Remove them again, so a failed package leaves nothing in memory.
       if (found?.format === "cjs") evictModules(dir, found.entry);
       if (found?.format === "isolated") stopIsolated(report.name);

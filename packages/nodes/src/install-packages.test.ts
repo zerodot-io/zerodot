@@ -5,6 +5,7 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
+import { SDK_VERSION } from "@zerodot/node-sdk";
 import { credentialTypeByName } from "./credentials";
 import { catalog, registry } from "./index";
 import {
@@ -187,6 +188,75 @@ describe("packages in the nodes folder", () => {
       await unloadPackage("@zerodot/demo-load");
       assert.equal(registry.has("demo.load"), false);
       assert.equal(isLoaded("@zerodot/demo-load"), false);
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+
+  it("gives packages the SDK of zerodot, not an old copy in the nodes folder", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "nodes-"));
+    try {
+      // An old SDK that npm left in the folder: it has no defineSupplyNode.
+      const old = join(dir, "node_modules", "@zerodot", "node-sdk");
+      mkdirSync(old, { recursive: true });
+      writeFileSync(
+        join(old, "package.json"),
+        JSON.stringify({ name: "@zerodot/node-sdk", version: "1.3.0", main: "index.js" }),
+      );
+      writeFileSync(join(old, "index.js"), 'exports.SDK_VERSION = "1.3.0";');
+      const node = (type: string) => `[{
+        type: ${JSON.stringify(type)}, label: SDK_VERSION, category: "integration",
+        icon: "PlugSocketIcon", config: z.object({}), defaultConfig: {},
+        ports: { in: ["in"], out: ["out"] }, run: () => ({ port: "out", data: null }),
+        tool: typeof defineSupplyNode,
+      }]`;
+      const esm = join(dir, "node_modules", "@zerodot", "demo-sdk-esm");
+      mkdirSync(esm, { recursive: true });
+      writeFileSync(
+        join(esm, "package.json"),
+        JSON.stringify({
+          name: "@zerodot/demo-sdk-esm",
+          version: "1.0.0",
+          type: "module",
+          exports: { ".": "./index.mjs" },
+          zerodot: { sdk: "^1.4" },
+        }),
+      );
+      writeFileSync(
+        join(esm, "index.mjs"),
+        `import { z } from ${JSON.stringify(ZOD)};
+        import { SDK_VERSION, defineSupplyNode } from "@zerodot/node-sdk";
+        export const nodes = ${node("demo.sdk_esm")};`,
+      );
+      const cjs = join(dir, "node_modules", "@zerodot", "demo-sdk-cjs");
+      mkdirSync(cjs, { recursive: true });
+      writeFileSync(
+        join(cjs, "package.json"),
+        JSON.stringify({
+          name: "@zerodot/demo-sdk-cjs",
+          version: "1.0.0",
+          exports: { ".": "./index.cjs" },
+          zerodot: { sdk: "^1.4" },
+        }),
+      );
+      writeFileSync(
+        join(cjs, "index.cjs"),
+        `const { z } = require(${JSON.stringify(ZOD_FILE)});
+        const { SDK_VERSION, defineSupplyNode } = require("@zerodot/node-sdk");
+        exports.nodes = ${node("demo.sdk_cjs")};`,
+      );
+      const reports = await loadInstalled(dir, ["@zerodot/demo-sdk-esm", "@zerodot/demo-sdk-cjs"]);
+      assert.deepEqual(
+        reports.map((r) => r.error),
+        [undefined, undefined],
+      );
+      for (const type of ["demo.sdk_esm", "demo.sdk_cjs"]) {
+        const found = registry.get(type) as unknown as { label: string; tool: string };
+        assert.equal(found.label, SDK_VERSION);
+        assert.equal(found.tool, "function");
+      }
+      await unloadPackage("@zerodot/demo-sdk-esm", dir);
+      await unloadPackage("@zerodot/demo-sdk-cjs", dir);
     } finally {
       rmSync(dir, { recursive: true });
     }
