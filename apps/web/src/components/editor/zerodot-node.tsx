@@ -281,7 +281,8 @@ export function ZerodotNode({ id, data, selected }: NodeProps<ZerodotFlowNode>) 
             position={Position.Top}
             id={SUPPLY_OUT_PORT}
             isConnectable={!readOnly}
-            className="size-3! rotate-45 rounded-none! border-2! border-card! bg-muted-foreground/70!"
+            style={{ top: -1, transform: "translate(-50%, -50%) rotate(45deg)" }}
+            className="size-3! rounded-none! border-2! border-card! bg-muted-foreground/70!"
           />
         )}
         {supplyPorts.map((port, index) => (
@@ -291,8 +292,15 @@ export function ZerodotNode({ id, data, selected }: NodeProps<ZerodotFlowNode>) 
             position={Position.Bottom}
             id={`${SUPPLY_PORT_PREFIX}${port.name}`}
             isConnectable={!readOnly}
-            style={{ left: supplyLeftFor(index) }}
-            className="size-3! rotate-45 rounded-none! border-2! border-card! bg-muted-foreground/70!"
+            // The rotation goes in `transform` after the centering translate. The Tailwind
+            // `rotate` turns the box around its first place and moves it off the line. Bottom 0
+            // is the inner edge of the 2px border, so -1px puts the center on the line.
+            style={{
+              left: supplyLeftFor(index),
+              bottom: -1,
+              transform: "translate(-50%, 50%) rotate(45deg)",
+            }}
+            className="size-3! rounded-none! border-2! border-card! bg-muted-foreground/70!"
           />
         ))}
         {graphNode.pinned && (
