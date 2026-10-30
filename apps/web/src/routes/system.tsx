@@ -24,6 +24,7 @@ import {
 } from "@zerodot/ui";
 import { Bar, BarChart, BarXAxis, ChartTooltip, Grid, LineSparkline } from "@zerodot/ui/charts";
 import { useCallback, useEffect, useState } from "react";
+import { releaseUrl } from "../components/about-dialog";
 import { ConfirmDialog } from "../components/confirm-dialog";
 import { SystemHeader } from "../components/system-header";
 import { formatAge, isStaleWorker } from "../lib/admin-format";
@@ -42,6 +43,7 @@ import {
   getAdminSignup,
   getHomeFn,
   getIsInstanceAdmin,
+  getUpdateFn,
 } from "../server/fns";
 
 type QueueName = "runs" | "system";
@@ -316,6 +318,44 @@ function SignupSection() {
           disabled={saving || setting.lockedByEnv}
           onCheckedChange={(next) => void change(next)}
         />
+      </div>
+    </Section>
+  );
+}
+
+function UpdateSection() {
+  const [latest, setLatest] = useState<string | null | undefined>(undefined);
+
+  useEffect(() => {
+    getUpdateFn({ data: { current: __APP_VERSION__ } }).then(
+      ({ releases }) => setLatest(releases[0]?.version ?? null),
+      () => setLatest(null),
+    );
+  }, []);
+
+  return (
+    <Section title="Version">
+      <div className="flex items-center justify-between gap-4 rounded-xl border p-4">
+        <div className="flex flex-col gap-1">
+          <span className="font-medium">v{__APP_VERSION__}</span>
+          <span className="text-muted-foreground">
+            {latest === undefined
+              ? "Checking for updates..."
+              : latest
+                ? `Update available: v${latest}`
+                : "No newer version found. The check runs at most once an hour. ZERODOT_UPDATE_CHECK=false turns it off."}
+          </span>
+        </div>
+        {latest && (
+          <Button
+            variant="outline"
+            render={
+              <a href={releaseUrl(latest)} target="_blank" rel="noopener noreferrer">
+                View release
+              </a>
+            }
+          />
+        )}
       </div>
     </Section>
   );
@@ -938,6 +978,7 @@ function System() {
         />
       </StatGroup>
 
+      <UpdateSection />
       <SignupSection />
 
       <Section title="Recent admin actions">
