@@ -1,0 +1,36 @@
+name: publish-sdk
+# Publishes @zerodot/node-sdk to npm. Push a tag sdk@<version>, for example sdk@1.4.0. The version
+# in the tag must be the version in packages/node-sdk/package.json.
+on:
+  push:
+    tags: ["sdk@*"]
+
+permissions:
+  contents: read
+
+jobs:
+  npm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+      - run: pnpm install --frozen-lockfile
+      - name: Check the tag version
+        working-directory: packages/node-sdk
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if [ "${GITHUB_REF_NAME#sdk@}" != "$version" ]; then
+            echo "The tag $GITHUB_REF_NAME does not match the package version $version"
+            exit 1
+          fi
+      - run: pnpm --filter @zerodot/node-sdk test
+      - name: Publish
+        working-directory: packages/node-sdk
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: pnpm publish --access public --no-git-checks
