@@ -1,4 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
+
+import { Cancel01Icon, PlusSignIcon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import {
   BaseEdge,
   type ConnectionLineComponentProps,
@@ -10,7 +13,6 @@ import {
   useInternalNode,
   useReactFlow,
 } from "@xyflow/react";
-import { Plus, X } from "lucide-react";
 import { useContext, useRef, useState } from "react";
 import { EdgeCountContext, EditorActionsContext, NodeStatusContext } from "./zerodot-node";
 
@@ -224,7 +226,7 @@ export function ZerodotEdge({
               onClick={() => insertOnEdge(id)}
               className="grid size-5 place-items-center rounded-full border bg-card text-muted-foreground shadow-xs transition-colors hover:text-foreground"
             >
-              <Plus className="size-3" strokeWidth={2.5} />
+              <HugeiconsIcon icon={PlusSignIcon} className="size-3" strokeWidth={2.5} />
             </button>
           )}
           <button
@@ -233,7 +235,7 @@ export function ZerodotEdge({
             onClick={() => void deleteElements({ edges: [{ id }] })}
             className="grid size-5 place-items-center rounded-full border bg-card text-muted-foreground shadow-xs transition-colors hover:text-destructive"
           >
-            <X className="size-3" strokeWidth={2.5} />
+            <HugeiconsIcon icon={Cancel01Icon} className="size-3" strokeWidth={2.5} />
           </button>
         </div>
       </EdgeLabelRenderer>

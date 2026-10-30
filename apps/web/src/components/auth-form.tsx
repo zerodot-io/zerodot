@@ -1,15 +1,38 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import { FingerPrintIcon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { authClient } from "@zerodot/auth/client";
 import { Button, Card, Field, FieldGroup, FieldLabel, Input, Logo } from "@zerodot/ui";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 
-export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
+export function AuthForm({
+  mode,
+  signupOpen = true,
+}: {
+  mode: "sign-in" | "sign-up";
+  /** False hides the sign-up link on the sign-in page. */
+  signupOpen?: boolean;
+}) {
   const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const isSignUp = mode === "sign-up";
+
+  // Passkey autofill: the browser offers saved passkeys in the email field.
+  useEffect(() => {
+    if (isSignUp || typeof PublicKeyCredential === "undefined") return;
+    let active = true;
+    void (async () => {
+      if (!(await PublicKeyCredential.isConditionalMediationAvailable?.())) return;
+      const result = await authClient.signIn.passkey({ autoFill: true });
+      if (active && !result.error) await navigate({ to: "/" });
+    })();
+    return () => {
+      active = false;
+    };
+  }, [isSignUp, navigate]);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -24,6 +47,18 @@ export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
     setPending(false);
     if (result.error) {
       setError(result.error.message ?? "Something went wrong");
+      return;
+    }
+    await navigate({ to: "/" });
+  }
+
+  async function onPasskey() {
+    setError(null);
+    setPending(true);
+    const result = await authClient.signIn.passkey();
+    setPending(false);
+    if (result.error) {
+      setError(result.error.message ?? "Passkey sign-in failed");
       return;
     }
     await navigate({ to: "/" });
@@ -44,7 +79,13 @@ export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
             )}
             <Field>
               <FieldLabel htmlFor="email">Email</FieldLabel>
-              <Input id="email" name="email" type="email" autoComplete="email" required />
+              <Input
+                id="email"
+                name="email"
+                type="email"
+                autoComplete={isSignUp ? "email" : "email webauthn"}
+                required
+              />
             </Field>
             <Field>
               <FieldLabel htmlFor="password">Password</FieldLabel>
@@ -52,7 +93,7 @@ export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
                 id="password"
                 name="password"
                 type="password"
-                autoComplete={isSignUp ? "new-password" : "current-password"}
+                autoComplete={isSignUp ? "new-password" : "current-password webauthn"}
                 minLength={8}
                 required
               />
@@ -66,12 +107,25 @@ export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
           <Button type="submit" disabled={pending}>
             {isSignUp ? "Create account" : "Sign in"}
           </Button>
-          <p className="text-muted-foreground">
-            {isSignUp ? "Have an account? " : "No account? "}
-            <Link to={isSignUp ? "/sign-in" : "/sign-up"} className="font-medium text-foreground">
-              {isSignUp ? "Sign in" : "Sign up"}
-            </Link>
-          </p>
+          {!isSignUp && (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={pending}
+              onClick={() => void onPasskey()}
+            >
+              <HugeiconsIcon icon={FingerPrintIcon} className="size-4" />
+              Sign in with passkey
+            </Button>
+          )}
+          {(isSignUp || signupOpen) && (
+            <p className="text-muted-foreground">
+              {isSignUp ? "Have an account? " : "No account? "}
+              <Link to={isSignUp ? "/sign-in" : "/sign-up"} className="font-medium text-foreground">
+                {isSignUp ? "Sign in" : "Sign up"}
+              </Link>
+            </p>
+          )}
         </form>
       </Card>
     </main>

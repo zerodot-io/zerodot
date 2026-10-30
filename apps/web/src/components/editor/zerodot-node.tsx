@@ -1,6 +1,18 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import {
+  Copy01Icon,
+  Delete02Icon,
+  FlashIcon,
+  LinkSquare02Icon,
+  MoreHorizontalIcon,
+  PinIcon,
+  PlayIcon,
+  PlusSignIcon,
+  PowerServiceIcon,
+} from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
+import {
   Handle,
   type NodeProps,
   Position,
@@ -19,17 +31,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@zerodot/ui";
-import {
-  Copy,
-  ExternalLink,
-  MoreHorizontal,
-  Pin,
-  Play,
-  Plus,
-  Power,
-  Trash2,
-  Zap,
-} from "lucide-react";
 import { createContext, useContext, useEffect, useState } from "react";
 import {
   catalogByType,
@@ -167,13 +168,13 @@ export function ZerodotNode({ id, data, selected }: NodeProps<ZerodotFlowNode>) 
         // The padding keeps the hover while the pointer moves from the node to the buttons.
         <div className="nodrag nopan absolute bottom-full left-1/2 flex -translate-x-1/2 gap-1 pb-2 opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100">
           <ToolbarButton label="Execute step" onClick={() => executeNode?.(id)}>
-            <Play className="size-3" />
+            <HugeiconsIcon icon={PlayIcon} className="size-3" />
           </ToolbarButton>
           <ToolbarButton
             label={data.graphNode.disabled ? "Activate" : "Deactivate"}
             onClick={toggleDisabled}
           >
-            <Power className="size-3" />
+            <HugeiconsIcon icon={PowerServiceIcon} className="size-3" />
           </ToolbarButton>
           {confirmDelete ? (
             <button
@@ -189,7 +190,7 @@ export function ZerodotNode({ id, data, selected }: NodeProps<ZerodotFlowNode>) 
             </button>
           ) : (
             <ToolbarButton label="Delete" onClick={() => setConfirmDelete(true)}>
-              <Trash2 className="size-3" />
+              <HugeiconsIcon icon={Delete02Icon} className="size-3" />
             </ToolbarButton>
           )}
           <DropdownMenu>
@@ -198,24 +199,24 @@ export function ZerodotNode({ id, data, selected }: NodeProps<ZerodotFlowNode>) 
               title="More"
               className="grid size-5 place-items-center rounded text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground"
             >
-              <MoreHorizontal className="size-3" />
+              <HugeiconsIcon icon={MoreHorizontalIcon} className="size-3" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start">
               <DropdownMenuItem onClick={() => openNode?.(id)}>
-                <ExternalLink />
+                <HugeiconsIcon icon={LinkSquare02Icon} />
                 Open
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => executeNode?.(id)}>
-                <Play />
+                <HugeiconsIcon icon={PlayIcon} />
                 Execute step
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={toggleDisabled}>
-                <Power />
+                <HugeiconsIcon icon={PowerServiceIcon} />
                 {data.graphNode.disabled ? "Activate" : "Deactivate"}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={duplicate}>
-                <Copy />
+                <HugeiconsIcon icon={Copy01Icon} />
                 Duplicate
               </DropdownMenuItem>
               <DropdownMenuSeparator />
@@ -223,7 +224,7 @@ export function ZerodotNode({ id, data, selected }: NodeProps<ZerodotFlowNode>) 
                 variant="destructive"
                 onClick={() => deleteElements({ nodes: [{ id }] })}
               >
-                <Trash2 />
+                <HugeiconsIcon icon={Delete02Icon} />
                 Delete
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -243,13 +244,15 @@ export function ZerodotNode({ id, data, selected }: NodeProps<ZerodotFlowNode>) 
         style={{ minHeight: `${Math.max(4, Math.max(outPorts.length, inPorts.length) * 1.5)}rem` }}
       >
         {graphNode.pinned && (
-          <Pin
+          <HugeiconsIcon
+            icon={PinIcon}
             aria-label="Pinned data"
             className="absolute -top-2 -right-2 size-4 rounded-full bg-card p-0.5 text-emerald-600"
           />
         )}
         {isTrigger && (
-          <Zap
+          <HugeiconsIcon
+            icon={FlashIcon}
             aria-hidden
             className="absolute top-1/2 -left-6 size-4 -translate-y-1/2 fill-amber-500 text-amber-500"
           />
@@ -265,7 +268,7 @@ export function ZerodotNode({ id, data, selected }: NodeProps<ZerodotFlowNode>) 
           />
         ))}
         <NodeIcon
-          name={entry?.icon ?? "Circle"}
+          name={entry?.icon ?? "CircleIcon"}
           src={entry?.iconUrl}
           variant="tile"
           category={entry?.category}
@@ -330,7 +333,8 @@ export function ZerodotNode({ id, data, selected }: NodeProps<ZerodotFlowNode>) 
                       "text-muted-foreground group-hover/stub:text-foreground",
                     )}
                   >
-                    <Plus
+                    <HugeiconsIcon
+                      icon={PlusSignIcon}
                       className={cn(
                         "size-3 transition-opacity",
                         draggingFrom === port && "opacity-0",

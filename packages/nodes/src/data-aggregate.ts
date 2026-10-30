@@ -8,7 +8,7 @@ export default defineNode({
   label: "Aggregate",
   description: "Combine a field from many items into a list in a single item",
   category: "data",
-  icon: "Combine",
+  icon: "GitMergeIcon",
   config: z.object({
     list: listField,
     // Paths of the fields to collect. Empty: collect the whole items.

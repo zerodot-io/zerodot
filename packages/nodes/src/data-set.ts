@@ -11,7 +11,7 @@ export default defineNode({
   label: "Set Fields",
   description: "Add or change fields on each item",
   category: "data",
-  icon: "PenLine",
+  icon: "PencilEdit01Icon",
   config: z.object({
     // Values can use expressions, for example { "name": "{{ $input.body.name }}" }.
     fields: z.record(z.string(), z.unknown()),

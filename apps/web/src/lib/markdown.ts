@@ -48,6 +48,27 @@ export function parseInline(source: string): Inline[] {
   return out;
 }
 
+/**
+ * Removes the noise of GitHub generated release notes: HTML comments, the "What's Changed" and
+ * "Full Changelog" lines, release chores, and the "by @user in <pull url>" end of each item.
+ * When only one category heading stays, it goes too.
+ */
+export function cleanReleaseNotes(source: string): string {
+  const lines = source
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .filter((line) => !/^#{1,6}\s+what's changed\s*$/i.test(line.trim()))
+    .filter((line) => !/^\**full changelog\**:?/i.test(line.trim()))
+    .filter((line) => !/^\s*[-*+]\s+chore(\([^)]*\))?:\s*release\b/i.test(line))
+    .map((line) =>
+      /^\s*[-*+]\s+/.test(line) ? line.replace(/\s+by\s+@[\w-]+(\s+in\s+\S+)?\s*$/, "") : line,
+    );
+  const headings = lines.filter((line) => /^#{1,6}\s+/.test(line));
+  const kept = headings.length === 1 ? lines.filter((line) => line !== headings[0]) : lines;
+  return kept.join("\n").trim();
+}
+
 /** Headings, bullet lists, fenced code and paragraphs. Anything else is a paragraph. */
 export function parseMarkdown(source: string): Block[] {
   const blocks: Block[] = [];

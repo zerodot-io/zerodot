@@ -7,7 +7,7 @@ export default defineNode({
   label: "No Op",
   description: "Do nothing. Pass the input on",
   category: "flow",
-  icon: "Circle",
+  icon: "CircleIcon",
   config: z.object({}),
   defaultConfig: {},
   ports: { in: ["in"], out: ["out"] },

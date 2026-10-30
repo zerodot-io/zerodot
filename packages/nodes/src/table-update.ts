@@ -9,7 +9,7 @@ export default defineNode({
   description: "Change rows in a table that match a filter",
   category: "data",
   app: "Tables",
-  icon: "FilePen",
+  icon: "FileEditIcon",
   config: z.object({
     table: tableRef,
     filter: z.unknown().optional().meta({ ui: "filter" }),

@@ -9,7 +9,7 @@ export default defineNode({
   description: "Read rows from a table with filters and sort",
   category: "data",
   app: "Tables",
-  icon: "TableProperties",
+  icon: "TableIcon",
   config: z.object({
     table: tableRef,
     // { "field": "status", "op": "eq", "value": "new" }, or { "and": [...] } / { "or": [...] }

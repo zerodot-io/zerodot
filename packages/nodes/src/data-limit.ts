@@ -8,7 +8,7 @@ export default defineNode({
   label: "Limit",
   description: "Restrict the number of items",
   category: "data",
-  icon: "ListEnd",
+  icon: "TextIndentLessIcon",
   config: z.object({
     list: listField,
     max: z.number().int().min(0).default(1),

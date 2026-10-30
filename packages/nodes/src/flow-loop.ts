@@ -18,7 +18,7 @@ export default defineNode({
   label: "Loop Over Items",
   description: "Run the nodes on the loop output once for each item or batch",
   category: "flow",
-  icon: "Repeat",
+  icon: "RepeatIcon",
   config: z.object({
     list: listField,
     batchSize: z.number().int().min(1).max(1000).default(1),

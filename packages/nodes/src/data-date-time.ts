@@ -102,7 +102,7 @@ export default defineNode({
     { label: "Format a date", config: { action: "format" } },
     { label: "Convert a date to a timestamp", config: { action: "toTimestamp" } },
   ],
-  icon: "CalendarDays",
+  icon: "Calendar01Icon",
   config: z.object({
     action: z
       .enum(["now", "add", "subtract", "startOf", "difference", "format", "toTimestamp"])

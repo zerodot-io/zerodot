@@ -1,12 +1,31 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import {
+  BubbleChatIcon,
+  ChartColumnIcon,
+  Folder02Icon,
+  FunctionOfXIcon,
+  HistoryIcon,
+  Key01Icon,
+  Logout01Icon,
+  PackageIcon,
+  PlusSignIcon,
+  ServerStack01Icon,
+  Settings02Icon,
+  SidebarLeft01Icon,
+  SidebarLeftIcon,
+  TableIcon,
+  UserCircleIcon,
+  VaultIcon,
+  WorkflowSquare06Icon,
+} from "@hugeicons/core-free-icons";
+import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
+import {
   createFileRoute,
   getRouteApi,
   Link,
   Outlet,
   redirect,
-  useMatchRoute,
   useNavigate,
 } from "@tanstack/react-router";
 import { authClient } from "@zerodot/auth/client";
@@ -22,28 +41,11 @@ import {
   PROJECT_LABEL,
   Tooltip,
 } from "@zerodot/ui";
-import {
-  Braces,
-  ChartColumn,
-  CircleUser,
-  FolderOpen,
-  KeyRound,
-  ListChecks,
-  LockKeyhole,
-  LogOut,
-  type LucideIcon,
-  PanelLeftClose,
-  PanelLeftOpen,
-  Plus,
-  Settings,
-  Table2,
-  Workflow,
-} from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { AboutDialog } from "../components/about-dialog";
 import { CommandPalette, type PaletteAction } from "../components/command-palette";
 import { FeedbackWidget, openFeedback, setFeedbackUser } from "../components/feedback-widget";
-import { ProjectDialog } from "../components/project-dialog";
+import { NewProjectInput, ProjectDialog } from "../components/project-dialog";
 import { type Release, UpdateNotice } from "../components/update-notice";
 import { getIsInstanceAdmin, getProjectFn, getUpdateFn } from "../server/fns";
 
@@ -69,15 +71,15 @@ type NavTo =
   | "/p/$projectSlug/api-keys"
   | "/p/$projectSlug/settings";
 
-const navItems: { to: NavTo; label: string; icon: LucideIcon }[] = [
-  { to: "/p/$projectSlug/workflows", label: "Workflows", icon: Workflow },
-  { to: "/p/$projectSlug/runs", label: "Runs", icon: ListChecks },
-  { to: "/p/$projectSlug/insights", label: "Insights", icon: ChartColumn },
-  { to: "/p/$projectSlug/credentials", label: "Credentials", icon: LockKeyhole },
-  { to: "/p/$projectSlug/variables", label: "Variables", icon: Braces },
-  { to: "/p/$projectSlug/tables", label: "Data tables", icon: Table2 },
-  { to: "/p/$projectSlug/api-keys", label: "API keys", icon: KeyRound },
-  { to: "/p/$projectSlug/settings", label: "Project settings", icon: Settings },
+const navItems: { to: NavTo; label: string; icon: IconSvgElement }[] = [
+  { to: "/p/$projectSlug/workflows", label: "Workflows", icon: WorkflowSquare06Icon },
+  { to: "/p/$projectSlug/runs", label: "Runs", icon: HistoryIcon },
+  { to: "/p/$projectSlug/insights", label: "Insights", icon: ChartColumnIcon },
+  { to: "/p/$projectSlug/credentials", label: "Credentials", icon: VaultIcon },
+  { to: "/p/$projectSlug/variables", label: "Variables", icon: FunctionOfXIcon },
+  { to: "/p/$projectSlug/tables", label: "Data tables", icon: TableIcon },
+  { to: "/p/$projectSlug/api-keys", label: "API keys", icon: Key01Icon },
+  { to: "/p/$projectSlug/settings", label: "Project settings", icon: Settings02Icon },
 ];
 
 const railItem =
@@ -92,6 +94,9 @@ function ProjectLayout() {
   const { user, project, projects } = Route.useRouteContext();
   const navigate = useNavigate();
   const [newProject, setNewProject] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [confirmSignOut, setConfirmSignOut] = useState(false);
   const [about, setAbout] = useState(false);
   const [hidden, setHiddenState] = useState(false);
   const [animate, setAnimate] = useState(false);
@@ -148,7 +153,7 @@ function ProjectLayout() {
       id: `page:${to}`,
       group: "Pages",
       label,
-      icon: <Icon className="size-4" />,
+      icon: <HugeiconsIcon icon={Icon} className="size-4" />,
       run: () =>
         navigate({
           to,
@@ -160,7 +165,7 @@ function ProjectLayout() {
       id: `project:${p.slug}`,
       group: `${PROJECT_LABEL[0]?.toUpperCase()}${PROJECT_LABEL.slice(1)}s`,
       label: p.name,
-      icon: <FolderOpen className="size-4" />,
+      icon: <HugeiconsIcon icon={Folder02Icon} className="size-4" />,
       run: () =>
         navigate({
           to: "/p/$projectSlug/workflows",
@@ -172,7 +177,7 @@ function ProjectLayout() {
       id: "new-project",
       group: "Actions",
       label: `New ${PROJECT_LABEL}`,
-      icon: <Plus className="size-4" />,
+      icon: <HugeiconsIcon icon={PlusSignIcon} className="size-4" />,
       run: () => setNewProject(true),
     },
     ...(instanceAdmin
@@ -181,7 +186,7 @@ function ProjectLayout() {
             id: "system",
             group: "Actions",
             label: "System",
-            icon: <Settings className="size-4" />,
+            icon: <HugeiconsIcon icon={Settings02Icon} className="size-4" />,
             run: () => navigate({ to: "/system" }),
           },
         ]
@@ -190,7 +195,7 @@ function ProjectLayout() {
       id: "sign-out",
       group: "Actions",
       label: "Sign out",
-      icon: <LogOut className="size-4" />,
+      icon: <HugeiconsIcon icon={Logout01Icon} className="size-4" />,
       run: async () => {
         await authClient.signOut();
         await navigate({ to: "/sign-in" });
@@ -198,10 +203,9 @@ function ProjectLayout() {
     },
   ];
 
-  // The canvas goes edge to edge. The rail floats over it. Other pages leave room for it.
-  const onCanvas = useMatchRoute()({ to: "/p/$projectSlug/workflows/$workflowId" });
+  // The rail floats over every page. Showing or hiding it does not move the page.
   return (
-    <div className={onCanvas || hidden ? "min-h-svh" : "min-h-svh pl-16"}>
+    <div className="min-h-svh">
       <button
         type="button"
         aria-label="Show sidebar"
@@ -209,51 +213,77 @@ function ProjectLayout() {
         onClick={() => setHidden(false)}
         className={`fixed top-1/2 left-3 z-20 flex size-9 -translate-y-1/2 items-center justify-center rounded-xl border bg-card text-muted-foreground shadow-md hover:text-foreground motion-reduce:transition-none ${animate ? "transition-opacity duration-150 ease-out" : ""} ${hidden ? "opacity-100" : "opacity-0"}`}
       >
-        <PanelLeftOpen className="size-4" />
+        <HugeiconsIcon icon={SidebarLeftIcon} className="size-4" />
       </button>
       <div
         inert={hidden}
         className={`fixed top-1/2 left-3 z-20 flex -translate-y-1/2 items-stretch rounded-xl border bg-card shadow-md motion-reduce:transition-none ${animate ? "transition-[translate,opacity] duration-150 ease-out" : ""} ${hidden ? "pointer-events-none -translate-x-2 opacity-0" : ""}`}
       >
         <nav aria-label="Project" className="flex flex-col items-center gap-1 p-1.5">
-          <button
-            type="button"
-            aria-label="About zerodot"
-            onClick={() => setAbout(true)}
-            className="flex size-9 items-center justify-center border-b pb-0.5 text-xs"
-          >
-            <LogoMark />
-          </button>
+          <Tooltip label="About zerodot" side="right">
+            <button
+              type="button"
+              aria-label="About zerodot"
+              onClick={() => setAbout(true)}
+              className="flex size-9 cursor-pointer items-center justify-center border-b pb-0.5 text-xs"
+            >
+              <LogoMark />
+            </button>
+          </Tooltip>
           {navItems.map(({ to, label, icon: Icon }) => (
-            <Tooltip key={to} label={label} side="right">
-              {to === "/p/$projectSlug/workflows" ? (
-                <Link
-                  to={to}
-                  params={{ projectSlug: slug }}
-                  search={{ all: true }}
-                  className={railItem}
-                  activeProps={railActive}
-                  inactiveProps={railInactive}
-                >
-                  <Icon className="size-4" />
-                </Link>
-              ) : (
-                <Link
-                  to={to}
-                  params={{ projectSlug: slug }}
-                  className={railItem}
-                  activeProps={railActive}
-                  inactiveProps={railInactive}
-                >
-                  <Icon className="size-4" />
-                </Link>
+            <Fragment key={to}>
+              {/* Nodes are for the whole instance. The link shows before the project settings. */}
+              {to === "/p/$projectSlug/settings" && instanceAdmin && (
+                <Tooltip label="Nodes" side="right">
+                  <Link
+                    to="/system/nodes"
+                    className={railItem}
+                    activeProps={railActive}
+                    inactiveProps={railInactive}
+                  >
+                    <HugeiconsIcon icon={PackageIcon} className="size-4" />
+                  </Link>
+                </Tooltip>
               )}
-            </Tooltip>
+              <Tooltip label={label} side="right">
+                {to === "/p/$projectSlug/workflows" ? (
+                  <Link
+                    to={to}
+                    params={{ projectSlug: slug }}
+                    search={{ all: true }}
+                    className={railItem}
+                    activeProps={railActive}
+                    inactiveProps={railInactive}
+                  >
+                    <HugeiconsIcon icon={Icon} className="size-4" />
+                  </Link>
+                ) : (
+                  <Link
+                    to={to}
+                    params={{ projectSlug: slug }}
+                    className={railItem}
+                    activeProps={railActive}
+                    inactiveProps={railInactive}
+                  >
+                    <HugeiconsIcon icon={Icon} className="size-4" />
+                  </Link>
+                )}
+              </Tooltip>
+            </Fragment>
           ))}
           <span aria-hidden="true" className="my-0.5 h-px w-6 bg-border" />
-          <DropdownMenu>
+          <DropdownMenu
+            open={menuOpen}
+            onOpenChange={(open) => {
+              setMenuOpen(open);
+              if (!open) {
+                setCreating(false);
+                setConfirmSignOut(false);
+              }
+            }}
+          >
             <DropdownMenuTrigger aria-label="Account" className={railButton}>
-              <CircleUser className="size-4" />
+              <HugeiconsIcon icon={UserCircleIcon} className="size-4" />
             </DropdownMenuTrigger>
             <DropdownMenuContent side="right" align="end">
               <DropdownMenuGroup>
@@ -261,47 +291,82 @@ function ProjectLayout() {
               </DropdownMenuGroup>
               <DropdownMenuSeparator />
               <DropdownMenuGroup>
-                <DropdownMenuLabel className="capitalize">{PROJECT_LABEL}s</DropdownMenuLabel>
-                {projects.map((p) => (
-                  <DropdownMenuItem
-                    key={p.slug}
-                    onClick={() =>
-                      navigate({
-                        to: "/p/$projectSlug/workflows",
-                        params: { projectSlug: p.slug },
-                        search: { all: true },
-                      })
-                    }
-                  >
-                    {p.name}
-                  </DropdownMenuItem>
-                ))}
-                <DropdownMenuItem onClick={() => setNewProject(true)}>
-                  New {PROJECT_LABEL}
-                </DropdownMenuItem>
+                <DropdownMenuLabel className="flex items-center gap-1.5 capitalize">
+                  <HugeiconsIcon icon={Folder02Icon} className="size-4" />
+                  {PROJECT_LABEL}s
+                </DropdownMenuLabel>
+                {/* Tree: the line under the folder icon joins the projects to the label. */}
+                <div className="ml-4 border-l pl-1">
+                  {projects.map((p) => (
+                    <DropdownMenuItem
+                      key={p.slug}
+                      className={p.slug === slug ? "font-medium" : undefined}
+                      onClick={() =>
+                        navigate({
+                          to: "/p/$projectSlug/workflows",
+                          params: { projectSlug: p.slug },
+                          search: { all: true },
+                        })
+                      }
+                    >
+                      {p.name}
+                    </DropdownMenuItem>
+                  ))}
+                  {creating ? (
+                    <NewProjectInput
+                      onCancel={() => setCreating(false)}
+                      onCreated={async (newSlug) => {
+                        setMenuOpen(false);
+                        setCreating(false);
+                        await navigate({
+                          to: "/p/$projectSlug/workflows",
+                          params: { projectSlug: newSlug },
+                          search: { all: true },
+                        });
+                      }}
+                    />
+                  ) : (
+                    <DropdownMenuItem closeOnClick={false} onClick={() => setCreating(true)}>
+                      <HugeiconsIcon icon={PlusSignIcon} className="size-4" />
+                      New {PROJECT_LABEL}
+                    </DropdownMenuItem>
+                  )}
+                </div>
               </DropdownMenuGroup>
               <DropdownMenuSeparator />
               {widgetId && (
-                <DropdownMenuItem onClick={openFeedback}>Send feedback</DropdownMenuItem>
+                <DropdownMenuItem onClick={openFeedback}>
+                  <HugeiconsIcon icon={BubbleChatIcon} className="size-4" />
+                  Send feedback
+                </DropdownMenuItem>
               )}
               {instanceAdmin && (
                 <DropdownMenuItem onClick={() => navigate({ to: "/system" })}>
+                  <HugeiconsIcon icon={ServerStack01Icon} className="size-4" />
                   System
                 </DropdownMenuItem>
               )}
+              {/* The first click asks to confirm. The second click signs out. */}
               <DropdownMenuItem
+                closeOnClick={false}
+                variant={confirmSignOut ? "destructive" : "default"}
                 onClick={async () => {
+                  if (!confirmSignOut) {
+                    setConfirmSignOut(true);
+                    return;
+                  }
                   await authClient.signOut();
                   await navigate({ to: "/sign-in" });
                 }}
               >
-                Sign out
+                <HugeiconsIcon icon={Logout01Icon} className="size-4" />
+                {confirmSignOut ? "Click again to sign out" : "Sign out"}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
           <Tooltip label="Hide sidebar" side="right">
             <button type="button" onClick={() => setHidden(true)} className={railButton}>
-              <PanelLeftClose className="size-4" />
+              <HugeiconsIcon icon={SidebarLeft01Icon} className="size-4" />
             </button>
           </Tooltip>
         </nav>

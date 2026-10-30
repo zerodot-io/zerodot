@@ -30,7 +30,7 @@ export default defineNode({
   label: "Summarize",
   description: "Sum, count, max, etc. across items",
   category: "data",
-  icon: "Sigma",
+  icon: "SigmaIcon",
   config: z.object({
     list: listField,
     summaries: z

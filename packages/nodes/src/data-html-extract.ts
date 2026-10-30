@@ -30,7 +30,7 @@ export default defineNode({
   label: "HTML Extract",
   description: "Get data from HTML with CSS selectors",
   category: "data",
-  icon: "FileSearch",
+  icon: "FileSearchIcon",
   config: z.object({
     html: z.unknown().default("{{ $input.data }}").meta({ title: "HTML", ui: "expression" }),
     selectors: z.record(z.string(), z.string()).default({}).meta({

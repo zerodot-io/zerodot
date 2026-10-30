@@ -280,7 +280,7 @@ export default defineNode({
     { label: "Combine every item with every item", config: { mode: "combineAll" } },
     { label: "Choose a branch", config: { mode: "chooseBranch" } },
   ],
-  icon: "Merge",
+  icon: "GitMergeIcon",
   config: z.object({
     mode: z
       .enum(MODES)

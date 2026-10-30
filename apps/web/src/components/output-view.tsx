@@ -1,4 +1,19 @@
 // SPDX-License-Identifier: AGPL-3.0-only
+
+import {
+  ArrowDown01Icon,
+  ArrowLeft01Icon,
+  ArrowRight01Icon,
+  Copy01Icon,
+  GridIcon,
+  Menu01Icon,
+  PackageIcon,
+  Search01Icon,
+  TextFontIcon,
+  Tick02Icon,
+  ToggleOffIcon,
+} from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import {
   Button,
   cn,
@@ -15,19 +30,6 @@ import {
   TabsList,
   TabsTrigger,
 } from "@zerodot/ui";
-import {
-  Box,
-  Check,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  Copy,
-  Hash,
-  List,
-  Search,
-  ToggleLeft,
-  Type,
-} from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { extend, startDrag } from "./drag-path";
 import { JsonView } from "./json-view";
@@ -62,11 +64,12 @@ function Leaf({ value }: { value: unknown }) {
 
 function TypeIcon({ value }: { value: unknown }) {
   const className = "size-3.5";
-  if (Array.isArray(value)) return <List className={className} />;
-  if (isObject(value)) return <Box className={className} />;
-  if (typeof value === "number") return <Hash className={className} />;
-  if (typeof value === "boolean") return <ToggleLeft className={className} />;
-  return <Type className={className} />;
+  if (Array.isArray(value)) return <HugeiconsIcon icon={Menu01Icon} className={className} />;
+  if (isObject(value)) return <HugeiconsIcon icon={PackageIcon} className={className} />;
+  if (typeof value === "number") return <HugeiconsIcon icon={GridIcon} className={className} />;
+  if (typeof value === "boolean")
+    return <HugeiconsIcon icon={ToggleOffIcon} className={className} />;
+  return <HugeiconsIcon icon={TextFontIcon} className={className} />;
 }
 
 function Chip({ value, label, path }: { value: unknown; label: string; path?: string }) {
@@ -102,7 +105,7 @@ function SchemaNode({ label, value, path }: { label: string; value: unknown; pat
       </div>
     );
   }
-  const Chevron = open ? ChevronDown : ChevronRight;
+  const Chevron = open ? ArrowDown01Icon : ArrowRight01Icon;
   return (
     <div>
       <div className="flex items-center gap-2 py-0.5">
@@ -113,7 +116,7 @@ function SchemaNode({ label, value, path }: { label: string; value: unknown; pat
           onClick={() => setOpen(!open)}
           className="grid size-4 place-items-center text-muted-foreground"
         >
-          <Chevron className="size-3.5" />
+          <HugeiconsIcon icon={Chevron} className="size-3.5" />
         </button>
         <Chip value={value} label={label} path={path} />
       </div>
@@ -308,7 +311,7 @@ export function OutputView({
                 setPage(0);
               }}
             >
-              <Search className="size-3.5" />
+              <HugeiconsIcon icon={Search01Icon} className="size-3.5" />
             </Button>
             <Tabs value={mode} onValueChange={(next) => setMode(next as Mode)}>
               <TabsList>
@@ -321,7 +324,11 @@ export function OutputView({
               </TabsList>
             </Tabs>
             <Button variant="outline" size="xs" aria-label="Copy" onClick={copy}>
-              {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+              {copied ? (
+                <HugeiconsIcon icon={Tick02Icon} className="size-3.5" />
+              ) : (
+                <HugeiconsIcon icon={Copy01Icon} className="size-3.5" />
+              )}
             </Button>
             {actions}
           </div>
@@ -329,7 +336,7 @@ export function OutputView({
         {searching && (
           <InputGroup>
             <InputGroupAddon>
-              <Search />
+              <HugeiconsIcon icon={Search01Icon} />
             </InputGroupAddon>
             <InputGroupInput
               autoFocus
@@ -371,7 +378,7 @@ export function OutputView({
               disabled={current === 0}
               onClick={() => setPage(current - 1)}
             >
-              <ChevronLeft className="size-3.5" />
+              <HugeiconsIcon icon={ArrowLeft01Icon} className="size-3.5" />
             </Button>
             <span className="px-2 text-muted-foreground tabular-nums">
               {current + 1} / {pages}
@@ -383,7 +390,7 @@ export function OutputView({
               disabled={current >= pages - 1}
               onClick={() => setPage(current + 1)}
             >
-              <ChevronRight className="size-3.5" />
+              <HugeiconsIcon icon={ArrowRight01Icon} className="size-3.5" />
             </Button>
             <div className="ml-auto flex items-center gap-2 text-muted-foreground">
               Page size

@@ -16,7 +16,7 @@ export default defineNode({
   label: "Sort",
   description: "Change items order",
   category: "data",
-  icon: "ArrowUpDown",
+  icon: "ArrowUpDownIcon",
   config: z.object({
     list: listField,
     // Path of the field to sort by, for example "user.age". Empty: sort the items themselves.

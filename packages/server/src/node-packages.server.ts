@@ -347,12 +347,15 @@ export async function installNodePackage(
   }
   const community = registry ? await communityVersion(db, { ...input, registry }) : null;
   const version = community?.version ?? (await resolveVersion(input.name));
-  await installFromNpm(dir, input.name, version, undefined, community?.integrity).catch(
-    (error: unknown) => {
-      throw conflict(errorText(error, "The package did not install"));
-    },
-  );
-  const [report] = await loadInstalled(dir, [input.name]);
+  // The lock keeps the other processes from running npm or loading files during the install.
+  const [report] = await withInstallLock(dir, async () => {
+    await installFromNpm(dir, input.name, version, undefined, community?.integrity).catch(
+      (error: unknown) => {
+        throw conflict(errorText(error, "The package did not install"));
+      },
+    );
+    return loadInstalled(dir, [input.name]);
+  });
   if (!report || report.error) {
     await uninstallFromNpm(dir, input.name).catch(() => undefined);
     throw conflict(report?.error ?? "The package did not load");
@@ -578,6 +581,7 @@ export type AvailableNodePackage = {
   icon: string | null;
   iconUrl: string | null;
   nodes: { type: string; label: string; description?: string }[];
+  credentialTypes: string[];
   /** False when the newest version needs a newer zerodot. */
   compatible: boolean;
 };
@@ -609,6 +613,7 @@ export async function availableNodePackages(headers: Headers): Promise<Available
         icon: item.icon ?? null,
         iconUrl: item.iconUrl ?? null,
         nodes: item.nodes,
+        credentialTypes: item.credentialTypes ?? [],
         compatible: satisfiesSdk(item.sdk, SDK_VERSION),
       }));
   } catch (error) {
@@ -641,23 +646,57 @@ export type NeededNodePackages = {
     /** For a community package: the zerodot team reviewed this version. */
     verified: boolean;
   })[];
-  /** Node types that no package gives. */
+  /** Types that no package gives. */
   unknown: string[];
 };
+
+/** The node types of the package that are in `types`. */
+const givenNodeTypes = (item: Pick<CatalogPackage, "nodes">, types: string[]) =>
+  item.nodes.map((node) => node.type).filter((type) => types.includes(type));
+
+/**
+ * The credential types of the package that are in `types`. An older catalog has no credential
+ * types: then a type matches when its first part is the first part of a node type of the package,
+ * for example `github.token` and `github.api`.
+ */
+function givenCredentialTypes(
+  item: Pick<CatalogPackage, "nodes" | "credentialTypes">,
+  types: string[],
+): string[] {
+  if (item.credentialTypes) return item.credentialTypes.filter((type) => types.includes(type));
+  const prefixes = new Set(item.nodes.map((node) => node.type.split(".")[0]));
+  return types.filter((type) => prefixes.has(type.split(".")[0]));
+}
 
 /**
  * The packages that give the node types: from the official catalog, then from the community
  * registries for the types that are left. Any signed-in person.
  */
-export async function packagesForNodeTypes(
+export function packagesForNodeTypes(
   headers: Headers,
   types: string[],
+): Promise<NeededNodePackages> {
+  return packagesFor(headers, types, givenNodeTypes);
+}
+
+/** The packages that give the credential types. Any signed-in person. */
+export function packagesForCredentialTypes(
+  headers: Headers,
+  types: string[],
+): Promise<NeededNodePackages> {
+  return packagesFor(headers, types, givenCredentialTypes);
+}
+
+async function packagesFor(
+  headers: Headers,
+  types: string[],
+  givenOf: (item: Pick<CatalogPackage, "nodes" | "credentialTypes">, types: string[]) => string[],
 ): Promise<NeededNodePackages> {
   const available = await availableNodePackages(headers);
   const packages: NeededNodePackages["packages"] = [];
   const found = new Set<string>();
   for (const item of available.packages) {
-    const given = item.nodes.map((node) => node.type).filter((type) => types.includes(type));
+    const given = givenOf(item, types);
     if (given.length === 0) continue;
     for (const type of given) found.add(type);
     packages.push({ ...item, types: given, registry: null, verified: false });
@@ -679,9 +718,7 @@ export async function packagesForNodeTypes(
       if (result?.status !== "fulfilled") return;
       for (const item of result.value.packages) {
         if (have.has(item.name)) continue;
-        const given = item.nodes
-          .map((node) => node.type)
-          .filter((type) => types.includes(type) && !found.has(type));
+        const given = givenOf(item, types).filter((type) => !found.has(type));
         if (given.length === 0) continue;
         for (const type of given) found.add(type);
         have.add(item.name);
@@ -694,6 +731,7 @@ export async function packagesForNodeTypes(
           icon: item.icon ?? null,
           iconUrl: item.iconUrl ?? null,
           nodes: item.nodes,
+          credentialTypes: item.credentialTypes ?? [],
           compatible: satisfiesSdk(item.sdk, SDK_VERSION),
           types: given,
           registry: { url: registry.url, name: registry.name },

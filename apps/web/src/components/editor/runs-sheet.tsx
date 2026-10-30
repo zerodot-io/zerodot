@@ -1,4 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
+
+import { ArrowRight01Icon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { Link } from "@tanstack/react-router";
 import {
   Badge,
@@ -11,7 +14,6 @@ import {
   SheetTitle,
   Spinner,
 } from "@zerodot/ui";
-import { ChevronRight } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { formatDuration, formatTime } from "../../lib/format";
 import { listRunsFn } from "../../server/fns";
@@ -112,7 +114,8 @@ export function RunsSheet({
                       <span className="shrink-0 text-muted-foreground tabular-nums">
                         {formatDuration(run.startedAt, run.finishedAt)}
                       </span>
-                      <ChevronRight
+                      <HugeiconsIcon
+                        icon={ArrowRight01Icon}
                         aria-hidden="true"
                         className="size-4 shrink-0 text-muted-foreground/60 transition-colors duration-150 group-hover:text-foreground"
                       />

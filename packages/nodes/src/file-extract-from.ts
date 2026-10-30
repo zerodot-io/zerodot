@@ -9,7 +9,7 @@ export default defineNode({
   label: "Extract from File",
   description: "Read data from a file: CSV, JSON, or text",
   category: "data",
-  icon: "FileInput",
+  icon: "FileImportIcon",
   config: z.object({
     format: z
       .enum(["csv", "json", "text"])

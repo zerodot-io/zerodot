@@ -313,7 +313,7 @@ function MissingNodesDialog({
               .map((node) => node.label);
             return (
               <li key={item.name} className="flex items-center gap-3 py-2">
-                <NodeIcon name={item.icon ?? "Package"} src={item.iconUrl ?? undefined} />
+                <NodeIcon name={item.icon ?? "PackageIcon"} src={item.iconUrl ?? undefined} />
                 <span className="flex min-w-0 flex-1 flex-col">
                   <span>
                     {item.label}

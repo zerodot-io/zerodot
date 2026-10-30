@@ -12,7 +12,7 @@ export default defineNode({
   description: "Read all rows of a table, or the rows that match a filter",
   category: "data",
   app: "Tables",
-  icon: "TableProperties",
+  icon: "TableIcon",
   config: z.object({
     table: tableRef,
     // { "field": "status", "op": "eq", "value": "new" }, or { "and": [...] } / { "or": [...] }

@@ -14,13 +14,16 @@
   },
   "devDependencies": {
     "@better-auth/cli": "1.4.21",
-    "@zerodot/config": "workspace:*",
     "@types/node": "26.6.5",
+    "@zerodot/config": "workspace:*",
     "tsx": "4.23.15",
     "typescript": "7.0.2"
   },
   "dependencies": {
+    "@better-auth/passkey": "1.7.12",
+    "@better-fetch/fetch": "1.3.2",
     "@zerodot/db": "workspace:*",
-    "better-auth": "1.7.12"
+    "better-auth": "1.7.12",
+    "better-call": "1.4.4"
   }
 }

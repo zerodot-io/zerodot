@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
+
+import { Delete02Icon, PlusSignIcon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@zerodot/ui";
-import { Plus, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { ExpressionInput } from "./expression-input";
 
@@ -58,7 +60,7 @@ function AddZone({ label, onClick }: { label: string; onClick: () => void }) {
       onClick={onClick}
       className="flex items-center justify-center gap-2 rounded-lg border border-dashed bg-muted/40 px-3 py-4 text-muted-foreground transition-colors duration-150 hover:text-foreground"
     >
-      <Plus className="size-4" />
+      <HugeiconsIcon icon={PlusSignIcon} className="size-4" />
       <span className="font-medium text-primary">{label}</span>
     </button>
   );
@@ -72,7 +74,7 @@ function RemoveButton({ label, onClick }: { label: string; onClick: () => void }
       onClick={onClick}
       className="mt-2 text-muted-foreground transition-colors duration-150 hover:text-foreground"
     >
-      <Trash2 className="size-4" />
+      <HugeiconsIcon icon={Delete02Icon} className="size-4" />
     </button>
   );
 }

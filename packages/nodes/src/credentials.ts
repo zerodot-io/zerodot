@@ -56,14 +56,14 @@ export const credentialTypes: CredentialTypeDefinition[] = [
       password: z.string().min(1),
     }),
     secretFields: ["password"],
-    icon: "KeyRound",
+    icon: "Key01Icon",
   },
   {
     type: "http.bearer",
     label: "Bearer token",
     fields: z.object({ token: z.string().min(1) }),
     secretFields: ["token"],
-    icon: "KeyRound",
+    icon: "Key01Icon",
   },
   {
     type: "http.header",
@@ -76,7 +76,7 @@ export const credentialTypes: CredentialTypeDefinition[] = [
       value: z.string().min(1),
     }),
     secretFields: ["value"],
-    icon: "KeyRound",
+    icon: "Key01Icon",
   },
   {
     type: "jwt.auth",
@@ -88,7 +88,7 @@ export const credentialTypes: CredentialTypeDefinition[] = [
       publicKey: z.string().min(1).optional(),
     }),
     secretFields: ["secret"],
-    icon: "KeyRound",
+    icon: "Key01Icon",
   },
   {
     type: "oauth2.generic",
@@ -106,7 +106,7 @@ export const credentialTypes: CredentialTypeDefinition[] = [
     secretFields: ["clientSecret", "accessToken", "refreshToken"],
     serverFields: [...OAUTH2_TOKEN_FIELDS],
     oauth2: "custom",
-    icon: "KeyRound",
+    icon: "Key01Icon",
   },
 ];
 

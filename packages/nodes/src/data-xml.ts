@@ -22,7 +22,7 @@ export default defineNode({
     { label: "Convert XML to JSON", config: { mode: "xmlToJson" } },
     { label: "Convert JSON to XML", config: { mode: "jsonToXml" } },
   ],
-  icon: "FileCode",
+  icon: "FileScriptIcon",
   config: z.object({
     mode: z
       .enum(["xmlToJson", "jsonToXml"])

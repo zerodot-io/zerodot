@@ -73,7 +73,7 @@ function writePackage(dir: string, name: string, version: string, sdk: string, t
     join(root, "dist", "index.mjs"),
     `import { z } from ${JSON.stringify(ZOD)};
     export const nodes = [{
-      type: ${JSON.stringify(type)}, label: "X", category: "integration", icon: "Plug",
+      type: ${JSON.stringify(type)}, label: "X", category: "integration", icon: "PlugSocketIcon",
       config: z.object({}),
       defaultConfig: {}, ports: { in: ["in"], out: ["out"] },
       run: () => ({ port: "out", data: null }),
@@ -121,7 +121,7 @@ function writeCjsPackage(
     const dep = require("dep-counter");
     exports.nodes = [{
       type: ${JSON.stringify(options.type)}, label: ${JSON.stringify(options.label)} + dep.reads,
-      category: "integration", icon: "Plug", config: z.object({}),
+      category: "integration", icon: "PlugSocketIcon", config: z.object({}),
       defaultConfig: {}, ports: { in: ["in"], out: ["out"] },
       run: () => ({ port: "out", data: null }),
     }];
@@ -417,7 +417,7 @@ describe("catalog", () => {
           name: "@zerodot/icons",
           version: "1.0.0",
           sdk: "^1.0",
-          icon: "Database",
+          icon: "Database01Icon",
           iconUrl: "data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=",
         },
         { name: "@zerodot/remote", version: "1.0.0", sdk: "^1.0", iconUrl: "https://x/i.svg" },
@@ -429,7 +429,7 @@ describe("catalog", () => {
     );
     assert.equal(packages[0]?.summary, "s");
     assert.equal(packages[1]?.summary, "");
-    assert.equal(packages[1]?.icon, "Database");
+    assert.equal(packages[1]?.icon, "Database01Icon");
     assert.match(packages[1]?.iconUrl ?? "", /^data:image\/svg\+xml/);
     assert.equal(packages[2]?.iconUrl, undefined);
     assert.deepEqual(packages[0]?.nodes, [{ type: "redis.database", label: "Redis" }]);

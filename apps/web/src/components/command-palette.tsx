@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
+
+import { WorkflowSquare10Icon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { useNavigate } from "@tanstack/react-router";
 import { Dialog, DialogContent, DialogTitle, Kbd } from "@zerodot/ui";
-import { Workflow } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { listWorkflowsFn } from "../server/fns";
 
@@ -62,7 +64,7 @@ export function CommandPalette({ slug, actions }: { slug: string; actions: Palet
       id: `wf:${w.id}`,
       group: "Workflows",
       label: w.name,
-      icon: <Workflow className="size-4" />,
+      icon: <HugeiconsIcon icon={WorkflowSquare10Icon} className="size-4" />,
       run: () =>
         navigate({
           to: "/p/$projectSlug/workflows/$workflowId",

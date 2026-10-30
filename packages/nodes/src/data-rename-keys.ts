@@ -13,7 +13,7 @@ export default defineNode({
   label: "Rename Keys",
   description: "Update item field names",
   category: "data",
-  icon: "TextCursorInput",
+  icon: "TextIcon",
   config: z.object({
     // Old name to new name. The input can be an object or a list of objects.
     keys: z.record(z.string(), z.string().min(1)),

@@ -42,7 +42,7 @@ function writeCommunityPackage(dir: string) {
       parse: (value) => value,
       toJSONSchema: () => ({ type: "object", properties: { token: { type: "string" } }, required: ["token"] }),
     };
-    const base = { label: "Iso", category: "integration", icon: "Plug", config: schema,
+    const base = { label: "Iso", category: "integration", icon: "PlugSocketIcon", config: schema,
       defaultConfig: { mode: "info" }, ports: { in: ["in"], out: ["out"] } };
     const tryIt = (work) => { try { work(); return "allowed"; } catch (error) { return error.code ?? error.message; } };
     exports.nodes = [

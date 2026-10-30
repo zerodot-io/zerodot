@@ -1,5 +1,16 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import {
+  ArrowDown01Icon,
+  FlashIcon,
+  Loading03Icon,
+  Login03Icon,
+  Logout03Icon,
+  PencilEdit02Icon,
+  PlayIcon,
+  PlusSignIcon,
+} from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { type ShowRules, visibleCredentialTypes } from "@zerodot/engine";
 import { credentialTypeCatalog } from "@zerodot/nodes";
 import {
@@ -22,16 +33,6 @@ import {
   Switch,
   Textarea,
 } from "@zerodot/ui";
-import {
-  ArrowLeftFromLine,
-  ArrowRightToLine,
-  ChevronDown,
-  Loader2,
-  Pencil,
-  Play,
-  Plus,
-  Zap,
-} from "lucide-react";
 import { type CSSProperties, type ReactNode, useRef, useState } from "react";
 import { catalogByType, type ZerodotFlowNode } from "../../lib/flow";
 import { CredentialDialog, type SavedCredential } from "../credential-dialog";
@@ -329,7 +330,10 @@ function WebhookUrls({
         onClick={() => setOpen((v) => !v)}
         className="flex items-center gap-2 font-medium text-primary"
       >
-        <ChevronDown className={cn("size-4 transition-transform", !open && "-rotate-90")} />
+        <HugeiconsIcon
+          icon={ArrowDown01Icon}
+          className={cn("size-4 transition-transform", !open && "-rotate-90")}
+        />
         Webhook URLs
       </button>
       {open && (
@@ -404,7 +408,7 @@ function CredentialPicker({
   const usable = credentials.filter((c) => allowedTypes.includes(c.type));
   const iconOf = (type: string) => {
     const entry = credentialTypeCatalog.find((t) => t.type === type);
-    return <NodeIcon name={entry?.icon ?? "KeyRound"} src={entry?.iconUrl} />;
+    return <NodeIcon name={entry?.icon ?? "Key01Icon"} src={entry?.iconUrl} />;
   };
   const typeLabel = (type: string) => credentialTypeCatalog.find((t) => t.type === type)?.label;
   const selected = usable.find((c) => c.id === node.credentialId);
@@ -469,7 +473,7 @@ function CredentialPicker({
               ))}
               <SelectSeparator />
               <SelectItem value={NEW_CREDENTIAL}>
-                <Plus />
+                <HugeiconsIcon icon={PlusSignIcon} />
                 Create new credential
               </SelectItem>
             </SelectContent>
@@ -481,7 +485,7 @@ function CredentialPicker({
               aria-label="Edit credential"
               onClick={() => setEditing(true)}
             >
-              <Pencil />
+              <HugeiconsIcon icon={PencilEdit02Icon} />
             </Button>
           )}
         </div>
@@ -616,7 +620,7 @@ export function NodeDialog({
             <DialogHeader className="border-b px-4 py-2 pr-12">
               <DialogTitle className="flex items-center gap-2">
                 <NodeIcon
-                  name={entry?.icon ?? "Circle"}
+                  name={entry?.icon ?? "CircleIcon"}
                   src={entry?.iconUrl}
                   category={entry?.category}
                 />
@@ -627,7 +631,11 @@ export function NodeDialog({
                   onChange={(event) => onChange((n) => ({ ...n, name: event.target.value }))}
                 />
                 <Button size="xs" className="ml-auto" disabled={busy} onClick={onExecuteStep}>
-                  {busy ? <Loader2 className="animate-spin" /> : <Play />}
+                  {busy ? (
+                    <HugeiconsIcon icon={Loading03Icon} className="animate-spin" />
+                  ) : (
+                    <HugeiconsIcon icon={PlayIcon} />
+                  )}
                   {busy ? "Running…" : "Execute step"}
                 </Button>
               </DialogTitle>
@@ -641,7 +649,12 @@ export function NodeDialog({
                 {isTrigger ? (
                   listening ? (
                     <EmptyState
-                      icon={<Zap className="size-5 animate-pulse text-primary" />}
+                      icon={
+                        <HugeiconsIcon
+                          icon={FlashIcon}
+                          className="size-5 animate-pulse text-primary"
+                        />
+                      }
                       title="Listening for test event"
                     >
                       {serviceHint && <p>{serviceHint}</p>}
@@ -659,7 +672,7 @@ export function NodeDialog({
                     </EmptyState>
                   ) : (
                     <EmptyState
-                      icon={<Zap className="size-5" />}
+                      icon={<HugeiconsIcon icon={FlashIcon} className="size-5" />}
                       title={`Pull in events from ${entry?.label}`}
                     >
                       <Button disabled={busy || !testUrl} onClick={onListen}>
@@ -698,7 +711,10 @@ export function NodeDialog({
                 ) : !hasInput ? (
                   <EmptyState icon={<NoInputArt />} title="No input connected" />
                 ) : io?.input === undefined ? (
-                  <EmptyState icon={<ArrowRightToLine className="size-5" />} title="No input data">
+                  <EmptyState
+                    icon={<HugeiconsIcon icon={Logout03Icon} className="size-5" />}
+                    title="No input data"
+                  >
                     <p>Run a test to see the input.</p>
                   </EmptyState>
                 ) : (
@@ -807,7 +823,7 @@ export function NodeDialog({
                   />
                 ) : output === undefined ? (
                   <EmptyState
-                    icon={<ArrowLeftFromLine className="size-5" />}
+                    icon={<HugeiconsIcon icon={Login03Icon} className="size-5" />}
                     title="No output data"
                   >
                     <p>

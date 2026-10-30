@@ -23,7 +23,7 @@ export default defineNode({
   label: "Execute Workflow",
   description: "Run another workflow and use the output of its last node",
   category: "flow",
-  icon: "Workflow",
+  icon: "WorkflowSquare10Icon",
   config: z.object({
     source: z
       .enum(["database", "parameter"])

@@ -12,7 +12,7 @@ export default defineNode({
     { label: "Compress a file", config: { operation: "compress" } },
     { label: "Decompress a file", config: { operation: "decompress" } },
   ],
-  icon: "FileArchive",
+  icon: "FileZipIcon",
   config: z.object({
     operation: z
       .enum(["compress", "decompress"])

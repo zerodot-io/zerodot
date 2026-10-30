@@ -562,7 +562,11 @@ function nodeLabel(row: NodeRow) {
   const entry = catalogByType.get(row.nodeType);
   return (
     <span className="inline-flex items-center gap-2">
-      <NodeIcon name={entry?.icon ?? "Circle"} src={entry?.iconUrl} category={entry?.category} />
+      <NodeIcon
+        name={entry?.icon ?? "CircleIcon"}
+        src={entry?.iconUrl}
+        category={entry?.category}
+      />
       <span className="font-medium">{row.nodeName ?? entry?.label ?? row.nodeId}</span>
       {entry && entry.label !== row.nodeName && (
         <span className="text-muted-foreground text-xs">{entry.label}</span>

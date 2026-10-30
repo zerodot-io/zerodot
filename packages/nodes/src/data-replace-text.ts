@@ -31,7 +31,7 @@ export default defineNode({
   label: "Replace Text",
   description: "Find and replace text in a field",
   category: "data",
-  icon: "Replace",
+  icon: "ArrowDataTransferHorizontalIcon",
   config: z
     .object({
       // Path of the text field, for example "user.name". Empty means the input is the text.

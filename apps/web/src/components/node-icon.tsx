@@ -1,106 +1,129 @@
 // SPDX-License-Identifier: AGPL-3.0-only
+
+import {
+  Alert02Icon,
+  ArrowDataTransferHorizontalIcon,
+  ArrowUpDownIcon,
+  BubbleChatIcon,
+  Calendar01Icon,
+  Calendar03Icon,
+  CheckListIcon,
+  CircleIcon,
+  ComputerTerminal01Icon,
+  CopyXIcon,
+  CreditCardIcon,
+  Cursor01Icon,
+  Database01Icon,
+  Delete02Icon,
+  File01Icon,
+  FileEditIcon,
+  FileExportIcon,
+  FileImportIcon,
+  FileScriptIcon,
+  FileSearchIcon,
+  FileZipIcon,
+  FilterIcon,
+  Folder02Icon,
+  FolderOpenIcon,
+  GitBranchIcon,
+  GitForkIcon,
+  GitMergeIcon,
+  Globe02Icon,
+  HardDriveIcon,
+  Image01Icon,
+  Key01Icon,
+  ListViewIcon,
+  Mail01Icon,
+  MailReply01Icon,
+  Message01Icon,
+  PackageIcon,
+  PencilEdit01Icon,
+  PlugSocketIcon,
+  RefreshIcon,
+  RepeatIcon,
+  Robot01Icon,
+  RssIcon,
+  Search01Icon,
+  SentIcon,
+  SigmaIcon,
+  SignpostIcon,
+  SourceCodeIcon,
+  SparklesIcon,
+  StopCircleIcon,
+  Table01Icon,
+  TableIcon,
+  TextIcon,
+  TextIndentLessIcon,
+  Timer02Icon,
+  Video01Icon,
+  WebhookIcon,
+  WorkflowSquare10Icon,
+  Xls01Icon,
+} from "@hugeicons/core-free-icons";
+import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import type { ItemIcon } from "@zerodot/engine";
 import { cn } from "@zerodot/ui";
-import {
-  ArrowUpDown,
-  CalendarClock,
-  CalendarDays,
-  Circle,
-  Code,
-  Combine,
-  CopyX,
-  Database,
-  FileArchive,
-  FileCode,
-  FileInput,
-  FileOutput,
-  FilePen,
-  FileSearch,
-  Filter,
-  FolderOpen,
-  GitBranch,
-  Globe,
-  HardDrive,
-  Image,
-  KeyRound,
-  ListEnd,
-  ListPlus,
-  type LucideIcon,
-  Mail,
-  Merge,
-  MousePointerClick,
-  OctagonX,
-  Package,
-  PenLine,
-  Plug,
-  RefreshCw,
-  Repeat,
-  Replace,
-  Reply,
-  Rss,
-  Search,
-  Send,
-  Sigma,
-  Signpost,
-  Split,
-  TableProperties,
-  Terminal,
-  TextCursorInput,
-  Timer,
-  Trash2,
-  TriangleAlert,
-  Webhook,
-} from "lucide-react";
 
 // Add an icon here when a node uses a new one. Importing the whole set would make the bundle big.
-const ICONS: Record<string, LucideIcon> = {
-  Package,
-  Mail,
-  Database,
-  ArrowUpDown,
-  CalendarClock,
-  CalendarDays,
-  Merge,
-  Combine,
-  CopyX,
-  Filter,
-  KeyRound,
-  ListEnd,
-  Sigma,
-  TextCursorInput,
-  Code,
-  Circle,
-  FilePen,
-  FileArchive,
-  FileCode,
-  FileInput,
-  FileOutput,
-  FileSearch,
-  OctagonX,
-  Rss,
-  ListPlus,
-  PenLine,
-  Plug,
-  RefreshCw,
-  Repeat,
-  Reply,
-  Replace,
-  Search,
-  Send,
-  Signpost,
-  Split,
-  TableProperties,
-  Trash2,
-  Timer,
-  GitBranch,
-  Globe,
-  HardDrive,
-  FolderOpen,
-  Image,
-  Terminal,
-  MousePointerClick,
-  TriangleAlert,
-  Webhook,
+const ICONS: Record<string, IconSvgElement> = {
+  Alert02Icon,
+  ArrowDataTransferHorizontalIcon,
+  ArrowUpDownIcon,
+  BubbleChatIcon,
+  Calendar01Icon,
+  Calendar03Icon,
+  CheckListIcon,
+  CircleIcon,
+  ComputerTerminal01Icon,
+  CopyXIcon,
+  CreditCardIcon,
+  Cursor01Icon,
+  Database01Icon,
+  Delete02Icon,
+  File01Icon,
+  FileEditIcon,
+  FileExportIcon,
+  FileImportIcon,
+  FileScriptIcon,
+  FileSearchIcon,
+  FileZipIcon,
+  FilterIcon,
+  Folder02Icon,
+  FolderOpenIcon,
+  GitBranchIcon,
+  GitForkIcon,
+  GitMergeIcon,
+  Globe02Icon,
+  HardDriveIcon,
+  Image01Icon,
+  Key01Icon,
+  ListViewIcon,
+  Mail01Icon,
+  MailReply01Icon,
+  Message01Icon,
+  PackageIcon,
+  PencilEdit01Icon,
+  PlugSocketIcon,
+  RefreshIcon,
+  RepeatIcon,
+  Robot01Icon,
+  RssIcon,
+  Search01Icon,
+  SentIcon,
+  SigmaIcon,
+  SignpostIcon,
+  SourceCodeIcon,
+  SparklesIcon,
+  StopCircleIcon,
+  Table01Icon,
+  TableIcon,
+  TextIcon,
+  TextIndentLessIcon,
+  Timer02Icon,
+  Video01Icon,
+  WebhookIcon,
+  WorkflowSquare10Icon,
+  Xls01Icon,
 };
 
 const CATEGORY_COLOR: Record<string, string> = {
@@ -139,7 +162,7 @@ export function NodeIcon({
   variant?: "tile" | "chip" | "inline";
   className?: string;
 }) {
-  const Icon = ICONS[name] ?? Circle;
+  const Icon = ICONS[name] ?? CircleIcon;
   if (src) {
     return (
       <img
@@ -157,11 +180,19 @@ export function NodeIcon({
     );
   }
   if (variant === "inline") {
-    return <Icon aria-hidden className={cn("size-4 shrink-0", className)} strokeWidth={1.75} />;
+    return (
+      <HugeiconsIcon
+        icon={Icon}
+        aria-hidden
+        className={cn("size-4 shrink-0", className)}
+        strokeWidth={1.75}
+      />
+    );
   }
   if (variant === "tile") {
     return (
-      <Icon
+      <HugeiconsIcon
+        icon={Icon}
         aria-hidden
         className={cn("size-6", category && CATEGORY_COLOR[category], className)}
         strokeWidth={1.5}
@@ -177,7 +208,7 @@ export function NodeIcon({
         className,
       )}
     >
-      <Icon className="size-3.5" strokeWidth={1.75} />
+      <HugeiconsIcon icon={Icon} className="size-3.5" strokeWidth={1.75} />
     </span>
   );
 }

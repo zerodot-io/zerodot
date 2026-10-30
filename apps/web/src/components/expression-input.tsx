@@ -1,4 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
+
+import { ArrowExpand01Icon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { credentialRefsUsed, resolveTemplate } from "@zerodot/engine";
 import {
   Button,
@@ -10,7 +13,6 @@ import {
   Input,
   Textarea,
 } from "@zerodot/ui";
-import { Maximize2 } from "lucide-react";
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { helpersFor } from "../lib/expression-helpers";
 
@@ -448,7 +450,7 @@ export function ExpressionInput({
               multiline ? "bottom-1.5" : "top-1/2 -translate-y-1/2",
             )}
           >
-            <Maximize2 className="size-2.5" />
+            <HugeiconsIcon icon={ArrowExpand01Icon} className="size-2.5" />
           </Button>
         )}
       </div>

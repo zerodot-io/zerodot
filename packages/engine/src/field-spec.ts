@@ -6,7 +6,7 @@ import type { FieldCondition } from "./show-when";
  * `iconUrl` when it is set, and `icon` if not. Add it to other labelled items with `& ItemIcon`.
  */
 export type ItemIcon = {
-  /** Name of a Lucide icon, in PascalCase, for example "Globe". */
+  /** Name of a Hugeicons icon, for example "Globe02Icon". */
   icon?: string;
   /** Image as a data URL. It replaces `icon`. */
   iconUrl?: string;

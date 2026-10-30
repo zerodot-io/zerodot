@@ -8,7 +8,7 @@ export default defineNode({
   label: "Remove Duplicates",
   description: "Delete items with matching field values",
   category: "data",
-  icon: "CopyX",
+  icon: "CopyXIcon",
   config: z.object({
     list: listField,
     // Paths of the fields to compare. Empty: compare the whole item.

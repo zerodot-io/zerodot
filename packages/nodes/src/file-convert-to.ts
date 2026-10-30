@@ -10,7 +10,7 @@ export default defineNode({
   label: "Convert to File",
   description: "Make a file from data: CSV, JSON, or text",
   category: "data",
-  icon: "FileOutput",
+  icon: "FileExportIcon",
   config: z.object({
     format: z
       .enum(["csv", "json", "text"])

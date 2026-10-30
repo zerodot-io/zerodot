@@ -9,7 +9,7 @@ export default defineNode({
   description: "Read one row from a table by ID",
   category: "data",
   app: "Tables",
-  icon: "Search",
+  icon: "Search01Icon",
   config: z.object({
     table: tableRef,
     by: z.string().min(1).default("id").meta({

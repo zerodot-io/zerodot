@@ -12,14 +12,14 @@ zerodot checks the range before it runs any package code. See [nodes](https://gi
 
 ## Option icons
 
-An option of a select can show an icon. Both fields are optional. `iconUrl` (a data URL, see `fileIcon`) wins over `icon` (a Lucide name in PascalCase).
+An option of a select can show an icon. Both fields are optional. `iconUrl` (a data URL, see `fileIcon`) wins over `icon` (a Hugeicons name, for example `Globe02Icon`).
 
 ```ts
 // A nested field (FieldSpec)
-options: [{ value: "get", label: "Get", hint: "Read a row", icon: "Download" }];
+options: [{ value: "get", label: "Get", hint: "Read a row", icon: "Download01Icon" }];
 
 // A select in the config schema, by value, like `hints`
-z.enum(["get", "put"]).meta({ icons: { get: { icon: "Download" }, put: { iconUrl } } });
+z.enum(["get", "put"]).meta({ icons: { get: { icon: "Download01Icon" }, put: { iconUrl } } });
 ```
 
 The type is `ItemIcon`: `{ icon?: string; iconUrl?: string }`.

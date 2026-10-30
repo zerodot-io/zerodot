@@ -16,7 +16,7 @@ export default defineNode({
     { label: "Make a random string", config: { action: "randomString" } },
     { label: "Make a random UUID", config: { action: "uuid" } },
   ],
-  icon: "KeyRound",
+  icon: "Key01Icon",
   config: z.object({
     action: z
       .enum(["hash", "hmac", "randomString", "uuid"])

@@ -5,10 +5,11 @@ import { credentialTypeCatalog } from "@zerodot/nodes";
 import { Button, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@zerodot/ui";
 import { useState } from "react";
 import { CredentialDialog, type SavedCredential } from "../components/credential-dialog";
+import { MissingCredentialDialog, packageForType } from "../components/missing-credential-dialog";
 import { NodeIcon } from "../components/node-icon";
 import { addServerCatalog } from "../lib/flow";
 import { formatTime } from "../lib/format";
-import { getExtraCatalogFn } from "../server/fns";
+import { credentialPackagesFn, getExtraCatalogFn } from "../server/fns";
 import { credentialUsageFn, deleteCredentialFn, listCredentialsFn } from "../server/settings-fns";
 
 export const Route = createFileRoute("/p/$projectSlug/credentials")({
@@ -19,7 +20,13 @@ export const Route = createFileRoute("/p/$projectSlug/credentials")({
       getExtraCatalogFn(),
     ]);
     addServerCatalog(extra);
-    return { credentials, extra };
+    // Types that no installed package gives. The page asks to install their packages.
+    const missing = [...new Set(credentials.map((c) => c.type))].filter((type) => !entryOf(type));
+    const needed =
+      missing.length > 0
+        ? await credentialPackagesFn({ data: { types: missing } }).catch(() => null)
+        : null;
+    return { credentials, extra, needed };
   },
   validateSearch: (search: Record<string, unknown>) => ({
     oauth2: search.oauth2 === "connected" || search.oauth2 === "error" ? search.oauth2 : undefined,
@@ -38,7 +45,7 @@ function statusOf(c: { type: string; status: string; connected: boolean }): stri
 }
 
 function Credentials() {
-  const { credentials, extra } = Route.useLoaderData();
+  const { credentials, extra, needed } = Route.useLoaderData();
   // The loader runs on the server for a full page load. The browser gets the extra nodes here.
   addServerCatalog(extra);
   const { projectSlug } = Route.useParams();
@@ -46,6 +53,7 @@ function Credentials() {
   const router = useRouter();
   const canEdit = project.role.split(",").some((r) => r === "owner" || r === "admin");
   const [editing, setEditing] = useState<SavedCredential | "new" | null>(null);
+  const [installing, setInstalling] = useState<string | null>(null);
   const search = Route.useSearch();
   const [message, setMessage] = useState<string | null>(
     search.oauth2 === "error" ? (search.message ?? "The connection failed.") : null,
@@ -102,20 +110,29 @@ function Credentials() {
                 <TableCell className="text-muted-foreground">
                   <span className="flex items-center gap-2">
                     <NodeIcon
-                      name={entryOf(c.type)?.icon ?? "KeyRound"}
+                      name={entryOf(c.type)?.icon ?? "Key01Icon"}
                       src={entryOf(c.type)?.iconUrl}
                     />
-                    {entryOf(c.type)?.label ?? c.type}
+                    {entryOf(c.type)?.label ?? packageForType(needed, c.type)?.label ?? c.type}
                   </span>
                 </TableCell>
-                <TableCell className="text-muted-foreground">{statusOf(c)}</TableCell>
+                <TableCell className="text-muted-foreground">
+                  {entryOf(c.type) ? statusOf(c) : "Not installed"}
+                </TableCell>
                 <TableCell className="text-muted-foreground">{formatTime(c.updatedAt)}</TableCell>
                 <TableCell className="text-right">
+                  {!entryOf(c.type) && (
+                    <Button variant="ghost" onClick={() => setInstalling(c.type)}>
+                      Install
+                    </Button>
+                  )}
                   {canEdit && (
                     <>
-                      <Button variant="ghost" onClick={() => setEditing(c)}>
-                        Edit
-                      </Button>
+                      {entryOf(c.type) && (
+                        <Button variant="ghost" onClick={() => setEditing(c)}>
+                          Edit
+                        </Button>
+                      )}
                       <Button variant="ghost" onClick={() => remove(c)}>
                         Delete
                       </Button>
@@ -136,6 +153,17 @@ function Credentials() {
           onOpenChange={(open) => !open && setEditing(null)}
           onSaved={() => void router.invalidate()}
           onDeleted={() => void router.invalidate()}
+        />
+      )}
+      {installing && (
+        <MissingCredentialDialog
+          type={installing}
+          needed={needed}
+          onClose={() => setInstalling(null)}
+          onInstalled={() => {
+            setInstalling(null);
+            void router.invalidate();
+          }}
         />
       )}
     </main>

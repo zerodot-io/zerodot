@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import { ArrowDown01Icon, Cancel01Icon, PlusSignIcon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { type FieldSpec, type ItemIcon, isVisible, type ShowRules } from "@zerodot/engine";
 import {
   Button,
@@ -18,7 +20,6 @@ import {
   SelectValue,
   Switch,
 } from "@zerodot/ui";
-import { ChevronDown, Plus, X } from "lucide-react";
 import { Fragment, useEffect, useState } from "react";
 import { columnOptions, prefillRow } from "../lib/table-prefill";
 import { CodeEditor } from "./code-editor";
@@ -353,7 +354,8 @@ export function SchemaForm({
               >
                 <ItemIconView icon={prop.icons?.[name]} />
                 {prop.labels?.[name] ?? name}
-                <X
+                <HugeiconsIcon
+                  icon={Cancel01Icon}
                   className="size-3"
                   onClick={(event) => {
                     event.stopPropagation();
@@ -362,7 +364,10 @@ export function SchemaForm({
                 />
               </span>
             ))}
-            <ChevronDown className="ml-auto size-4 text-muted-foreground" />
+            <HugeiconsIcon
+              icon={ArrowDown01Icon}
+              className="ml-auto size-4 text-muted-foreground"
+            />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="max-h-80 w-(--anchor-width) min-w-72">
             {options.map((name) => (
@@ -563,7 +568,7 @@ export function SchemaForm({
               onClick={onRemove}
               className="text-muted-foreground transition-colors hover:text-foreground"
             >
-              <X className="size-4" />
+              <HugeiconsIcon icon={Cancel01Icon} className="size-4" />
             </button>
           )}
         </div>
@@ -604,7 +609,7 @@ export function SchemaForm({
           {available.length > 0 && (
             <DropdownMenu>
               <DropdownMenuTrigger render={<Button variant="outline" className="w-fit" />}>
-                <Plus className="size-4" />
+                <HugeiconsIcon icon={PlusSignIcon} className="size-4" />
                 Add option
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start">

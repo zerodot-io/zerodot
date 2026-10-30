@@ -7,7 +7,7 @@ export default defineNode({
   label: "If",
   description: "Split items into true and false paths",
   category: "logic",
-  icon: "GitBranch",
+  icon: "GitBranchIcon",
   config: z.object({
     // Usually an expression, for example {{ $input.status == 200 }}.
     condition: z.unknown().meta({ ui: "condition" }),
