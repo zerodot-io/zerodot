@@ -41,6 +41,13 @@ export const allowedHosts = (env: Record<string, string | undefined> = process.e
     .split(",")
     .map((host) => host.trim().toLowerCase())
     .filter((host) => host !== "");
+
+/**
+ * True only when `ZERODOT_COMMUNITY_NODES_AS_TOOLS=true`. Off by default: as a tool, a community
+ * node runs with values that a model chose.
+ */
+export const communityTools = (env: Record<string, string | undefined> = process.env): boolean =>
+  (env.ZERODOT_COMMUNITY_NODES_AS_TOOLS ?? "").trim().toLowerCase() === "true";
 const LOAD_TIMEOUT_MS = 30_000;
 
 type NodeManifest = {
@@ -341,7 +348,8 @@ function nodeFrom(host: PackageHost, manifest: NodeManifest): NodeDefinition {
     credentialTypes: manifest.credentialTypes,
     credentialRules: manifest.credentialRules,
     ports: manifest.ports,
-    usableAsTool: manifest.usableAsTool,
+    // False, not undefined: an integration node is a tool by default.
+    usableAsTool: communityTools() ? manifest.usableAsTool : false,
     join: manifest.join || undefined,
     stateful: manifest.stateful || undefined,
     rawConfigKeys: manifest.rawConfigKeys,

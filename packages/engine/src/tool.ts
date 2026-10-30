@@ -81,6 +81,33 @@ export function toolInputSchema(
   return { type: "object", properties, required: [...inputs.keys()], additionalProperties: false };
 }
 
+function isBinary(value: object): value is { data: string; mimeType: string; fileName?: string } {
+  const record = value as Record<string, unknown>;
+  return (
+    typeof record.data === "string" &&
+    typeof record.mimeType === "string" &&
+    Object.keys(record).every((key) => key === "data" || key === "mimeType" || key === "fileName")
+  );
+}
+
+/**
+ * The result of a tool as the model gets it. A model cannot read base64 file data, so each binary
+ * value becomes its type, file name, and size in bytes.
+ */
+export function withoutBinary(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(withoutBinary);
+  if (value === null || typeof value !== "object") return value;
+  if (isBinary(value)) {
+    const padding = value.data.endsWith("==") ? 2 : value.data.endsWith("=") ? 1 : 0;
+    return {
+      mimeType: value.mimeType,
+      ...(value.fileName !== undefined ? { fileName: value.fileName } : {}),
+      size: Math.floor((value.data.length * 3) / 4) - padding,
+    };
+  }
+  return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, withoutBinary(item)]));
+}
+
 /** A tool name from a node name: letters, digits, _ and -, at most 64. Unique in `used`. */
 export function toolName(nodeName: string, used: Set<string>): string {
   const base =

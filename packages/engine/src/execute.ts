@@ -31,7 +31,7 @@ import {
 import type { CodeLog, SandboxClient } from "./sandbox";
 import { type SupplyCall, type SupplyUseStatus, trackUse } from "./supply-use";
 import type { TableStore } from "./tables";
-import { fromAIInputs, type NodeTool, toolInputSchema, toolName } from "./tool";
+import { fromAIInputs, type NodeTool, toolInputSchema, toolName, withoutBinary } from "./tool";
 
 export type NodeStatus = "running" | "waiting" | "succeeded" | "failed" | "skipped";
 
@@ -618,7 +618,8 @@ export async function executeGraph(options: ExecuteOptions): Promise<ExecuteResu
             loopBack: false,
           });
           if (ran.waitUntil !== undefined) throw new Error("A node that waits cannot be a tool");
-          return masked.length > 0 ? maskSecrets(ran.data, masked) : ran.data;
+          const data = withoutBinary(ran.data);
+          return masked.length > 0 ? maskSecrets(data, masked) : data;
         } catch (error) {
           const { message } = scrubError(toError(error), secrets);
           throw new Error(`Tool "${name}": ${message}`);

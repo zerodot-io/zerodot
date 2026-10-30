@@ -392,9 +392,11 @@ export const TOOL_KIND = "ai.tool";
 
 /** True when a node can run as a tool (see `usableAsTool`). Supply nodes and triggers cannot. */
 export function canBeTool(
-  definition: Pick<NodeDefinition, "supplies" | "category" | "usableAsTool">,
+  definition: Pick<NodeDefinition, "supplies" | "category" | "usableAsTool" | "join">,
 ): boolean {
   if (definition.supplies !== undefined || definition.category === "trigger") return false;
+  // A join node waits for all of its parents. A tool call has one input only.
+  if (definition.join) return false;
   return definition.usableAsTool ?? definition.category === "integration";
 }
 

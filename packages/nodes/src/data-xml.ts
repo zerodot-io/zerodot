@@ -18,6 +18,7 @@ export default defineNode({
   label: "XML",
   description: "Convert between XML and JSON",
   category: "data",
+  usableAsTool: true,
   actions: [
     { label: "Convert XML to JSON", config: { mode: "xmlToJson" } },
     { label: "Convert JSON to XML", config: { mode: "jsonToXml" } },

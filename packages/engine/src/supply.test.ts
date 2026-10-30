@@ -4,7 +4,8 @@ import { describe, it } from "node:test";
 import { z } from "zod";
 import { executeGraph, type NodeEndEvent } from "./execute";
 import { type Graph, rootNodes } from "./graph";
-import { createRegistry, defineNode, defineSupplyNode } from "./node";
+import { canBeTool, createRegistry, defineNode, defineSupplyNode } from "./node";
+import { withoutBinary } from "./tool";
 
 const trigger = defineNode({
   type: "trigger.test",
@@ -240,6 +241,30 @@ describe("node as tool", () => {
       sent: { channel: "Ada", text: "Say: hi", count: 3 },
       input: { name: "Ada" },
     });
+  });
+
+  it("gives the model the type and size of binary data, not the data", () => {
+    assert.deepEqual(
+      withoutBinary({
+        ok: true,
+        binary: { file: { data: "aGVsbG8=", mimeType: "text/plain", fileName: "a.txt" } },
+        list: [{ data: "aGk=", mimeType: "text/plain" }],
+        other: { data: "x", mimeType: "y", extra: 1 },
+      }),
+      {
+        ok: true,
+        binary: { file: { mimeType: "text/plain", fileName: "a.txt", size: 5 } },
+        list: [{ mimeType: "text/plain", size: 2 }],
+        other: { data: "x", mimeType: "y", extra: 1 },
+      },
+    );
+  });
+
+  it("does not let a join node or a trigger be a tool", () => {
+    assert.equal(canBeTool({ category: "integration", join: true }), false);
+    assert.equal(canBeTool({ category: "trigger", usableAsTool: true }), false);
+    assert.equal(canBeTool({ category: "integration" }), true);
+    assert.equal(canBeTool({ category: "data" }), false);
   });
 
   it("fails a $fromAI key that is not literal text", async () => {

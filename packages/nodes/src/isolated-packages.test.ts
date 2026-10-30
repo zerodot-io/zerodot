@@ -10,6 +10,7 @@ import type { ListenContext, NodeDefinition, PollItem } from "@zerodot/engine";
 import { credentialTypeByName } from "./credentials";
 import { registry } from "./index";
 import { isLoaded, loadInstalled, packageReports, unloadPackage } from "./install-packages";
+import { communityTools } from "./isolated-packages";
 
 const NAME = "zerodot-iso-demo";
 // A file outside the nodes folder. The package must not read it.
@@ -119,6 +120,12 @@ describe("community package in its own process", () => {
     await unloadPackage(NAME, dir);
     delete process.env.ZERODOT_TEST_SECRET;
     rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("does not let a node be a tool unless the env allows it", () => {
+    assert.equal(node("iso.inspect").usableAsTool, false);
+    assert.equal(communityTools({}), false);
+    assert.equal(communityTools({ ZERODOT_COMMUNITY_NODES_AS_TOOLS: " TRUE " }), true);
   });
 
   it("runs a node with no secrets, no files, and no programs", async () => {
