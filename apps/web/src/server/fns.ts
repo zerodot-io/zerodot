@@ -819,6 +819,15 @@ export const adminResumeQueue = createServerFn({ method: "POST" })
     return resumeQueue(await adminHeaders(), data);
   });
 
+/** True when anyone can create an account. Public. The sign-in page uses it to show the sign-up link. */
+export const getSignupOpenFn = createServerFn({ method: "GET" }).handler(async () => {
+  const { getServices } = await import("@zerodot/server/services.server");
+  const { config, db } = await getServices();
+  if (config.ZERODOT_SIGNUP_DISABLED) return false;
+  const { getSignupDisabled } = await import("@zerodot/db");
+  return !(await getSignupDisabled(db));
+});
+
 export const getAdminSignup = createServerFn({ method: "GET" }).handler(async () => {
   const { getSignupSetting } = await adminServer();
   return getSignupSetting(await adminHeaders());
@@ -848,6 +857,14 @@ export const refreshNodePackagesFn = createServerFn({ method: "POST" }).handler(
   const { refreshNodePackages } = await nodePackageServer();
   return refreshNodePackages(await adminHeaders());
 });
+
+/** Packages that give credential types this instance does not have. Any signed-in person. */
+export const credentialPackagesFn = createServerFn({ method: "POST" })
+  .validator(z.object({ types: z.array(z.string().min(1).max(200)).min(1).max(100) }))
+  .handler(async ({ data }) => {
+    const { packagesForCredentialTypes } = await nodePackageServer();
+    return packagesForCredentialTypes(await adminHeaders(), data.types);
+  });
 
 /** Packages that are not installed, for the Add node list. Any signed-in person. */
 export const getAvailableNodePackagesFn = createServerFn({ method: "GET" }).handler(async () => {

@@ -1,8 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-import { Button, toast } from "@zerodot/ui";
-import { X } from "lucide-react";
-import { useState } from "react";
-import { type Block, type Inline, parseMarkdown } from "../lib/markdown";
+
+import { Cancel01Icon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Button } from "@zerodot/ui";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
+import { type Block, cleanReleaseNotes, type Inline, parseMarkdown } from "../lib/markdown";
+import { getUpdateFn } from "../server/fns";
 
 export type Release = {
   version: string;
@@ -30,7 +34,7 @@ function Inlines({ items }: { items: Inline[] }) {
           href={item.href}
           target="_blank"
           rel="noopener noreferrer"
-          className="break-all underline underline-offset-4"
+          className="text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
         >
           {item.text}
         </a>
@@ -45,14 +49,14 @@ function Blocks({ blocks }: { blocks: Block[] }) {
     const key = `${i}:${block.type}`;
     if (block.type === "heading") {
       return (
-        <p key={key} className="font-medium">
+        <p key={key} className="pt-1 text-muted-foreground">
           <Inlines items={block.inline} />
         </p>
       );
     }
     if (block.type === "list") {
       return (
-        <ul key={key} className="list-disc space-y-1 pl-4">
+        <ul key={key} className="list-disc space-y-1.5 pl-4 marker:text-muted-foreground">
           {block.items.map((item, j) => (
             // biome-ignore lint/suspicious/noArrayIndexKey: the list never changes
             <li key={j}>
@@ -81,72 +85,106 @@ function Blocks({ blocks }: { blocks: Block[] }) {
 function Message({ release }: { release: Release }) {
   const date = release.publishedAt ? new Date(release.publishedAt).toLocaleDateString() : "";
   return (
-    <article className="space-y-2 rounded-xl bg-muted p-3">
+    <article className="space-y-3 p-4">
       <header className="flex items-baseline justify-between gap-2">
         <h3 className="font-medium">v{release.version}</h3>
-        <span className="text-muted-foreground">{date}</span>
+        <a
+          href={release.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+        >
+          {date || "GitHub"}
+        </a>
       </header>
-      <div className="space-y-2 break-words">
-        <Blocks blocks={parseMarkdown(release.body)} />
+      <div className="space-y-2 text-pretty break-words">
+        <Blocks blocks={parseMarkdown(cleanReleaseNotes(release.body))} />
       </div>
-      <a
-        href={release.url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="inline-block text-muted-foreground underline underline-offset-4"
-      >
-        View on GitHub
-      </a>
     </article>
   );
 }
 
+/** How long the toast stays when nobody opens it. */
+const TOAST_MS = 15_000;
+
 /**
  * The orange dot in the bottom-right corner while a newer version exists. It stays until the
- * app is updated. A click shows a toast, and "View" opens the release notes in a small window.
+ * app is updated. A click shows a small toast, and "View" grows that toast into the release notes.
  */
 export function UpdateNotice({ releases }: { releases: Release[] }) {
-  const [open, setOpen] = useState(false);
+  const [view, setView] = useState<"closed" | "toast" | "open">("closed");
   const latest = releases[0];
+
+  useEffect(() => {
+    if (view !== "toast") return;
+    const timer = setTimeout(() => setView("closed"), TOAST_MS);
+    return () => clearTimeout(timer);
+  }, [view]);
+
   if (!latest) return null;
-  const notify = () =>
-    toast(`Update available: v${latest.version}`, {
-      duration: 15_000,
-      action: { label: "View", onClick: () => setOpen(true) },
-    });
-  return (
+  const open = view === "open";
+  // A portal to the body, so a transformed parent (the .reveal animation) cannot move the fixed
+  // dot and window away from the viewport corner. The releases load in an effect, so this runs
+  // only in the browser.
+  return createPortal(
     <>
-      {open && (
-        <section
-          aria-label="What's new"
-          className="fixed right-4 bottom-10 z-50 flex h-112 max-h-[70vh] w-96 max-w-[calc(100vw-2rem)] flex-col rounded-xl border bg-popover text-popover-foreground shadow-lg"
-        >
-          <header className="flex items-center justify-between border-b py-1 pr-1 pl-3">
-            <h2 className="font-medium">What's new</h2>
+      {/* One box for the toast and the window. The width and the body rows morph between them. */}
+      <section
+        aria-label={open ? "What's new" : "Update available"}
+        inert={view === "closed"}
+        className={`fixed right-4 bottom-10 z-50 flex max-w-[calc(100vw-2rem)] origin-bottom-right flex-col overflow-hidden rounded-xl bg-popover text-foreground shadow-elevation-xl ring-1 ring-foreground/10 transition-[width,opacity,translate,scale,visibility] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none ${open ? "w-96" : "w-72"} ${view === "closed" ? "invisible translate-y-2 scale-95 opacity-0" : ""}`}
+      >
+        <header className="flex items-center justify-between gap-2 py-1 pr-1 pl-3">
+          <h2 role="status" className="truncate font-medium">
+            {open ? "What's new" : `Update available: v${latest.version}`}
+          </h2>
+          <span className="flex shrink-0 items-center gap-1">
+            {!open && (
+              <Button size="xs" variant="outline" onClick={() => setView("open")}>
+                View
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="icon-xs"
               aria-label="Close"
-              onClick={() => setOpen(false)}
+              onClick={() => setView("closed")}
             >
-              <X />
+              <HugeiconsIcon icon={Cancel01Icon} />
             </Button>
-          </header>
-          <div className="flex-1 space-y-3 overflow-y-auto p-3">
-            {releases.map((release) => (
-              <Message key={release.version} release={release} />
-            ))}
+          </span>
+        </header>
+        <div
+          className={`grid transition-[grid-template-rows] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none ${open ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}
+        >
+          <div inert={!open} className="min-h-0 overflow-hidden">
+            <div className="max-h-[60vh] overflow-y-auto border-t border-foreground/10">
+              <Message release={latest} />
+            </div>
           </div>
-        </section>
-      )}
+        </div>
+      </section>
       <button
         type="button"
         aria-label={`Update available: v${latest.version}`}
-        onClick={notify}
+        aria-expanded={open}
+        onClick={() => setView((v) => (v === "closed" ? "toast" : "closed"))}
         className="fixed right-2 bottom-2 z-40 grid size-5 place-items-center"
       >
         <span className="update-dot size-2.5 rounded-full bg-orange-500" />
       </button>
-    </>
+    </>,
+    document.body,
   );
+}
+
+/** The update dot for pages outside the project layout. Only render it for the instance admin. */
+export function AdminUpdateNotice() {
+  const [releases, setReleases] = useState<Release[]>([]);
+  useEffect(() => {
+    getUpdateFn({ data: { current: __APP_VERSION__ } })
+      .then(({ releases }) => setReleases(releases))
+      .catch(() => undefined);
+  }, []);
+  return <UpdateNotice releases={releases} />;
 }

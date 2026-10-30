@@ -7,7 +7,7 @@ export default defineNode({
   label: "Stop and Error",
   description: "Fail the workflow with an error message",
   category: "flow",
-  icon: "OctagonX",
+  icon: "StopCircleIcon",
   config: z.object({
     errorType: z
       .enum(["message", "object"])

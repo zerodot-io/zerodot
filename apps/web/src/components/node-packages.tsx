@@ -1,4 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
+
+import { RefreshIcon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import {
   Badge,
   Button,
@@ -16,10 +19,10 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
+  Skeleton,
   Spinner,
   toast,
 } from "@zerodot/ui";
-import { RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { addServerCatalog } from "../lib/flow";
 import {
@@ -478,7 +481,7 @@ function PackageRow({
   return (
     <li className="flex items-start gap-4 px-4 py-4">
       <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted">
-        <NodeIcon name={item.icon ?? "Package"} src={item.iconUrl ?? undefined} />
+        <NodeIcon name={item.icon ?? "PackageIcon"} src={item.iconUrl ?? undefined} />
       </span>
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -598,26 +601,32 @@ function RegistryList({
   onRemove: (registry: RegistryView) => void;
 }) {
   return (
-    <section aria-label="Community registries" className="flex flex-col gap-2">
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="flex items-baseline gap-2 font-medium">
-          Community registries
-          <span className="tabular-nums text-muted-foreground">{registries.length}</span>
-        </h2>
+    <section aria-label="Community registries" className="overflow-hidden rounded-xl border">
+      <div className="flex items-start justify-between gap-4 bg-muted/50 px-4 py-3">
+        <div className="flex min-w-0 flex-col gap-1">
+          <h2 className="flex items-baseline gap-2 font-medium">
+            Community registries
+            <span className="tabular-nums text-muted-foreground">{registries.length}</span>
+          </h2>
+          <p className="max-w-prose text-pretty text-muted-foreground">
+            Other people make these packages. zerodot does not check them, and their code can do
+            anything on this server.
+          </p>
+        </div>
         {enabled && (
           <Button variant="outline" onClick={onAdd}>
             Add registry
           </Button>
         )}
       </div>
-      <p className="max-w-prose text-pretty text-muted-foreground">
-        Other people make these packages. zerodot does not check them, and their code can do
-        anything on this server.
-        {!enabled &&
-          " Community packages are off on this instance. The operator sets ZERODOT_COMMUNITY_NODES=true to turn them on."}
-      </p>
+      {!enabled && (
+        <p className="border-t px-4 py-3 text-pretty">
+          Community packages are off on this instance. To turn them on, the operator sets{" "}
+          <code className="font-mono">ZERODOT_COMMUNITY_NODES=true</code>.
+        </p>
+      )}
       {registries.length > 0 && (
-        <ul className="divide-y overflow-hidden rounded-xl border">
+        <ul className="divide-y border-t">
           {registries.map((registry) => (
             <li key={registry.url} className="flex items-start gap-4 px-4 py-3">
               <div className="flex min-w-0 flex-1 flex-col gap-1">
@@ -723,10 +732,11 @@ export function NodePackagesSection() {
 
   if (!overview) {
     return (
-      <p className="flex items-center gap-2 text-muted-foreground">
-        <Spinner />
-        Loading packages
-      </p>
+      <div role="status" aria-label="Loading packages" className="flex flex-col gap-2">
+        {[0, 1, 2, 3, 4, 5].map((i) => (
+          <Skeleton key={i} className="h-16 w-full rounded-xl" />
+        ))}
+      </div>
     );
   }
   const text = query.trim().toLowerCase();
@@ -805,7 +815,7 @@ export function NodePackagesSection() {
             disabled={refreshing}
             onClick={() => void refresh()}
           >
-            <RefreshCw className={refreshing ? "animate-spin" : undefined} />
+            <HugeiconsIcon icon={RefreshIcon} className={refreshing ? "animate-spin" : undefined} />
           </Button>
         </div>
       </div>
@@ -1026,7 +1036,7 @@ export function AvailableNodePackages({
       <span className="px-2 py-1.5 font-medium">Not installed ({found.length})</span>
       {found.map((item) => (
         <div key={item.name} className="flex items-center gap-3 rounded-lg px-2 py-2">
-          <NodeIcon name={item.icon ?? "Package"} src={item.iconUrl ?? undefined} />
+          <NodeIcon name={item.icon ?? "PackageIcon"} src={item.iconUrl ?? undefined} />
           <span className="flex min-w-0 flex-1 flex-col">
             <span>{item.label}</span>
             <span className="text-muted-foreground">

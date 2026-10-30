@@ -39,27 +39,28 @@ import {
   toast,
 } from "@zerodot/ui";
 import "@xyflow/react/dist/style.css";
-import { Link, useRouter } from "@tanstack/react-router";
 import {
-  ArrowLeft,
-  ChevronRight,
-  Download,
-  EllipsisVertical,
-  History,
-  ListChecks,
-  Loader2,
-  Maximize,
-  Minus,
-  Play,
-  Plus,
-  Rocket,
-  Settings,
-  Share2,
-  Square,
-  Trash2,
-  Workflow as WorkflowIcon,
-  Zap,
-} from "lucide-react";
+  ArrowLeft01Icon,
+  ArrowRight01Icon,
+  CheckListIcon,
+  Clock01Icon,
+  Delete02Icon,
+  Download01Icon,
+  FlashIcon,
+  FullScreenIcon,
+  Loading03Icon,
+  MinusSignIcon,
+  MoreVerticalIcon,
+  PlayIcon,
+  PlusSignIcon,
+  Rocket01Icon,
+  Settings02Icon,
+  Share08Icon,
+  StopIcon,
+  WorkflowSquare10Icon,
+} from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Link, useRouter } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   catalogByType,
@@ -1186,7 +1187,8 @@ export function Editor({
                     >
                       Workflows
                     </Link>
-                    <ChevronRight
+                    <HugeiconsIcon
+                      icon={ArrowRight01Icon}
                       aria-hidden="true"
                       className="size-3.5 text-muted-foreground/60"
                     />
@@ -1241,7 +1243,7 @@ export function Editor({
                       <DropdownMenu>
                         <Tooltip label="More" side="bottom">
                           <DropdownMenuTrigger render={<Button variant="ghost" size="icon" />}>
-                            <EllipsisVertical />
+                            <HugeiconsIcon icon={MoreVerticalIcon} />
                           </DropdownMenuTrigger>
                         </Tooltip>
                         <DropdownMenuContent align="end">
@@ -1252,7 +1254,7 @@ export function Editor({
                               setRunsOpen(true);
                             }}
                           >
-                            <ListChecks />
+                            <HugeiconsIcon icon={CheckListIcon} />
                             Runs
                           </DropdownMenuItem>
                           <DropdownMenuItem
@@ -1262,7 +1264,7 @@ export function Editor({
                               setHistoryOpen(true);
                             }}
                           >
-                            <History />
+                            <HugeiconsIcon icon={Clock01Icon} />
                             Version history
                           </DropdownMenuItem>
                           <DropdownMenuItem
@@ -1272,16 +1274,16 @@ export function Editor({
                               setSettingsOpen(true);
                             }}
                           >
-                            <Settings />
+                            <HugeiconsIcon icon={Settings02Icon} />
                             Workflow settings
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem onClick={exportFile}>
-                            <Download />
+                            <HugeiconsIcon icon={Download01Icon} />
                             Export as a file
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => setShareOpen(true)}>
-                            <Share2 />
+                            <HugeiconsIcon icon={Share08Icon} />
                             Share
                           </DropdownMenuItem>
                         </DropdownMenuContent>
@@ -1561,7 +1563,7 @@ export function Editor({
                           hasChanges ? "Make the draft the live version" : "No changes to publish"
                         }
                       >
-                        <Rocket />
+                        <HugeiconsIcon icon={Rocket01Icon} />
                         Publish
                       </Button>
                       <div className="ml-1 flex items-center gap-2">
@@ -1630,22 +1632,25 @@ export function Editor({
                               >
                                 <Tooltip label="Zoom in" side="right">
                                   <ControlButton onClick={() => flowRef.current?.zoomIn()}>
-                                    <Plus className="fill-none" />
+                                    <HugeiconsIcon icon={PlusSignIcon} className="fill-none" />
                                   </ControlButton>
                                 </Tooltip>
                                 <Tooltip label="Zoom out" side="right">
                                   <ControlButton onClick={() => flowRef.current?.zoomOut()}>
-                                    <Minus className="fill-none" />
+                                    <HugeiconsIcon icon={MinusSignIcon} className="fill-none" />
                                   </ControlButton>
                                 </Tooltip>
                                 <Tooltip label="Fit view" side="right">
                                   <ControlButton onClick={fit}>
-                                    <Maximize className="fill-none" />
+                                    <HugeiconsIcon icon={FullScreenIcon} className="fill-none" />
                                   </ControlButton>
                                 </Tooltip>
                                 <Tooltip label="Auto arrange" side="right">
                                   <ControlButton onClick={arrangeAndFit}>
-                                    <WorkflowIcon className="fill-none" />
+                                    <HugeiconsIcon
+                                      icon={WorkflowSquare10Icon}
+                                      className="fill-none"
+                                    />
                                   </ControlButton>
                                 </Tooltip>
                               </Controls>
@@ -1661,7 +1666,7 @@ export function Editor({
                         title="Add node (Tab)"
                         onClick={() => setAddOpen(true)}
                       >
-                        <Plus />
+                        <HugeiconsIcon icon={PlusSignIcon} />
                       </Button>
                       <div className="absolute bottom-6 left-1/2 z-10 flex -translate-x-1/2 flex-col items-center gap-3">
                         <div className="flex items-center rounded-full">
@@ -1684,9 +1689,9 @@ export function Editor({
                                 onClick={testRun}
                               >
                                 {runStatus === "queued" || runStatus === "running" ? (
-                                  <Loader2 className="animate-spin" />
+                                  <HugeiconsIcon icon={Loading03Icon} className="animate-spin" />
                                 ) : (
-                                  <Play />
+                                  <HugeiconsIcon icon={PlayIcon} />
                                 )}
                               </Button>
                               {(runId || Object.keys(ios).length > 0) && (
@@ -1698,7 +1703,7 @@ export function Editor({
                                   title="Clear results"
                                   onClick={clearResults}
                                 >
-                                  <Trash2 />
+                                  <HugeiconsIcon icon={Delete02Icon} />
                                 </Button>
                               )}
                             </div>
@@ -1736,7 +1741,7 @@ export function Editor({
                                   title="Stop listening"
                                   onClick={stopListening}
                                 >
-                                  <Square className="fill-current" />
+                                  <HugeiconsIcon icon={StopIcon} className="fill-current" />
                                 </Button>
                               </div>
                             </div>
@@ -1769,7 +1774,7 @@ export function Editor({
                               aria-label="Back to all nodes"
                               onClick={() => openApp(null)}
                             >
-                              <ArrowLeft />
+                              <HugeiconsIcon icon={ArrowLeft01Icon} />
                             </Button>
                             {addAppEntry && (
                               <NodeIcon
@@ -1833,7 +1838,8 @@ export function Editor({
                                 onClick={() => toggleCategory(category)}
                               >
                                 {!addApp && (
-                                  <ChevronRight
+                                  <HugeiconsIcon
+                                    icon={ArrowRight01Icon}
                                     className={cn(
                                       "size-4 text-muted-foreground transition-transform duration-150 ease-out",
                                       open && "rotate-90",
@@ -1842,10 +1848,14 @@ export function Editor({
                                 )}
                                 {category} ({rows.length})
                                 {addApp && category === "triggers" && (
-                                  <Zap className="size-3.5 fill-primary text-primary" />
+                                  <HugeiconsIcon
+                                    icon={FlashIcon}
+                                    className="size-3.5 fill-primary text-primary"
+                                  />
                                 )}
                                 {addApp && (
-                                  <ChevronRight
+                                  <HugeiconsIcon
+                                    icon={ArrowRight01Icon}
                                     className={cn(
                                       "ml-auto size-4 text-muted-foreground transition-transform duration-150 ease-out",
                                       open ? "rotate-90" : "-rotate-90",
@@ -1899,7 +1909,10 @@ export function Editor({
                                             : (row.action?.label ?? row.entry.label)}
                                           {row.kind === "node" &&
                                             row.entry.category === "trigger" && (
-                                              <Zap className="size-3.5 fill-primary text-primary" />
+                                              <HugeiconsIcon
+                                                icon={FlashIcon}
+                                                className="size-3.5 fill-primary text-primary"
+                                              />
                                             )}
                                         </span>
                                         {row.kind === "app" ? (
@@ -1923,7 +1936,10 @@ export function Editor({
                                         )}
                                       </span>
                                       {row.kind === "app" && (
-                                        <ChevronRight className="size-4 text-muted-foreground" />
+                                        <HugeiconsIcon
+                                          icon={ArrowRight01Icon}
+                                          className="size-4 text-muted-foreground"
+                                        />
                                       )}
                                     </button>
                                   );

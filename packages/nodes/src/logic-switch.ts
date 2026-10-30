@@ -17,7 +17,7 @@ export default defineNode({
   label: "Switch",
   description: "Route items to one of many outputs by rules",
   category: "logic",
-  icon: "Split",
+  icon: "GitForkIcon",
   config: z.object({
     value: z.unknown().meta({ ui: "expression" }),
     // A case matches when the text of the value is the same as the case.

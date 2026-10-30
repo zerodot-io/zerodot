@@ -488,7 +488,9 @@ export type SyncResult = { reports: NodePackageReport[]; versions: Record<string
 /**
  * Makes this process match the wanted packages: installs what is missing from the folder, then
  * loads what is not loaded. A package with no version gets the newest one that fits. One package
- * that fails does not stop the others.
+ * that fails does not stop the others. Web, API, and worker sync at the same time at start, so each
+ * install and the load hold the install lock: `npm` in one process must not change the files that
+ * another one installs or loads. The lock is taken per step, so it is never held for long.
  */
 export async function syncPackages(
   dir: string,
@@ -503,14 +505,21 @@ export async function syncPackages(
   for (const { name, version, integrity } of wanted) {
     try {
       if (!isPackageName(name)) throw new Error(`"${name}" is not a valid package name`);
-      const have = installedVersion(dir, name);
-      const sameFiles = !integrity || installedIntegrity(dir, name) === integrity;
-      if (have && (!version || version === have) && sameFiles) {
+      const current = (): string | null => {
+        const have = installedVersion(dir, name);
+        const sameFiles = !integrity || installedIntegrity(dir, name) === integrity;
+        return have && (!version || version === have) && sameFiles ? have : null;
+      };
+      const have = current();
+      if (have) {
         versions[name] = have;
       } else {
         const target = version ?? (await resolveVersionOf(name));
-        await install(dir, name, target, undefined, integrity);
-        versions[name] = installedVersion(dir, name) ?? target;
+        // Another process can install the same package while this one waits for the lock.
+        versions[name] = await withInstallLock(dir, async () => {
+          if (!current()) await install(dir, name, target, undefined, integrity);
+          return installedVersion(dir, name) ?? target;
+        });
       }
       ready.push(name);
     } catch (error) {
@@ -524,7 +533,7 @@ export async function syncPackages(
     }
   }
   for (const report of reports) lastReports.set(report.name, report);
-  reports.push(...(await loadInstalled(dir, ready)));
+  reports.push(...(await withInstallLock(dir, () => loadInstalled(dir, ready))));
   return { reports, versions };
 }
 
@@ -614,6 +623,8 @@ export type CatalogPackage = {
   /** The icon of the package as a `data:image/...` URL. Another address is dropped. */
   iconUrl?: string;
   nodes: { type: string; label: string; description?: string }[];
+  /** The credential types that the package gives. An older catalog does not have them. */
+  credentialTypes?: string[];
 };
 
 const isText = (value: unknown): value is string => typeof value === "string" && value !== "";
@@ -656,6 +667,9 @@ export function parseCatalog(
           label: isText(node.label) ? node.label : node.type,
           ...(isText(node.description) ? { description: node.description } : {}),
         })),
+      ...(Array.isArray(item.credentialTypes)
+        ? { credentialTypes: item.credentialTypes.filter(isText) }
+        : {}),
     });
   }
   return packages;

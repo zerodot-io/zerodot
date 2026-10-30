@@ -9,7 +9,7 @@ export default defineNode({
   description: "Add new rows to a table",
   category: "data",
   app: "Tables",
-  icon: "ListPlus",
+  icon: "ListViewIcon",
   config: z.object({
     table: tableRef,
     // One row object, or a list of up to 1,000. Values can use expressions.

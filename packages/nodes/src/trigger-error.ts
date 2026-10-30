@@ -8,7 +8,7 @@ export default defineNode({
   label: "Error Trigger",
   description: "Start when a live run of another workflow fails",
   category: "trigger",
-  icon: "TriangleAlert",
+  icon: "Alert02Icon",
   config: z.object({}),
   defaultConfig: {},
   ports: { in: [], out: ["out"] },

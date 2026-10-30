@@ -1,4 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
+
+import { Delete02Icon, MoreVerticalIcon, RefreshIcon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import {
   Button,
   Dialog,
@@ -22,7 +25,6 @@ import {
   Switch,
   toast,
 } from "@zerodot/ui";
-import { EllipsisVertical, RefreshCw, Trash2 } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
 import { formatAge } from "../lib/admin-format";
 import {
@@ -192,17 +194,17 @@ export function ShareDialog({
                       disabled={busy !== null}
                       className="grid size-7 place-items-center rounded-md text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground"
                     >
-                      <EllipsisVertical className="size-4" />
+                      <HugeiconsIcon icon={MoreVerticalIcon} className="size-4" />
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                       {!share.usedAt && (
                         <DropdownMenuItem onClick={() => onRefresh(share)}>
-                          <RefreshCw />
+                          <HugeiconsIcon icon={RefreshIcon} />
                           Update copy
                         </DropdownMenuItem>
                       )}
                       <DropdownMenuItem variant="destructive" onClick={() => onDelete(share)}>
-                        <Trash2 />
+                        <HugeiconsIcon icon={Delete02Icon} />
                         Delete link
                       </DropdownMenuItem>
                     </DropdownMenuContent>

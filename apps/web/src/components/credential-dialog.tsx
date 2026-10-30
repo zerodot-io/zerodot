@@ -1,4 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
+
+import {
+  Alert02Icon,
+  CheckmarkCircle02Icon,
+  Delete02Icon,
+  Loading03Icon,
+} from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { credentialTypeCatalog } from "@zerodot/nodes";
 import {
   Button,
@@ -16,7 +24,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@zerodot/ui";
-import { AlertTriangle, CheckCircle2, Loader2, Trash2 } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { catalogByType } from "../lib/flow";
 import {
@@ -314,11 +321,11 @@ export function CredentialDialog({
         )}
       >
         {test === "testing" ? (
-          <Loader2 className="size-3 animate-spin" />
+          <HugeiconsIcon icon={Loading03Icon} className="size-3 animate-spin" />
         ) : test === "ok" ? (
-          <CheckCircle2 className="size-3" />
+          <HugeiconsIcon icon={CheckmarkCircle02Icon} className="size-3" />
         ) : (
-          <AlertTriangle className="size-3" />
+          <HugeiconsIcon icon={Alert02Icon} className="size-3" />
         )}
         {test === "testing" ? "Checking" : test === "ok" ? "Working" : "Failed"}
       </button>
@@ -354,7 +361,7 @@ export function CredentialDialog({
                     className="flex w-full items-center gap-2 rounded px-2 py-2 text-left hover:bg-muted"
                     onClick={() => setType(entry.type)}
                   >
-                    <NodeIcon name={entry.icon ?? "KeyRound"} src={entry.iconUrl} />
+                    <NodeIcon name={entry.icon ?? "Key01Icon"} src={entry.iconUrl} />
                     <span className="flex-1">{entry.label}</span>
                     {entry.apps.length > 0 && (
                       <span className="max-w-40 truncate text-muted-foreground">
@@ -377,7 +384,7 @@ export function CredentialDialog({
       <DialogContent className="max-w-lg gap-0 p-0" initialFocus={false}>
         <form onSubmit={onSubmit} className="flex min-w-0 flex-col">
           <DialogHeader className="flex-row items-center gap-3 px-5 pt-5 pr-12">
-            <NodeIcon name={definition?.icon ?? "KeyRound"} src={definition?.iconUrl} />
+            <NodeIcon name={definition?.icon ?? "Key01Icon"} src={definition?.iconUrl} />
             <DialogTitle className="sr-only">{definition?.label}</DialogTitle>
             <Input
               aria-label="Credential name"
@@ -431,7 +438,7 @@ export function CredentialDialog({
             </p>
             {savedId && onDeleted && (
               <Button type="button" variant="ghost" onClick={() => void remove()}>
-                <Trash2 />
+                <HugeiconsIcon icon={Delete02Icon} />
                 Delete
               </Button>
             )}

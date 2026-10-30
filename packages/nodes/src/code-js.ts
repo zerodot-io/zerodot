@@ -11,7 +11,7 @@ export default defineNode({
   label: "Code",
   description: "Run JavaScript to transform data",
   category: "code",
-  icon: "Code",
+  icon: "SourceCodeIcon",
   config: z.object({
     // The body of an async function. Use `return`. The editor shows this field as code.
     code: z.string().min(1).max(SANDBOX_MAX_CODE_CHARS).meta({ ui: "code" }),

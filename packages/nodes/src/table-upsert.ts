@@ -9,7 +9,7 @@ export default defineNode({
   description: "Update a row if it exists, else insert it",
   category: "data",
   app: "Tables",
-  icon: "Replace",
+  icon: "ArrowDataTransferHorizontalIcon",
   config: z.object({
     table: tableRef,
     // The key of a unique column. The value comes from `row`.

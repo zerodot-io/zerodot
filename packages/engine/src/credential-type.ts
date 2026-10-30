@@ -31,7 +31,7 @@ export type CredentialTypeDefinition = {
    * `scope` and `authentication` from the credential data.
    */
   oauth2?: OAuth2Config | OAuth2Resolver | "custom";
-  /** Lucide icon name. */
+  /** Hugeicons icon name, for example "Key01Icon". */
   icon?: string;
   /** Image URL. It replaces `icon`. */
   iconUrl?: string;

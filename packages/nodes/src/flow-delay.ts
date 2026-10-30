@@ -38,7 +38,7 @@ export default defineNode({
   label: "Wait",
   description: "Pause the workflow for a set time, or until a URL gets a call",
   category: "flow",
-  icon: "Timer",
+  icon: "Timer02Icon",
   config: z
     .object({
       mode: z

@@ -57,7 +57,7 @@ export default defineNode({
   label: "RSS Read",
   description: "Read the items of an RSS or Atom feed",
   category: "core",
-  icon: "Rss",
+  icon: "RssIcon",
   config: z.object({
     url: z.url().meta({ title: "URL" }),
     limit: z

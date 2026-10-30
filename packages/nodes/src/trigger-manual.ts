@@ -7,7 +7,7 @@ export default defineNode({
   label: "Manual",
   description: "Start the workflow by hand with a button",
   category: "trigger",
-  icon: "MousePointerClick",
+  icon: "Cursor01Icon",
   config: z.object({}),
   defaultConfig: {},
   ports: { in: [], out: ["out"] },

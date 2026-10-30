@@ -8,7 +8,7 @@ export default defineNode({
   label: "Schedule",
   description: "Start the workflow on a time schedule",
   category: "trigger",
-  icon: "CalendarClock",
+  icon: "Calendar03Icon",
   config: z
     .object({
       expression: z.string().min(1).meta({ ui: "cron", title: "Schedule" }),

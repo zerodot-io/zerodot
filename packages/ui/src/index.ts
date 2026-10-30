@@ -23,6 +23,7 @@ export * from "./components/ui/item";
 export * from "./components/ui/kbd";
 export * from "./components/ui/select";
 export * from "./components/ui/sheet";
+export * from "./components/ui/skeleton";
 export * from "./components/ui/sonner";
 export * from "./components/ui/spinner";
 export * from "./components/ui/switch";

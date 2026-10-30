@@ -8,7 +8,7 @@ export default defineNode({
   label: "HTTP Request",
   description: "Call any HTTP API and get the response",
   category: "core",
-  icon: "Globe",
+  icon: "Globe02Icon",
   config: z.object({
     method: z.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]).meta({
       title: "Method",

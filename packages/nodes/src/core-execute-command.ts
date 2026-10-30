@@ -10,7 +10,7 @@ export default defineNode({
   label: "Execute Command",
   description: "Run a shell command on the machine of the worker",
   category: "core",
-  icon: "Terminal",
+  icon: "ComputerTerminal01Icon",
   config: z.object({
     command: z.string().min(1).meta({
       title: "Command",

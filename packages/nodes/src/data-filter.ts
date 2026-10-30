@@ -8,7 +8,7 @@ export default defineNode({
   label: "Filter",
   description: "Keep only items matching a condition",
   category: "data",
-  icon: "Filter",
+  icon: "FilterIcon",
   config: z.object({
     list: listField,
     // Runs once for each item. Read the item with $item and its position with $index.

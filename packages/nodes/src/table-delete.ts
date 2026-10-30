@@ -9,7 +9,7 @@ export default defineNode({
   description: "Remove rows from a table that match a filter",
   category: "data",
   app: "Tables",
-  icon: "Trash2",
+  icon: "Delete02Icon",
   config: z.object({
     table: tableRef,
     filter: z.unknown().optional().meta({ ui: "filter" }),

@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
+import { passkey } from "@better-auth/passkey";
 import { type Db, firstOrganizationId, hasPendingInvitation, schema } from "@zerodot/db";
 import { type BetterAuthPlugin, betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
@@ -37,6 +38,8 @@ export function createAuth({
     trustedOrigins,
     database: drizzleAdapter(db, { provider: "pg", schema }),
     emailAndPassword: { enabled: true, requireEmailVerification: false },
+    // Emails are not verified, so a change takes effect at once.
+    user: { changeEmail: { enabled: true, updateEmailWithoutVerification: true } },
     databaseHooks: {
       user: {
         create: {
@@ -67,7 +70,12 @@ export function createAuth({
         },
       },
     },
-    plugins: [organization(), ...extraPlugins],
+    plugins: [
+      organization(),
+      // Only a signed-in user can add a passkey, so passkeys do not go around the signup switch.
+      passkey({ rpID: new URL(baseURL).hostname, rpName: "zerodot", origin: baseURL }),
+      ...extraPlugins,
+    ],
   });
   return auth;
 }

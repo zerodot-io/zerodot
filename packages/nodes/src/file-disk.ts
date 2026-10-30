@@ -13,7 +13,7 @@ export default defineNode({
     { label: "Read a file from disk", config: { operation: "read" } },
     { label: "Write a file to disk", config: { operation: "write" } },
   ],
-  icon: "HardDrive",
+  icon: "HardDriveIcon",
   config: z.object({
     operation: z
       .enum(["read", "write"])

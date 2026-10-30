@@ -227,7 +227,7 @@ export type NodeDefinition<Schema extends z.ZodType = z.ZodType> = {
   actions?: { label: string; config: Record<string, unknown> }[];
   /** App the node belongs to, for example "Postgres". The Add node list shows one row for the app. */
   app?: string;
-  /** Name of a Lucide icon, in PascalCase, for example "Globe". The editor shows it. */
+  /** Name of a Hugeicons icon, for example "Globe02Icon". The editor shows it. */
   icon: string;
   /** Image of the node, as a data URL. The editor shows it in place of `icon`. */
   iconUrl?: string;

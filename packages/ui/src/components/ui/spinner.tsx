@@ -86,14 +86,14 @@ export { Spinner, spinnerVariants };
 // - CVA-based `spinnerVariants`
 // - Size variants (`sm`, `default`, `lg`, `xl`) — sm: size-3, default: size-3.5, lg: size-4, xl: size-5
 // - `track` boolean prop — when true, renders a static background ring at 25% opacity
-// - Custom inline SVG with conic-gradient arc (replaces lucide `Loader2Icon`)
+// - Custom inline SVG with conic-gradient arc (replaces the old loader icon)
 // - `currentColor` support — both arc and track inherit text color (e.g. `className="text-blue-500"`)
 // - `data-slot="spinner"` attribute
 // - Exported `spinnerVariants`
 //
 // ### Changed
-// - Replaced `Loader2Icon` from lucide with inline SVG using conic-gradient inside `foreignObject`
+// - Replaced the loader icon with inline SVG using conic-gradient inside `foreignObject`
 // - Default size changed from `size-4` to `size-3.5` (via `default` variant)
 //
 // ### Removed
-// - `lucide-react` dependency
+// - Icon library dependency

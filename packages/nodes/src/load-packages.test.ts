@@ -24,7 +24,7 @@ const node = (type: string, extra = {}) => ({
   type,
   label: type,
   category: "integration",
-  icon: "Plug",
+  icon: "PlugSocketIcon",
   config: z.object({}),
   defaultConfig: {},
   ports: { in: ["in"], out: ["out"] },

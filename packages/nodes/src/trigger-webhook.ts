@@ -131,7 +131,7 @@ export default defineNode({
   label: "Webhook",
   description: "Start the workflow when an HTTP request arrives",
   category: "trigger",
-  icon: "Webhook",
+  icon: "WebhookIcon",
   config: webhookConfig,
   defaultConfig: { httpMethod: "POST", authentication: "none", responseMode: "immediate" },
   credentialTypes: ["http.basic", "http.header", "jwt.auth"],

@@ -20,7 +20,7 @@ export default defineNode({
   label: "HTTP Poll",
   description: "Check a JSON API on a timer and start a run for each new item",
   category: "trigger",
-  icon: "RefreshCw",
+  icon: "RefreshIcon",
   config: z.object({
     url: z.url(),
     intervalSeconds: z.number().int().min(15).max(86_400).default(300).meta({

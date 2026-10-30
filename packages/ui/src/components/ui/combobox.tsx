@@ -1,5 +1,6 @@
 import { Combobox as ComboboxPrimitive } from "@base-ui/react/combobox";
-import { ChevronDownIcon } from "lucide-react";
+import { ArrowDown01Icon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { cn } from "../../lib/utils";
 
 export type ComboboxOption = { value: string; label: string };
@@ -48,7 +49,7 @@ function Combobox({
           aria-label="Show options"
           className="absolute inset-y-0 right-0 flex w-8 items-center justify-center text-muted-foreground"
         >
-          <ChevronDownIcon className="size-4" />
+          <HugeiconsIcon icon={ArrowDown01Icon} className="size-4" />
         </ComboboxPrimitive.Trigger>
       </div>
       <ComboboxPrimitive.Portal>

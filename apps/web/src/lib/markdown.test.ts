@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { parseInline, parseMarkdown, safeHref } from "./markdown";
+import { cleanReleaseNotes, parseInline, parseMarkdown, safeHref } from "./markdown";
 
 describe("safeHref", () => {
   it("allows http and https only", () => {
@@ -56,5 +56,26 @@ describe("parseMarkdown", () => {
     );
     assert.equal(blocks[1]?.type === "list" && blocks[1].items.length, 2);
     assert.equal(blocks[3]?.type === "code" && blocks[3].text, "x < y");
+  });
+});
+
+describe("cleanReleaseNotes", () => {
+  it("keeps only the change list of GitHub generated notes", () => {
+    const body = [
+      "<!-- Release notes generated using configuration in .github/release.yml -->",
+      "",
+      "## What's Changed",
+      "### Other changes",
+      "* fix: release handles by @mcnaveen in https://github.com/zerodot-io/zerodot/pull/46",
+      "* chore: release 0.2.6 by @mcnaveen in https://github.com/zerodot-io/zerodot/pull/49",
+      "",
+      "**Full Changelog**: https://github.com/zerodot-io/zerodot/compare/v0.2.5...v0.2.6",
+    ].join("\n");
+    assert.equal(cleanReleaseNotes(body), "* fix: release handles");
+  });
+
+  it("keeps category headings when there are more than one", () => {
+    const body = "### Features\n* a by @x in https://e.com/pull/1\n### Fixes\n* b";
+    assert.equal(cleanReleaseNotes(body), "### Features\n* a\n### Fixes\n* b");
   });
 });

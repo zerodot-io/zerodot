@@ -1,4 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
+
+import {
+  ArrowDown01Icon,
+  ArrowRight01Icon,
+  Cancel01Icon,
+  PlusSignIcon,
+} from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { type FieldSpec, isVisible } from "@zerodot/engine";
 import {
   Button,
@@ -16,7 +24,6 @@ import {
   SelectValue,
   Switch,
 } from "@zerodot/ui";
-import { ChevronDown, ChevronRight, Plus, X } from "lucide-react";
 import { useState } from "react";
 import { ExpressionInput } from "./expression-input";
 import { ItemIconView } from "./node-icon";
@@ -266,14 +273,14 @@ export function FieldCollectionEditor({
               }}
               className="mt-0.5 text-muted-foreground transition-colors hover:text-foreground"
             >
-              <X className="size-4" />
+              <HugeiconsIcon icon={Cancel01Icon} className="size-4" />
             </button>
           </div>
         ))}
         {available.length > 0 && (
           <DropdownMenu>
             <DropdownMenuTrigger render={<Button variant="outline" className="w-fit" />}>
-              <Plus className="size-4" />
+              <HugeiconsIcon icon={PlusSignIcon} className="size-4" />
               Add option
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start">
@@ -335,9 +342,15 @@ export function FieldCollectionEditor({
                   className="flex flex-1 items-center gap-1.5 text-left font-medium"
                 >
                   {collapsed ? (
-                    <ChevronRight className="size-4 text-muted-foreground" />
+                    <HugeiconsIcon
+                      icon={ArrowRight01Icon}
+                      className="size-4 text-muted-foreground"
+                    />
                   ) : (
-                    <ChevronDown className="size-4 text-muted-foreground" />
+                    <HugeiconsIcon
+                      icon={ArrowDown01Icon}
+                      className="size-4 text-muted-foreground"
+                    />
                   )}
                   {spec.multiple ? `${g.label} ${index + 1}` : g.label}
                 </button>
@@ -352,7 +365,7 @@ export function FieldCollectionEditor({
                   }
                   className="text-muted-foreground transition-colors hover:text-foreground"
                 >
-                  <X className="size-4" />
+                  <HugeiconsIcon icon={Cancel01Icon} className="size-4" />
                 </button>
               </div>
               {!collapsed && (
@@ -380,14 +393,14 @@ export function FieldCollectionEditor({
           className="w-fit"
           onClick={() => add(addable[0]?.name ?? "", addable[0]?.fields ?? [])}
         >
-          <Plus className="size-4" />
+          <HugeiconsIcon icon={PlusSignIcon} className="size-4" />
           Add {addable[0].label}
         </Button>
       )}
       {addable.length > 1 && (
         <DropdownMenu>
           <DropdownMenuTrigger render={<Button variant="outline" className="w-fit" />}>
-            <Plus className="size-4" />
+            <HugeiconsIcon icon={PlusSignIcon} className="size-4" />
             Add {spec.label}
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
@@ -573,7 +586,7 @@ export function ConditionsEditor({
             onClick={() => commit({ conditions: conditions.filter((_, i) => i !== index) })}
             className="mt-2 text-muted-foreground transition-colors hover:text-foreground"
           >
-            <X className="size-4" />
+            <HugeiconsIcon icon={Cancel01Icon} className="size-4" />
           </button>
         </div>
       ))}
@@ -588,7 +601,7 @@ export function ConditionsEditor({
             })
           }
         >
-          <Plus className="size-4" />
+          <HugeiconsIcon icon={PlusSignIcon} className="size-4" />
           Add condition
         </Button>
         {conditions.length > 1 && (

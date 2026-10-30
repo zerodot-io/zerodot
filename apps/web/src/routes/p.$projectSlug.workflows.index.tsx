@@ -1,5 +1,18 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import {
+  Cancel01Icon,
+  Clock01Icon,
+  Copy01Icon,
+  Delete02Icon,
+  Download01Icon,
+  LinkSquare02Icon,
+  MoreVerticalIcon,
+  PlusSignIcon,
+  Share08Icon,
+  WorkflowSquare10Icon,
+} from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { createFileRoute, Link, redirect, useRouter } from "@tanstack/react-router";
 import {
   Badge,
@@ -26,18 +39,6 @@ import {
   toast,
 } from "@zerodot/ui";
 import { Bar, BarChart, BarXAxis, ChartTooltip, Grid, LineSparkline } from "@zerodot/ui/charts";
-import {
-  Copy,
-  Download,
-  EllipsisVertical,
-  ExternalLink,
-  History,
-  Plus,
-  Share2,
-  Trash2,
-  Workflow,
-  X,
-} from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { ConfirmDialog } from "../components/confirm-dialog";
 import { ImportDialog, type ImportResult } from "../components/import-dialog";
@@ -161,6 +162,7 @@ function Glance({ children }: { children: ReactNode }) {
 function Workflows() {
   const { workflows, insights } = Route.useLoaderData();
   const { projectSlug } = Route.useParams();
+  const { project } = Route.useRouteContext();
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -313,7 +315,10 @@ function Workflows() {
     <main className="mx-auto flex w-full max-w-4xl flex-col gap-6 p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-col">
-          <h1 className="text-lg font-semibold">Workflows</h1>
+          <h1 className="text-lg font-semibold">
+            <span className="text-muted-foreground">{project.name} / </span>
+            Workflows
+          </h1>
           <span className="text-muted-foreground">
             {workflows.length} total, {activeCount} active
           </span>
@@ -330,7 +335,7 @@ function Workflows() {
             Import
           </Button>
           <Button type="button" disabled={pending} onClick={() => void onCreate()}>
-            {pending ? <Spinner /> : <Plus />}
+            {pending ? <Spinner /> : <HugeiconsIcon icon={PlusSignIcon} />}
             New workflow
           </Button>
         </div>
@@ -511,7 +516,7 @@ function Workflows() {
             onClick={() => setImported(null)}
             className="absolute top-2 right-2 grid size-7 place-items-center rounded-md text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground"
           >
-            <X className="size-4" />
+            <HugeiconsIcon icon={Cancel01Icon} className="size-4" />
           </button>
           <span>
             Imported{" "}
@@ -545,14 +550,14 @@ function Workflows() {
         <Empty>
           <EmptyHeader>
             <EmptyMedia variant="icon">
-              <Workflow />
+              <HugeiconsIcon icon={WorkflowSquare10Icon} />
             </EmptyMedia>
             <EmptyTitle>No workflows yet</EmptyTitle>
             <EmptyDescription>A workflow runs steps for you when a trigger fires.</EmptyDescription>
           </EmptyHeader>
           <EmptyContent>
             <Button type="button" disabled={pending} onClick={() => void onCreate()}>
-              {pending ? <Spinner /> : <Plus />}
+              {pending ? <Spinner /> : <HugeiconsIcon icon={PlusSignIcon} />}
               New workflow
             </Button>
           </EmptyContent>
@@ -633,7 +638,7 @@ function Workflows() {
                       title="More"
                       className="grid size-7 place-items-center rounded-md text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground"
                     >
-                      <EllipsisVertical className="size-4" />
+                      <HugeiconsIcon icon={MoreVerticalIcon} className="size-4" />
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                       <DropdownMenuItem
@@ -644,7 +649,7 @@ function Workflows() {
                           })
                         }
                       >
-                        <ExternalLink />
+                        <HugeiconsIcon icon={LinkSquare02Icon} />
                         Open
                       </DropdownMenuItem>
                       <DropdownMenuItem
@@ -656,20 +661,20 @@ function Workflows() {
                           })
                         }
                       >
-                        <History />
+                        <HugeiconsIcon icon={Clock01Icon} />
                         View runs
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem onClick={() => void onDuplicate(w.id, w.name)}>
-                        <Copy />
+                        <HugeiconsIcon icon={Copy01Icon} />
                         Duplicate
                       </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => void onExport(w.id, w.name)}>
-                        <Download />
+                        <HugeiconsIcon icon={Download01Icon} />
                         Export
                       </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => setSharing({ id: w.id, name: w.name })}>
-                        <Share2 />
+                        <HugeiconsIcon icon={Share08Icon} />
                         Share
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
@@ -677,7 +682,7 @@ function Workflows() {
                         variant="destructive"
                         onClick={() => setToDelete({ id: w.id, name: w.name })}
                       >
-                        <Trash2 />
+                        <HugeiconsIcon icon={Delete02Icon} />
                         Delete
                       </DropdownMenuItem>
                     </DropdownMenuContent>

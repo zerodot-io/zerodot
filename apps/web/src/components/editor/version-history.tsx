@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
+
+import { Undo02Icon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { Badge, Button, Sheet, SheetContent, SheetHeader, SheetTitle, Spinner } from "@zerodot/ui";
-import { RotateCcw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { catalogByType } from "../../lib/flow";
 import type { Json } from "../../lib/json";
@@ -103,7 +105,7 @@ function VersionMap({ detail }: { detail: VersionDetail }) {
             style={{ left: `${pos.left}%`, top: `${pos.top}%` }}
           >
             <NodeIcon
-              name={entry?.icon ?? "Circle"}
+              name={entry?.icon ?? "CircleIcon"}
               src={entry?.iconUrl}
               variant="tile"
               category={entry?.category}
@@ -339,7 +341,7 @@ export function VersionHistory({
                                 className="self-start"
                                 onClick={() => setConfirming(true)}
                               >
-                                <RotateCcw />
+                                <HugeiconsIcon icon={Undo02Icon} />
                                 Restore to draft
                               </Button>
                             )}

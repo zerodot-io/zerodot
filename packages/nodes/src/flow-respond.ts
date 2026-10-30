@@ -7,7 +7,7 @@ export default defineNode({
   label: "Respond to Webhook",
   description: "Send the HTTP response for a webhook run",
   category: "flow",
-  icon: "Reply",
+  icon: "MailReply01Icon",
   config: z.object({
     respondWith: z
       .enum(["json", "text", "noData"])
