@@ -40,6 +40,7 @@ describe("public API", { skip: !url }, () => {
     session: async () => null,
     syncSchedules: async () => {},
     draftChanged: async () => {},
+    runCancelled: async () => {},
     reader: () => {
       throw new Error("no reader in tests");
     },

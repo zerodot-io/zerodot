@@ -656,6 +656,15 @@ export const retryRunFn = createServerFn({ method: "POST" })
     return { runId: run.id };
   });
 
+export const cancelTestRunFn = createServerFn({ method: "POST" })
+  .validator(slugInput.extend({ runId: z.string().uuid() }))
+  .handler(async ({ data }) => {
+    const ctx = await serviceContext(data.projectSlug);
+    const { cancelTestRun } = await import("@zerodot/server/api/service.server");
+    const run = await plain(cancelTestRun(ctx, data.runId));
+    return { status: run.status };
+  });
+
 /** Published versions of a workflow, newest first. */
 export const listVersionsFn = createServerFn({ method: "GET" })
   .validator(workflowInput)

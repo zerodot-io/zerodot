@@ -662,6 +662,19 @@ export async function retryRun(ctx: ApiContext, runId: string) {
   return run;
 }
 
+/** Stop a test run from the editor. Idempotent: a finished run stays as it is. */
+export async function cancelTestRun(ctx: ApiContext, runId: string) {
+  const run = await ctx.scope.runs.get(runId);
+  if (!run) throw notFound("Run");
+  if (run.mode !== "test") throw conflict("Only a test run can be stopped here");
+  if (run.status !== "queued" && run.status !== "running" && run.status !== "waiting") return run;
+  const error = { message: "Stopped by a user" };
+  const row = await ctx.scope.runs.finish(run.id, { status: "cancelled", error });
+  // A queued job sees the cancelled row and does nothing. A running job gets the cancel message.
+  await ctx.services.runCancelled(ctx.principal.organizationId, run.id, error);
+  return row ?? run;
+}
+
 /**
  * Copy a version into the draft. The published version and the triggers do not change.
  * The restored graph needs only a valid structure: a node type or a credential can be gone.
