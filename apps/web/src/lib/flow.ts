@@ -24,6 +24,21 @@ export function addServerCatalog(extra: { nodes: unknown; credentialTypes: unkno
   for (const entry of nodes) catalogByType.set(entry.type, entry);
 }
 
+/**
+ * The plus button under a supply port holds a second handle, so a drag can start from it. Its id
+ * is the port handle id and this suffix. An edge always uses the port handle id.
+ */
+export const ADD_HANDLE_SUFFIX = "#add";
+
+/** The port handle id of a handle id: the plus button handle gives its port handle. */
+export function portHandle<T extends string | null | undefined>(handle: T): T {
+  return (
+    typeof handle === "string" && handle.endsWith(ADD_HANDLE_SUFFIX)
+      ? handle.slice(0, -ADD_HANDLE_SUFFIX.length)
+      : handle
+  ) as T;
+}
+
 /** True for an edge from a supply node into a supply port. It carries no data. */
 export const isSupplyFlowEdge = (edge: Pick<Edge, "sourceHandle" | "targetHandle">) =>
   isSupplyEdge({ fromPort: edge.sourceHandle ?? "out", toPort: edge.targetHandle ?? "in" });

@@ -79,6 +79,7 @@ import {
   newNode,
   parseGraph,
   pasteGraph,
+  portHandle,
   toFlow,
   toGraph,
   uniqueName,
@@ -479,12 +480,27 @@ export function Editor({
 
   const onConnect = useCallback(
     (connection: Connection) =>
-      setEdges((current) => addEdge({ ...connection, type: "zerodot" }, current)),
+      setEdges((current) =>
+        addEdge(
+          {
+            ...connection,
+            sourceHandle: portHandle(connection.sourceHandle),
+            targetHandle: portHandle(connection.targetHandle),
+            type: "zerodot",
+          },
+          current,
+        ),
+      ),
     [setEdges],
   );
 
   const isValidConnection = useCallback(
-    (connection: Connection | Edge) => {
+    (raw: Connection | Edge) => {
+      const connection = {
+        ...raw,
+        sourceHandle: portHandle(raw.sourceHandle),
+        targetHandle: portHandle(raw.targetHandle),
+      };
       const sourceNode = nodes.find((n) => n.id === connection.source);
       const sourceEntry = sourceNode && catalogByType.get(sourceNode.data.graphNode.type);
       // A node that can be a tool gives the tool kind from its supply handle.
@@ -721,7 +737,8 @@ export function Editor({
       const point = "changedTouches" in event ? event.changedTouches[0] : event;
       if (!point || !flowRef.current) return;
       const nodeId = state.fromNode.id;
-      const handle = state.fromHandle.id ?? (state.fromHandle.type === "source" ? "out" : "in");
+      const handle =
+        portHandle(state.fromHandle.id) ?? (state.fromHandle.type === "source" ? "out" : "in");
       const graphNode = nodes.find((n) => n.id === nodeId)?.data.graphNode;
       const entry = graphNode && catalogByType.get(graphNode.type);
       if (!entry) return;

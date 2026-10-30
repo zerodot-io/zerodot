@@ -39,6 +39,7 @@ import {
 } from "@zerodot/ui";
 import { createContext, useContext, useEffect, useState } from "react";
 import {
+  ADD_HANDLE_SUFFIX,
   catalogByType,
   type NodeRunStatus,
   supplyPortX,
@@ -470,9 +471,29 @@ export function ZerodotNode({ id, data, selected }: NodeProps<ZerodotFlowNode>) 
                   aria-label={`Add ${port.label} to ${graphNode.name}`}
                   title={`Add ${port.label}`}
                   onClick={() => addSupply?.(id, port)}
-                  className="nodrag nopan grid size-5 place-items-center text-muted-foreground transition-colors duration-150 hover:text-foreground"
+                  className="nodrag nopan relative grid size-5 place-items-center text-muted-foreground transition-colors duration-150 hover:text-foreground"
                 >
                   <HugeiconsIcon icon={PlusSignIcon} className="size-3" strokeWidth={2.5} />
+                  {/* A click opens the add list. A drag from here makes a supply edge. */}
+                  <Handle
+                    type="target"
+                    position={Position.Bottom}
+                    id={`${SUPPLY_PORT_PREFIX}${port.name}${ADD_HANDLE_SUFFIX}`}
+                    isConnectable={!readOnly}
+                    style={{
+                      top: 0,
+                      left: 0,
+                      right: "auto",
+                      bottom: "auto",
+                      width: "100%",
+                      height: "100%",
+                      transform: "none",
+                      opacity: 0,
+                      border: 0,
+                      borderRadius: 0,
+                      cursor: readOnly ? "default" : "crosshair",
+                    }}
+                  />
                 </button>
               </>
             )}
