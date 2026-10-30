@@ -14,6 +14,8 @@ const server = createSandboxServer({
   // A full sandbox says 503 fast. The client tries another replica.
   maxWaitMs: number("SANDBOX_MAX_WAIT_MS", 250),
   maxQueue: number("SANDBOX_MAX_QUEUE", number("SANDBOX_MAX_CONCURRENCY", 4)),
+  // 0: the worker picks its own short, jittered wait. A fixed 1 s made every busy answer cost 1 s.
+  retryAfterSeconds: number("SANDBOX_RETRY_AFTER_SECONDS", 0),
   maxBodyBytes: number("SANDBOX_MAX_BODY_BYTES", 10 * 1024 * 1024),
   log,
 });

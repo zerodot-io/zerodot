@@ -26,7 +26,7 @@ SANDBOX_REPLICAS=3 docker compose up -d      # or: docker compose up -d --scale 
 ```
 
 - `SANDBOX_URL` on the worker can be one URL, a host name with many addresses (Docker DNS of a scaled service), or a comma-separated list: `http://sandbox-1:3002,http://sandbox-2:3002`. The worker sends each run to the replica with the fewest runs in flight, and the replicas take turns when they are equal. The worker looks up DNS again every 5 seconds.
-- A full sandbox does not queue for long. It waits at most `SANDBOX_MAX_WAIT_MS` (default 250) with at most `SANDBOX_MAX_QUEUE` (default: `SANDBOX_MAX_CONCURRENCY`) waiting requests. Then it answers `503` with `Retry-After`.
+- A full sandbox does not queue for long. It waits at most `SANDBOX_MAX_WAIT_MS` (default 250) with at most `SANDBOX_MAX_QUEUE` (default: `SANDBOX_MAX_CONCURRENCY`) waiting requests. Then it answers `503` with `Retry-After` (`SANDBOX_RETRY_AFTER_SECONDS`, default 0: the worker then uses its own short backoff).
 - On `503`, or when a replica does not connect, the worker waits a random time (backoff, up to 2 seconds) and tries again, on another replica if there is one. After 30 seconds or 10 tries, the Code node fails with "The code sandbox is busy. Try again later".
 - `GET /healthz` is the health check. `GET /metrics` shows `zerodot_sandbox_active`, `zerodot_sandbox_queued`, `zerodot_sandbox_max_concurrency`, `zerodot_sandbox_runs_total`, and `zerodot_sandbox_rejected_total` in Prometheus format. A growing `rejected_total` means: add replicas.
 - The isolation stays the same for each replica: only the internal network (no way out), read-only file system, all capabilities dropped, no volumes.
