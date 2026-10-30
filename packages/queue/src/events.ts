@@ -28,6 +28,8 @@ export type RunEvent =
       runId: string;
       nodeId: string;
       status: "running" | "succeeded" | "failed";
+      /** The call that ended: its method, input, and output or error. */
+      call?: { method: string; input: unknown; output?: unknown; error?: { message: string } };
     }
   | { type: "node.waiting"; runId: string; nodeId: string; attempt: number; resumeAt: number }
   | { type: "run.waiting"; runId: string; resumeAt: number }

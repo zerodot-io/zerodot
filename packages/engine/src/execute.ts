@@ -29,7 +29,7 @@ import {
   TOOL_KIND,
 } from "./node";
 import type { CodeLog, SandboxClient } from "./sandbox";
-import { type SupplyUseStatus, trackUse } from "./supply-use";
+import { type SupplyCall, type SupplyUseStatus, trackUse } from "./supply-use";
 import type { TableStore } from "./tables";
 import { fromAIInputs, type NodeTool, toolInputSchema, toolName } from "./tool";
 
@@ -78,6 +78,8 @@ export type ExecutionHooks = {
     node: GraphNode;
     parentId: string;
     status: SupplyUseStatus;
+    /** The call that ended, with its input and output. Not set when a call starts. */
+    call?: SupplyCall;
   }): void | Promise<void>;
   /** The run stops here and the worker resumes it at `resumeAt` (epoch ms). */
   onRunWait?(event: { resumeAt: number; nodeId: string }): void | Promise<void>;
@@ -546,7 +548,14 @@ export async function executeGraph(options: ExecuteOptions): Promise<ExecuteResu
 
   /** A supply value that reports its use through the `onSupplyUse` hook. */
   const track = <T>(value: T, node: GraphNode, parent: GraphNode): T =>
-    trackUse(value, (status) => void call("onSupplyUse", { node, parentId: parent.id, status }));
+    trackUse(value, (status, used) => {
+      void call("onSupplyUse", {
+        node,
+        parentId: parent.id,
+        status,
+        ...(used ? { call: used } : {}),
+      });
+    });
 
   /**
    * A node that runs as a tool. Each call resolves its config with the scope of the parent and the

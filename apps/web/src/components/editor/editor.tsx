@@ -910,9 +910,24 @@ export function Editor({
       case "node.skipped":
         setStatuses((s) => ({ ...s, [event.nodeId]: "skipped" }));
         break;
-      case "supply.used":
+      case "supply.used": {
         setStatuses((s) => ({ ...s, [event.nodeId]: event.status }));
+        // The last call shows in the input and output panes of the supply node.
+        const used = event.call;
+        if (used) {
+          setIos((s) => ({
+            ...s,
+            [event.nodeId]: {
+              ...s[event.nodeId],
+              input: used.input,
+              output: used.output,
+              port: used.method,
+              error: used.error,
+            },
+          }));
+        }
         break;
+      }
       case "run.finished":
         setRunStatus(event.status);
         // A stopped run leaves nodes that did not end. They do not spin any more.

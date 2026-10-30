@@ -5,7 +5,7 @@ import { type SupplyUseStatus, trackUse } from "./supply-use";
 
 class Model {
   #calls = 0;
-  async chat(text: string) {
+  async chat(text: string, _signal?: AbortSignal) {
     this.#calls++;
     return { text, calls: this.#calls };
   }
@@ -14,8 +14,13 @@ class Model {
 describe("trackUse", () => {
   it("reports calls of methods, keeps private fields, and leaves plain data as it is", async () => {
     const seen: SupplyUseStatus[] = [];
-    const model = trackUse(new Model(), (s) => seen.push(s));
-    const turn = await model.chat("hi");
+    const calls: unknown[] = [];
+    const model = trackUse(new Model(), (s, call) => {
+      seen.push(s);
+      if (call) calls.push(call);
+    });
+    const turn = await model.chat("hi", new AbortController().signal);
+    assert.deepEqual(calls, [{ method: "chat", input: "hi", output: { text: "hi", calls: 1 } }]);
     assert.deepEqual(turn, { text: "hi", calls: 1 });
     assert.deepEqual(structuredClone(turn), turn);
     assert.deepEqual(seen, ["running", "succeeded"]);
@@ -33,7 +38,8 @@ describe("trackUse", () => {
     const [tool] = await set.open();
     seen.length = 0;
     await Promise.all([tool?.call(), tool?.call()]);
-    assert.deepEqual(seen, ["running", "succeeded"]);
+    // Each ended call is reported. The status stays "running" until the last one ends.
+    assert.deepEqual(seen, ["running", "running", "succeeded"]);
     const failing = trackUse({ call: async () => Promise.reject(new Error("x")) }, (s) =>
       seen.push(s),
     );
