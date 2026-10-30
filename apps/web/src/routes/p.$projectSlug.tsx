@@ -8,6 +8,7 @@ import {
   HistoryIcon,
   Key01Icon,
   Logout01Icon,
+  Menu01Icon,
   PackageIcon,
   PlusSignIcon,
   ServerStack01Icon,
@@ -30,6 +31,9 @@ import {
 } from "@tanstack/react-router";
 import { authClient } from "@zerodot/auth/client";
 import {
+  Drawer,
+  DrawerContent,
+  DrawerTitle,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuGroup,
@@ -88,6 +92,12 @@ const railActive = { className: "bg-muted text-foreground" };
 const railInactive = { className: "text-muted-foreground hover:bg-muted hover:text-foreground" };
 const railButton = `${railItem} ${railInactive.className}`;
 
+const sheetItem =
+  "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors duration-150 ease-out";
+const sheetActive = { className: "bg-muted text-foreground" };
+const sheetInactive = { className: "text-muted-foreground hover:bg-muted hover:text-foreground" };
+const sheetButton = `${sheetItem} ${sheetInactive.className}`;
+
 const HIDDEN_KEY = "zerodot:sidebar-hidden";
 
 function ProjectLayout() {
@@ -98,6 +108,7 @@ function ProjectLayout() {
   const [creating, setCreating] = useState(false);
   const [confirmSignOut, setConfirmSignOut] = useState(false);
   const [about, setAbout] = useState(false);
+  const [navOpen, setNavOpen] = useState(false);
   const [hidden, setHiddenState] = useState(false);
   const [animate, setAnimate] = useState(false);
   const [instanceAdmin, setInstanceAdmin] = useState(false);
@@ -203,21 +214,167 @@ function ProjectLayout() {
     },
   ];
 
+  async function signOut() {
+    if (!confirmSignOut) {
+      setConfirmSignOut(true);
+      return;
+    }
+    await authClient.signOut();
+    await navigate({ to: "/sign-in" });
+  }
+
   // The rail floats over every page. Showing or hiding it does not move the page.
+  // On a phone, a menu button opens the same links in a bottom sheet.
   return (
-    <div className="min-h-svh">
+    <div className="min-h-svh max-md:pb-20 max-md:has-data-editor:pb-0">
+      <button
+        type="button"
+        aria-label="Open menu"
+        onClick={() => setNavOpen(true)}
+        className="fixed bottom-4 left-4 z-20 flex size-11 items-center justify-center rounded-full border bg-card text-muted-foreground shadow-md hover:text-foreground md:hidden"
+      >
+        <HugeiconsIcon icon={Menu01Icon} className="size-5" />
+      </button>
+      <Drawer
+        open={navOpen}
+        onOpenChange={(open) => {
+          setNavOpen(open);
+          if (!open) setConfirmSignOut(false);
+        }}
+      >
+        <DrawerContent>
+          <div className="border-b p-4 pr-12">
+            <DrawerTitle>{project.name}</DrawerTitle>
+            <p className="text-muted-foreground">{user.email}</p>
+          </div>
+          <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-2">
+            <nav aria-label="Project" className="flex flex-col">
+              {navItems.map(({ to, label, icon: Icon }) => (
+                <Fragment key={to}>
+                  {to === "/p/$projectSlug/settings" && instanceAdmin && (
+                    <Link
+                      to="/system/nodes"
+                      onClick={() => setNavOpen(false)}
+                      className={sheetItem}
+                      activeProps={sheetActive}
+                      inactiveProps={sheetInactive}
+                    >
+                      <HugeiconsIcon icon={PackageIcon} className="size-4" />
+                      Nodes
+                    </Link>
+                  )}
+                  {to === "/p/$projectSlug/workflows" ? (
+                    <Link
+                      to={to}
+                      params={{ projectSlug: slug }}
+                      search={{ all: true }}
+                      onClick={() => setNavOpen(false)}
+                      className={sheetItem}
+                      activeProps={sheetActive}
+                      inactiveProps={sheetInactive}
+                    >
+                      <HugeiconsIcon icon={Icon} className="size-4" />
+                      {label}
+                    </Link>
+                  ) : (
+                    <Link
+                      to={to}
+                      params={{ projectSlug: slug }}
+                      onClick={() => setNavOpen(false)}
+                      className={sheetItem}
+                      activeProps={sheetActive}
+                      inactiveProps={sheetInactive}
+                    >
+                      <HugeiconsIcon icon={Icon} className="size-4" />
+                      {label}
+                    </Link>
+                  )}
+                </Fragment>
+              ))}
+            </nav>
+            <div className="flex flex-col border-t pt-2">
+              <p className="px-3 py-2 text-muted-foreground capitalize">{PROJECT_LABEL}s</p>
+              {projects.map((p) => (
+                <Link
+                  key={p.slug}
+                  to="/p/$projectSlug/workflows"
+                  params={{ projectSlug: p.slug }}
+                  search={{ all: true }}
+                  onClick={() => setNavOpen(false)}
+                  className={`${sheetButton} ${p.slug === slug ? "font-medium text-foreground" : ""}`}
+                >
+                  <HugeiconsIcon icon={Folder02Icon} className="size-4" />
+                  {p.name}
+                </Link>
+              ))}
+              <button
+                type="button"
+                onClick={() => {
+                  setNavOpen(false);
+                  setNewProject(true);
+                }}
+                className={sheetButton}
+              >
+                <HugeiconsIcon icon={PlusSignIcon} className="size-4" />
+                New {PROJECT_LABEL}
+              </button>
+            </div>
+            <div className="flex flex-col border-t pt-2">
+              {widgetId && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNavOpen(false);
+                    openFeedback();
+                  }}
+                  className={sheetButton}
+                >
+                  <HugeiconsIcon icon={BubbleChatIcon} className="size-4" />
+                  Send feedback
+                </button>
+              )}
+              {instanceAdmin && (
+                <Link to="/system" onClick={() => setNavOpen(false)} className={sheetButton}>
+                  <HugeiconsIcon icon={ServerStack01Icon} className="size-4" />
+                  System
+                </Link>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  setNavOpen(false);
+                  setAbout(true);
+                }}
+                className={sheetButton}
+              >
+                <LogoMark className="w-4" />
+                About zerodot
+              </button>
+              {/* The first tap asks to confirm. The second tap signs out. */}
+              <button
+                type="button"
+                onClick={signOut}
+                className={`${sheetButton} ${confirmSignOut ? "text-destructive hover:text-destructive" : ""}`}
+              >
+                <HugeiconsIcon icon={Logout01Icon} className="size-4" />
+                {confirmSignOut ? "Tap again to sign out" : "Sign out"}
+              </button>
+            </div>
+          </div>
+        </DrawerContent>
+      </Drawer>
       <button
         type="button"
         aria-label="Show sidebar"
         inert={!hidden}
         onClick={() => setHidden(false)}
-        className={`fixed top-1/2 left-3 z-20 flex size-9 -translate-y-1/2 items-center justify-center rounded-xl border bg-card text-muted-foreground shadow-md hover:text-foreground motion-reduce:transition-none ${animate ? "transition-opacity duration-150 ease-out" : ""} ${hidden ? "opacity-100" : "opacity-0"}`}
+        className={`fixed top-1/2 left-3 z-20 flex size-9 -translate-y-1/2 max-md:hidden items-center justify-center rounded-xl border bg-card text-muted-foreground shadow-md hover:text-foreground motion-reduce:transition-none ${animate ? "transition-opacity duration-150 ease-out" : ""} ${hidden ? "opacity-100" : "opacity-0"}`}
       >
         <HugeiconsIcon icon={SidebarLeftIcon} className="size-4" />
       </button>
       <div
         inert={hidden}
-        className={`fixed top-1/2 left-3 z-20 flex -translate-y-1/2 items-stretch rounded-xl border bg-card shadow-md motion-reduce:transition-none ${animate ? "transition-[translate,opacity] duration-150 ease-out" : ""} ${hidden ? "pointer-events-none -translate-x-2 opacity-0" : ""}`}
+        className={`fixed top-1/2 left-3 z-20 flex -translate-y-1/2 items-stretch max-md:hidden rounded-xl border bg-card shadow-md motion-reduce:transition-none ${animate ? "transition-[translate,opacity] duration-150 ease-out" : ""} ${hidden ? "pointer-events-none -translate-x-2 opacity-0" : ""}`}
       >
         <nav aria-label="Project" className="flex flex-col items-center gap-1 p-1.5">
           <Tooltip label="About zerodot" side="right">
@@ -350,14 +507,7 @@ function ProjectLayout() {
               <DropdownMenuItem
                 closeOnClick={false}
                 variant={confirmSignOut ? "destructive" : "default"}
-                onClick={async () => {
-                  if (!confirmSignOut) {
-                    setConfirmSignOut(true);
-                    return;
-                  }
-                  await authClient.signOut();
-                  await navigate({ to: "/sign-in" });
-                }}
+                onClick={signOut}
               >
                 <HugeiconsIcon icon={Logout01Icon} className="size-4" />
                 {confirmSignOut ? "Click again to sign out" : "Sign out"}

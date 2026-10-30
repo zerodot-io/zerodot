@@ -79,6 +79,9 @@ export function BarXAxis(props: BarXAxisProps) {
   return <BarXAxisInner {...props} container={container} />;
 }
 
+/** Pixels of chart width for each x-axis label. */
+const MIN_LABEL_SPACING = 64;
+
 const BarXAxisInner = memo(function BarXAxisInner({
   tickerHalfWidth = 50,
   showAllLabels = false,
@@ -88,7 +91,12 @@ const BarXAxisInner = memo(function BarXAxisInner({
   const { margin, tooltipData, barScale, bandWidth, barXAccessor, data, width } = useChart();
 
   const resolvedMaxLabels = useMemo(
-    () => resolveResponsiveChartLabelCount(maxLabels, width, 12),
+    // A narrow chart shows fewer labels, so the labels do not overlap.
+    () =>
+      Math.min(
+        resolveResponsiveChartLabelCount(maxLabels, width, 12),
+        Math.max(2, Math.floor(width / MIN_LABEL_SPACING)),
+      ),
     [maxLabels, width],
   );
 

@@ -54,13 +54,14 @@ export function SystemHeader({
           </Link>
         )}
       </div>
-      {/* The tabs are links, so each tab has its own URL and the back button works. */}
+      {/* The tabs are links, so each tab has its own URL and the back button works.
+          On a phone only the current tab shows its label. */}
       <Tabs value={current}>
         <TabsList
           variant="line"
           size="default"
           aria-label="System"
-          className="w-full justify-start"
+          className="scrollbar-hide w-full justify-start overflow-x-auto"
         >
           <TabsIndicator />
           {SYSTEM_TABS.map((t) => {
@@ -74,7 +75,7 @@ export function SystemHeader({
                 render={<Link to="/system" search={t === "overview" ? {} : { tab: t }} />}
               >
                 <HugeiconsIcon icon={Icon} aria-hidden="true" />
-                {label}
+                <span className={t === current ? undefined : "max-md:sr-only"}>{label}</span>
               </TabsTrigger>
             );
           })}
@@ -85,7 +86,7 @@ export function SystemHeader({
             render={<Link to="/system/nodes" />}
           >
             <HugeiconsIcon icon={PackageIcon} aria-hidden="true" />
-            Nodes
+            <span className={current === "nodes" ? undefined : "max-md:sr-only"}>Nodes</span>
           </TabsTrigger>
         </TabsList>
       </Tabs>

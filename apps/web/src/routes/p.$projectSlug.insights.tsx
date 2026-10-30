@@ -628,7 +628,7 @@ function Problems({
   return (
     <section className="flex flex-col gap-4">
       <h2 className="font-semibold">Problems</h2>
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-6 lg:grid-cols-2 *:min-w-0">
         <div className="flex flex-col gap-2">
           <h3 className="font-medium text-muted-foreground">Top failing nodes</h3>
           {failing.length === 0 ? (

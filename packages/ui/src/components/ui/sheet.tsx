@@ -2,11 +2,41 @@ import { Dialog as SheetPrimitive } from "@base-ui/react/dialog";
 import { Cancel01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import type * as React from "react";
+import { useIsMobile } from "../../lib/use-mobile";
 import { cn } from "../../lib/utils";
 import { Button } from "./button";
+import { Drawer, DrawerContent, DrawerTitle, useInDrawer } from "./drawer";
 
-function Sheet({ ...props }: SheetPrimitive.Root.Props) {
-  return <SheetPrimitive.Root data-slot="sheet" {...props} />;
+function Sheet({
+  open,
+  onOpenChange,
+  modal,
+  children,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  /** Desktop only. The bottom drawer is always modal. */
+  modal?: boolean;
+  children: React.ReactNode;
+}) {
+  // On a phone the sheet is a bottom drawer.
+  if (useIsMobile()) {
+    return (
+      <Drawer open={open} onOpenChange={onOpenChange}>
+        {children}
+      </Drawer>
+    );
+  }
+  return (
+    <SheetPrimitive.Root
+      data-slot="sheet"
+      open={open}
+      onOpenChange={(next) => onOpenChange(next)}
+      modal={modal}
+    >
+      {children}
+    </SheetPrimitive.Root>
+  );
 }
 
 function SheetContent({
@@ -15,9 +45,11 @@ function SheetContent({
   container,
   ...props
 }: SheetPrimitive.Popup.Props & {
-  /** Opens the sheet inside this element, with no backdrop and no shadow. */
+  /** Opens the sheet inside this element, with no backdrop and no shadow. Desktop only. */
   container?: HTMLElement | null;
 }) {
+  const mobile = useInDrawer();
+  if (mobile) return <DrawerContent>{children}</DrawerContent>;
   const contained = container !== undefined;
   if (contained && !container) return null;
   return (
@@ -60,13 +92,16 @@ function SheetHeader({ className, ...props }: React.ComponentProps<"div">) {
   );
 }
 
-function SheetTitle({ className, ...props }: SheetPrimitive.Title.Props) {
+function SheetTitle({ className, children }: { className?: string; children: React.ReactNode }) {
+  const mobile = useInDrawer();
+  if (mobile) return <DrawerTitle className={className}>{children}</DrawerTitle>;
   return (
     <SheetPrimitive.Title
       data-slot="sheet-title"
       className={cn("font-semibold text-foreground", className)}
-      {...props}
-    />
+    >
+      {children}
+    </SheetPrimitive.Title>
   );
 }
 

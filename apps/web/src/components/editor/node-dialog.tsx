@@ -32,6 +32,7 @@ import {
   SelectValue,
   Switch,
   Textarea,
+  useIsMobile,
 } from "@zerodot/ui";
 import { type CSSProperties, type ReactNode, useRef, useState } from "react";
 import { catalogByType, type ZerodotFlowNode } from "../../lib/flow";
@@ -122,7 +123,7 @@ function ResizeHandle({ label, onDrag }: { label: string; onDrag: (deltaX: numbe
       role="separator"
       aria-orientation="vertical"
       aria-label={label}
-      className="group relative z-10 w-px shrink-0 cursor-col-resize touch-none bg-border"
+      className="group relative z-10 w-px shrink-0 cursor-col-resize touch-none bg-border max-md:hidden"
       onPointerDown={(event) => {
         event.preventDefault();
         let lastX = event.clientX;
@@ -573,6 +574,9 @@ export function NodeDialog({
   const [mocking, setMocking] = useState(false);
   const [inputWidth, setInputWidth] = useState(320);
   const [paramsWidth, setParamsWidth] = useState(440);
+  // On a phone one pane shows at a time.
+  const mobile = useIsMobile();
+  const [pane, setPane] = useState<"input" | "parameters" | "output">("parameters");
   const panesRef = useRef<HTMLDivElement>(null);
 
   // Keep the output pane at least MIN_PANE wide.
@@ -632,7 +636,7 @@ export function NodeDialog({
                 <Input
                   aria-label="Node name"
                   value={graphNode.name}
-                  className="h-6 w-72 border-transparent bg-transparent font-semibold shadow-none"
+                  className="h-6 w-72 border-transparent bg-transparent font-semibold shadow-none max-md:w-0 max-md:flex-1"
                   onChange={(event) => onChange((n) => ({ ...n, name: event.target.value }))}
                 />
                 {!isSupply && (
@@ -647,11 +651,35 @@ export function NodeDialog({
                 )}
               </DialogTitle>
             </DialogHeader>
+            {mobile && (
+              <div className="flex border-b px-2" role="tablist" aria-label="Panes">
+                {(["input", "parameters", "output"] as const).map((name) => (
+                  <button
+                    key={name}
+                    type="button"
+                    role="tab"
+                    aria-selected={pane === name}
+                    onClick={() => setPane(name)}
+                    className={cn(
+                      "-mb-px flex-1 border-b-2 py-2 capitalize transition-colors duration-150",
+                      pane === name
+                        ? "border-primary font-medium text-foreground"
+                        : "border-transparent text-muted-foreground",
+                    )}
+                  >
+                    {name === "input" && isTrigger ? "Trigger" : name}
+                  </button>
+                ))}
+              </div>
+            )}
             <div ref={panesRef} className="flex min-h-0 min-w-0 flex-1">
               <Pane
                 title={isTrigger ? "Trigger" : "Input"}
-                className="shrink-0 bg-muted/40"
-                style={{ width: inputWidth }}
+                className={cn(
+                  "shrink-0 bg-muted/40",
+                  mobile && (pane === "input" ? "w-full overflow-y-auto" : "hidden"),
+                )}
+                style={mobile ? undefined : { width: inputWidth }}
               >
                 {isTrigger ? (
                   listening ? (
@@ -741,7 +769,13 @@ export function NodeDialog({
                 onDrag={(d) => resize(setInputWidth, paramsWidth, d)}
               />
 
-              <section className="flex min-h-0 shrink-0 flex-col" style={{ width: paramsWidth }}>
+              <section
+                className={cn(
+                  "flex min-h-0 shrink-0 flex-col",
+                  mobile && (pane === "parameters" ? "w-full" : "hidden"),
+                )}
+                style={mobile ? undefined : { width: paramsWidth }}
+              >
                 <div className="flex items-center gap-4 border-b px-4" role="tablist">
                   {(["parameters", "settings"] as const).map((name) => (
                     <button
@@ -849,7 +883,14 @@ export function NodeDialog({
                 onDrag={(d) => resize(setParamsWidth, inputWidth, d)}
               />
 
-              <Pane title="Output" className="min-w-0 flex-1 bg-muted/40">
+              <Pane
+                title="Output"
+                className={cn(
+                  "min-w-0 flex-1 bg-muted/40",
+                  mobile && pane !== "output" && "hidden",
+                  mobile && "overflow-y-auto",
+                )}
+              >
                 {mocking ? (
                   <MockEditor
                     onCancel={() => setMocking(false)}

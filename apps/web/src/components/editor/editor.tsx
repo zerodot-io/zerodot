@@ -1484,20 +1484,20 @@ export function Editor({
           <NodeNamesContext.Provider value={nodeNames}>
             <NodeOutputsContext.Provider value={nodeOutputs}>
               <InputDataContext.Provider value={selected ? inputFor(selected) : undefined}>
-                <div className="flex h-svh min-w-0 flex-col overflow-hidden">
-                  <div className="flex items-center gap-1.5 border-b px-4 py-2">
+                <div data-editor className="flex h-svh min-w-0 flex-col overflow-hidden">
+                  <div className="flex items-center gap-1.5 border-b px-4 py-2 max-md:px-2">
                     <Link
                       to="/p/$projectSlug/workflows"
                       params={{ projectSlug }}
                       search={{ all: true }}
-                      className="rounded-md px-1.5 py-0.5 text-muted-foreground transition-colors duration-150 ease-out hover:text-foreground"
+                      className="rounded-md px-1.5 py-0.5 text-muted-foreground transition-colors duration-150 ease-out hover:text-foreground max-md:hidden"
                     >
                       Workflows
                     </Link>
                     <HugeiconsIcon
                       icon={ArrowRight01Icon}
                       aria-hidden="true"
-                      className="size-3.5 text-muted-foreground/60"
+                      className="size-3.5 text-muted-foreground/60 max-md:hidden"
                     />
                     {renaming === null ? (
                       <button
@@ -1505,7 +1505,7 @@ export function Editor({
                         aria-label="Rename workflow"
                         title="Rename"
                         onClick={() => setRenaming(name)}
-                        className="max-w-64 cursor-text truncate rounded-md px-1.5 py-0.5 font-semibold transition-colors duration-150 ease-out hover:bg-muted"
+                        className="min-w-0 max-w-64 cursor-text truncate rounded-md px-1.5 py-0.5 font-semibold transition-colors duration-150 ease-out hover:bg-muted"
                       >
                         {name}
                       </button>
@@ -1540,11 +1540,14 @@ export function Editor({
                               : "bg-muted-foreground/40"
                         }`}
                       />
-                      {saveState === "saving"
-                        ? "Saving…"
-                        : saveState === "error"
-                          ? "Not saved"
-                          : "Saved"}
+                      {/* On a phone only the dot shows the save state. */}
+                      <span className="max-md:sr-only">
+                        {saveState === "saving"
+                          ? "Saving…"
+                          : saveState === "error"
+                            ? "Not saved"
+                            : "Saved"}
+                      </span>
                     </span>
                     <div className="ml-auto flex items-center gap-2">
                       <DropdownMenu>
@@ -1937,7 +1940,9 @@ export function Editor({
                               proOptions={{ hideAttribution: true }}
                             >
                               <Background />
+                              {/* On a phone the menu button sits in the bottom-left corner. */}
                               <Controls
+                                className="max-md:mb-18!"
                                 showZoom={false}
                                 showFitView={false}
                                 showInteractive={false}
@@ -1980,7 +1985,7 @@ export function Editor({
                       >
                         <HugeiconsIcon icon={PlusSignIcon} />
                       </Button>
-                      <div className="absolute bottom-6 left-1/2 z-10 flex -translate-x-1/2 flex-col items-center gap-3">
+                      <div className="absolute bottom-6 left-1/2 z-10 flex -translate-x-1/2 flex-col items-center gap-3 max-md:bottom-20">
                         <div className="flex items-center rounded-full">
                           <div
                             className={cn(

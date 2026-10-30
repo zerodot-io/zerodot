@@ -1,5 +1,6 @@
 import { Popover as PopoverPrimitive } from "@base-ui/react/popover";
 import { cn } from "../../lib/utils";
+import { usePortalContainer } from "./drawer";
 
 function Popover(props: PopoverPrimitive.Root.Props) {
   return <PopoverPrimitive.Root {...props} />;
@@ -20,7 +21,7 @@ function PopoverContent({
   sideOffset?: number;
 }) {
   return (
-    <PopoverPrimitive.Portal>
+    <PopoverPrimitive.Portal container={usePortalContainer()}>
       <PopoverPrimitive.Positioner align={align} sideOffset={sideOffset} className="isolate z-50">
         <PopoverPrimitive.Popup
           data-slot="popover-content"
