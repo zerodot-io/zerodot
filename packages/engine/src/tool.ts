@@ -108,6 +108,53 @@ export function withoutBinary(value: unknown): unknown {
   return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, withoutBinary(item)]));
 }
 
+function same(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return false;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  const keys = Object.keys(a);
+  if (keys.length !== Object.keys(b).length) return false;
+  return keys.every((key) =>
+    same((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key]),
+  );
+}
+
+/**
+ * The action of `definition.actions` that the config of a node selects: each config value of
+ * the action is the same in the node. When more than one matches, the action with the most
+ * values wins, because it is the most exact one.
+ */
+export function actionOf(
+  definition: Pick<NodeDefinition, "actions">,
+  config: Record<string, unknown>,
+): { label: string; config: Record<string, unknown> } | undefined {
+  let found: { label: string; config: Record<string, unknown> } | undefined;
+  for (const action of definition.actions ?? []) {
+    const entries = Object.entries(action.config);
+    if (entries.length === 0 || !entries.every(([key, value]) => same(config[key], value))) {
+      continue;
+    }
+    if (!found || entries.length > Object.keys(found.config).length) found = action;
+  }
+  return found;
+}
+
+/**
+ * What a node tool tells the model that it does. The tool does one action, so the label of that
+ * action is better than the description of the whole node, for example "Send a message in Slack".
+ */
+export function toolDescription(
+  node: Pick<GraphNode, "config" | "toolDescription">,
+  definition: Pick<NodeDefinition, "actions" | "app" | "label" | "description" | "subtitle">,
+): string {
+  const written = node.toolDescription?.trim();
+  if (written) return written;
+  const action = actionOf(definition, node.config);
+  if (action) return `${action.label} in ${definition.app ?? definition.label}`;
+  const subtitle = definition.subtitle?.(node.config);
+  return [definition.description, subtitle].filter(Boolean).join(". ") || definition.label;
+}
+
 /** A tool name from a node name: letters, digits, _ and -, at most 64. Unique in `used`. */
 export function toolName(nodeName: string, used: Set<string>): string {
   const base =
