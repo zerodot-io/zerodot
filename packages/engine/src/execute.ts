@@ -1,6 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { type BlobStore, containsBlobRef, hydrate } from "./blob";
-import { credentialRefsUsed, ExpressionError, resolveConfig, StrictRecord } from "./expression";
+import {
+  credentialRefsUsed,
+  ExpressionError,
+  resolveConfig,
+  StrictRecord,
+  ToolInput,
+} from "./expression";
 import {
   flowEdges,
   type Graph,
@@ -12,6 +18,7 @@ import {
   validateGraph,
 } from "./graph";
 import {
+  canBeTool,
   inputPortsOf,
   type NodeDefinition,
   type NodeRegistry,
@@ -19,9 +26,11 @@ import {
   type ResolvedCredential,
   type RunResponse,
   type SubWorkflowRunner,
+  TOOL_KIND,
 } from "./node";
 import type { CodeLog, SandboxClient } from "./sandbox";
 import type { TableStore } from "./tables";
+import { fromAIInputs, type NodeTool, toolInputSchema, toolName } from "./tool";
 
 export type NodeStatus = "running" | "waiting" | "succeeded" | "failed" | "skipped";
 
@@ -475,10 +484,15 @@ export async function executeGraph(options: ExecuteOptions): Promise<ExecuteResu
         throw new Error(`"${port.label}" takes one node. ${connected.length} are connected`);
       }
       const values: unknown[] = [];
+      const toolNames = new Set<string>();
       for (const node of connected) {
         const supplier = registry.get(node.type);
         try {
           if (!supplier) throw new Error(`Unknown node type "${node.type}"`);
+          if (!supplier.supply && port.kind === TOOL_KIND && canBeTool(supplier)) {
+            values.push(nodeTool(node, supplier, scope, input, toolNames, sink.logs));
+            continue;
+          }
           if (!supplier.supply || supplier.supplies !== port.kind) {
             throw new Error(`The node does not give "${port.kind}"`);
           }
@@ -519,6 +533,76 @@ export async function executeGraph(options: ExecuteOptions): Promise<ExecuteResu
       else if (values.length === 1) supplies[port.name] = values[0];
     }
     return supplies;
+  };
+
+  /**
+   * A node that runs as a tool. Each call resolves its config with the scope of the parent and the
+   * values the model gave for `$fromAI`, then runs the node with the input of the parent.
+   */
+  const nodeTool = (
+    node: GraphNode,
+    definition: NodeDefinition,
+    scope: Record<string, unknown>,
+    input: unknown,
+    used: Set<string>,
+    logs: CodeLog[],
+  ): NodeTool => {
+    const name = toolName(node.name, used);
+    const subtitle = definition.subtitle?.(node.config);
+    const description =
+      node.toolDescription?.trim() ||
+      [definition.description, subtitle].filter(Boolean).join(". ") ||
+      definition.label;
+    const spec = {
+      name,
+      description,
+      inputSchema: toolInputSchema(fromAIInputs(node, definition)),
+    };
+    return {
+      spec,
+      call: async (given, callSignal) => {
+        const secrets: string[] = [];
+        const masked: string[] = [];
+        try {
+          const values =
+            given !== null && typeof given === "object" && !Array.isArray(given)
+              ? (given as Record<string, unknown>)
+              : {};
+          const toolScope = { ...scope, $fromAI: new ToolInput(values) };
+          const { config, credential } = await resolveNode(
+            node,
+            definition,
+            toolScope,
+            secrets,
+            masked,
+          );
+          const ran = await definition.run({
+            config,
+            input,
+            credential,
+            signal: callSignal ? AbortSignal.any([signal, callSignal]) : signal,
+            scope: runScope(scope, input),
+            log: (entries) => {
+              const named = entries.map((entry) => ({
+                ...entry,
+                message: `[${node.name}] ${entry.message}`,
+              }));
+              logs.push(...(masked.length > 0 ? maskSecrets(named, masked) : named));
+            },
+            sandbox: options.sandbox ?? null,
+            tables: options.tables ?? null,
+            resumeUrl: null,
+            runWorkflow: options.runWorkflow ?? null,
+            loopBack: false,
+          });
+          if (ran.waitUntil !== undefined) throw new Error("A node that waits cannot be a tool");
+          return masked.length > 0 ? maskSecrets(ran.data, masked) : ran.data;
+        } catch (error) {
+          const { message } = scrubError(toError(error), secrets);
+          throw new Error(`Tool "${name}": ${message}`);
+        }
+      },
+    };
   };
 
   /** The nodes that a node feeds, directly or through other nodes. */

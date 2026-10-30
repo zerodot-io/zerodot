@@ -37,6 +37,8 @@ export const NodeOutputsContext = createContext<Record<string, unknown>>({});
 
 /** The data of the previous node. The fields suggest its keys after "$input.". */
 export const InputDataContext = createContext<unknown>(undefined);
+/** True in the form of a node that runs as a tool: a field can let the model fill it. */
+export const FromAIContext = createContext(false);
 
 type Suggestion = { label: string; insert: string; hint: string };
 
@@ -95,6 +97,10 @@ const previewOf = (value: unknown) => {
 const insideExpression = (before: string) => before.lastIndexOf("{{") > before.lastIndexOf("}}");
 
 /** A text field. After you type $vars. it lists the variable names, with their values. */
+/** The config key of a field id, for example "text" for "field-text". */
+const fieldKey = (id: string) =>
+  id.replace(/^field-/, "").replace(/[^A-Za-z0-9_]+/g, "_") || "value";
+
 export function ExpressionInput({
   id,
   value,
@@ -110,6 +116,7 @@ export function ExpressionInput({
   const nodeNames = useContext(NodeNamesContext);
   const outputs = useContext(NodeOutputsContext);
   const inputData = useContext(InputDataContext);
+  const fromAI = useContext(FromAIContext);
   const ref = useRef<HTMLInputElement & HTMLTextAreaElement>(null);
   const wrapper = useRef<HTMLDivElement>(null);
   const list = useRef<HTMLUListElement>(null);
@@ -437,6 +444,22 @@ export function ExpressionInput({
           />
         ) : (
           <Input {...field} />
+        )}
+        {fromAI && id && !value.includes("$fromAI") && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="xs"
+            title="Let the model fill this"
+            onClick={() => onChange(`{{ $fromAI("${fieldKey(id)}", "") }}`)}
+            className={cn(
+              "absolute z-20 h-4 px-1 text-2xs text-muted-foreground opacity-0 transition-opacity duration-150 focus-visible:opacity-100 group-focus-within/expr:opacity-100 group-hover/expr:opacity-100",
+              expandable ? "right-7" : "right-1.5",
+              multiline ? "bottom-1.5" : "top-1/2 -translate-y-1/2",
+            )}
+          >
+            AI
+          </Button>
         )}
         {expandable && (
           <Button

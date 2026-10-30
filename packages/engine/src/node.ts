@@ -345,6 +345,11 @@ export type NodeDefinition<Schema extends z.ZodType = z.ZodType> = {
    * ports and is never a step: it builds a value with `supply` each time its parent runs.
    */
   supplies?: string;
+  /**
+   * The node can connect to a supply port of kind `TOOL_KIND` and run as a tool: the model fills
+   * the config values that use `$fromAI`. Default: true for an "integration" node.
+   */
+  usableAsTool?: boolean;
   // Method syntax keeps parameter bivariance, so a typed node fits the registry type.
   /** Builds the value of a supply node. */
   supply?(ctx: SupplyContext<z.output<Schema>>): unknown;
@@ -380,6 +385,17 @@ export function defineNode<Schema extends z.ZodType>(
   definition: NodeDefinition<Schema>,
 ): NodeDefinition<Schema> {
   return definition;
+}
+
+/** The supply kind of a tool. A port of this kind also takes nodes that can be tools. */
+export const TOOL_KIND = "ai.tool";
+
+/** True when a node can run as a tool (see `usableAsTool`). Supply nodes and triggers cannot. */
+export function canBeTool(
+  definition: Pick<NodeDefinition, "supplies" | "category" | "usableAsTool">,
+): boolean {
+  if (definition.supplies !== undefined || definition.category === "trigger") return false;
+  return definition.usableAsTool ?? definition.category === "integration";
 }
 
 /**

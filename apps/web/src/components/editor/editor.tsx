@@ -22,6 +22,7 @@ import {
   SUPPLY_OUT_PORT,
   SUPPLY_PORT_PREFIX,
   type SupplyPort,
+  TOOL_KIND,
 } from "@zerodot/engine";
 import { catalog, registry } from "@zerodot/nodes";
 import type { RunEvent } from "@zerodot/queue";
@@ -483,7 +484,13 @@ export function Editor({
   const isValidConnection = useCallback(
     (connection: Connection | Edge) => {
       const sourceNode = nodes.find((n) => n.id === connection.source);
-      const supplies = sourceNode && catalogByType.get(sourceNode.data.graphNode.type)?.supplies;
+      const sourceEntry = sourceNode && catalogByType.get(sourceNode.data.graphNode.type);
+      // A node that can be a tool gives the tool kind from its supply handle.
+      const supplies =
+        sourceEntry?.supplies ??
+        (connection.sourceHandle === SUPPLY_OUT_PORT && sourceEntry?.usableAsTool
+          ? TOOL_KIND
+          : undefined);
       // A supply node connects only to a supply port of its kind.
       if (supplies !== undefined || isSupplyFlowEdge(connection)) {
         const parent = nodes.find((n) => n.id === connection.target);
@@ -716,8 +723,8 @@ export function Editor({
       const graphNode = nodes.find((n) => n.id === nodeId)?.data.graphNode;
       const entry = graphNode && catalogByType.get(graphNode.type);
       if (!entry) return;
-      if (handle === SUPPLY_OUT_PORT && entry.supplies !== undefined) {
-        setAddConsumer({ nodeId, kind: entry.supplies });
+      if (handle === SUPPLY_OUT_PORT && (entry.supplies !== undefined || entry.usableAsTool)) {
+        setAddConsumer({ nodeId, kind: entry.supplies ?? TOOL_KIND });
       } else if (handle.startsWith(SUPPLY_PORT_PREFIX)) {
         const port = entry.supplyPorts?.find((p) => `${SUPPLY_PORT_PREFIX}${p.name}` === handle);
         if (!port) return;
@@ -1242,7 +1249,12 @@ export function Editor({
   const addGroups = useMemo(() => {
     const query = addQuery.trim().toLowerCase();
     const visible = catalog.filter((entry) => {
-      if (addSupply) return entry.supplies === addSupply.port.kind;
+      if (addSupply) {
+        return (
+          entry.supplies === addSupply.port.kind ||
+          (addSupply.port.kind === TOOL_KIND && entry.usableAsTool)
+        );
+      }
       if (addConsumer) return entry.supplyPorts?.some((p) => p.kind === addConsumer.kind) === true;
       // A node before an input needs an output to connect.
       if (addBefore && entry.ports.out.length === 0) return false;
@@ -1282,6 +1294,9 @@ export function Editor({
       if (app) apps.set(app, [...(apps.get(app) ?? []), entry]);
     }
     const groups = new Map<string, AddRow[]>();
+    // On a tool port, the nodes that run as tools sit in their own group.
+    const groupOf = (entry: CatalogEntry) =>
+      addSupply && entry.supplies === undefined ? "Action in an app" : entry.category;
     const add = (category: string, row: AddRow) =>
       groups.set(category, [...(groups.get(category) ?? []), row]);
     const placed = new Set<string>();
@@ -1290,12 +1305,12 @@ export function Editor({
       const members = app ? (apps.get(app) ?? []) : [];
       // A node with actions gets its own app row, so the user sees its operations.
       if (!app || (members.length < 2 && !entry.actions?.length)) {
-        add(entry.category, { kind: "node", key: entry.type, entry });
+        add(groupOf(entry), { kind: "node", key: entry.type, entry });
       } else if (!placed.has(app)) {
         placed.add(app);
         // The app sits with its actions. An app with triggers only sits with the triggers.
         const first = members.find((m) => m.category !== "trigger") ?? members[0] ?? entry;
-        add(first.category, {
+        add(groupOf(first), {
           kind: "app",
           key: `app:${app}`,
           app,
@@ -2225,6 +2240,10 @@ export function Editor({
                     hasInput={
                       selected !== null &&
                       edges.some((e) => e.target === selected.id && !isSupplyFlowEdge(e))
+                    }
+                    asTool={
+                      selected !== null &&
+                      edges.some((e) => e.source === selected.id && isSupplyFlowEdge(e))
                     }
                     inputPorts={selectedInputPorts}
                     io={selectedIo}

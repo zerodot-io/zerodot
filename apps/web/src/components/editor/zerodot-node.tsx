@@ -157,10 +157,16 @@ export function ZerodotNode({ id, data, selected }: NodeProps<ZerodotFlowNode>) 
   const entry = catalogByType.get(graphNode.type);
   const definition = registry.get(graphNode.type);
   const portSource = definition ?? entry;
-  const outPorts = portSource ? outputPortsOf(portSource, graphNode.config) : ["out"];
-  const inPorts = portSource ? inputPortsOf(portSource, graphNode.config) : (entry?.ports.in ?? []);
   const isTrigger = entry?.category === "trigger";
-  const isSupply = entry?.supplies !== undefined;
+  // A node on a tool port runs as a tool. It draws as a supply node, with no data ports.
+  const asTool = connections.some((c) => c.sourceHandle === SUPPLY_OUT_PORT);
+  const isSupply = entry?.supplies !== undefined || asTool;
+  const outPorts = asTool ? [] : portSource ? outputPortsOf(portSource, graphNode.config) : ["out"];
+  const inPorts = asTool
+    ? []
+    : portSource
+      ? inputPortsOf(portSource, graphNode.config)
+      : (entry?.ports.in ?? []);
   const supplyPorts = entry?.supplyPorts ?? [];
   const suppliedCount = (port: SupplyPort) =>
     incoming.filter((c) => c.targetHandle === `${SUPPLY_PORT_PREFIX}${port.name}`).length;
@@ -263,7 +269,9 @@ export function ZerodotNode({ id, data, selected }: NodeProps<ZerodotFlowNode>) 
         style={{
           minHeight: `${Math.max(4, Math.max(outPorts.length, inPorts.length) * 1.5)}rem`,
           // Each supply port needs room for its label under the node.
-          ...(supplyPorts.length > 0 ? { width: `${Math.max(8, supplyPorts.length * 4)}rem` } : {}),
+          ...(supplyPorts.length > 0
+            ? { width: `${Math.max(12, supplyPorts.length * 4)}rem` }
+            : {}),
         }}
       >
         {isSupply && (
@@ -307,12 +315,12 @@ export function ZerodotNode({ id, data, selected }: NodeProps<ZerodotFlowNode>) 
             position={Position.Left}
             id={port}
             style={inPorts.length > 1 ? { top: inTopFor(index) } : undefined}
-            className="size-3! rounded-full! border-2! border-card! bg-muted-foreground/70!"
+            className="z-10 size-3! rounded-full! border-2! border-card! bg-muted-foreground/70!"
           />
         ))}
         {supplyPorts.length > 0 ? (
           // The supply ports and their nodes are under the node, so the name goes inside it.
-          <div className="flex min-w-0 items-center gap-2 px-3">
+          <div className="flex w-full min-w-0 items-center gap-2 px-3">
             <NodeIcon
               name={entry?.icon ?? "CircleIcon"}
               src={entry?.iconUrl}
@@ -320,7 +328,7 @@ export function ZerodotNode({ id, data, selected }: NodeProps<ZerodotFlowNode>) 
               category={entry?.category}
             />
             <div className="min-w-0 text-xs">
-              <div className="truncate font-semibold leading-tight">{graphNode.name}</div>
+              <div className="line-clamp-2 font-semibold leading-tight">{graphNode.name}</div>
               {subtitle && (
                 <div className="truncate text-[9px] text-muted-foreground/70">{subtitle}</div>
               )}
@@ -343,7 +351,7 @@ export function ZerodotNode({ id, data, selected }: NodeProps<ZerodotFlowNode>) 
               position={Position.Right}
               id={port}
               style={{ top: topFor(index) }}
-              className="size-3! rounded-full! border-2! border-card! bg-muted-foreground/70!"
+              className="z-10 size-3! rounded-full! border-2! border-card! bg-muted-foreground/70!"
             />
           ) : null,
         )}
@@ -441,7 +449,7 @@ export function ZerodotNode({ id, data, selected }: NodeProps<ZerodotFlowNode>) 
             {/* A long label wraps, so the ports can sit close. */}
             <span className="pointer-events-none w-14 text-center text-2xs text-muted-foreground leading-tight">
               {port.label}
-              {port.required && "*"}
+              {port.required && <span className="text-destructive">*</span>}
             </span>
             {canAdd && (
               <button

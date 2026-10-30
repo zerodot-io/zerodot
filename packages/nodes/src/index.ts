@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import {
+  canBeTool,
   createRegistry,
   type Graph,
   type NodeDefinition,
@@ -128,6 +129,8 @@ export type NodeCatalogEntry = {
   supplyPorts?: SupplyPort[];
   /** The kind of value a supply node gives. Set only for a supply node. */
   supplies?: string;
+  /** The node can connect to a tool port and run as a tool. */
+  usableAsTool: boolean;
   defaultConfig: unknown;
   credentialTypes: string[];
   /** A trigger that registers its test address at a service. The hint replaces the address in the editor. */
@@ -151,6 +154,7 @@ const catalogEntry = (node: NodeDefinition): NodeCatalogEntry => ({
   ports: node.ports,
   supplyPorts: node.supplyPorts,
   supplies: node.supplies,
+  usableAsTool: canBeTool(node),
   defaultConfig: node.defaultConfig,
   credentialTypes: node.credentialTypes ?? [],
   credentialRules: node.credentialRules ?? {},

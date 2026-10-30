@@ -32,6 +32,8 @@ export const graphNodeSchema = z.object({
   notes: z.string().optional(),
   /** Show the note under the node on the canvas. */
   notesInFlow: z.boolean().optional(),
+  /** For a node that runs as a tool: what the tool does, for the model. */
+  toolDescription: z.string().optional(),
 });
 
 export const graphEdgeSchema = z.object({

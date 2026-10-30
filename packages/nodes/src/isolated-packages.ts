@@ -61,6 +61,7 @@ type NodeManifest = {
   stateful: boolean;
   rawConfigKeys?: string[];
   webhookTest?: NodeDefinition["webhookTest"];
+  usableAsTool?: boolean;
   hasRun: boolean;
   /** The node gives a supply or has supply ports. */
   hasSupply?: boolean;
@@ -340,6 +341,7 @@ function nodeFrom(host: PackageHost, manifest: NodeManifest): NodeDefinition {
     credentialTypes: manifest.credentialTypes,
     credentialRules: manifest.credentialRules,
     ports: manifest.ports,
+    usableAsTool: manifest.usableAsTool,
     join: manifest.join || undefined,
     stateful: manifest.stateful || undefined,
     rawConfigKeys: manifest.rawConfigKeys,

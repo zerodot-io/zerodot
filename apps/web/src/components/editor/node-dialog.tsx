@@ -36,7 +36,7 @@ import {
 import { type CSSProperties, type ReactNode, useRef, useState } from "react";
 import { catalogByType, type ZerodotFlowNode } from "../../lib/flow";
 import { CredentialDialog, type SavedCredential } from "../credential-dialog";
-import { ExpressionInput } from "../expression-input";
+import { ExpressionInput, FromAIContext } from "../expression-input";
 import { McpToolFields } from "../mcp-tool-fields";
 import { NodeIcon } from "../node-icon";
 import { OutputView } from "../output-view";
@@ -524,6 +524,8 @@ type Props = {
   node: ZerodotFlowNode | null;
   /** True when an edge leads into the node. */
   hasInput: boolean;
+  /** The node is on a tool port: it runs as a tool, not as a step. */
+  asTool?: boolean;
   /** For a node that joins several inputs (Merge): each input port and whether an edge leads into it. */
   inputPorts: { port: string; connected: boolean }[] | null;
   io: NodeIO | undefined;
@@ -552,6 +554,7 @@ export function NodeDialog({
   onCredentialCreated,
   node,
   hasInput,
+  asTool = false,
   inputPorts,
   io,
   webhookUrl,
@@ -586,7 +589,7 @@ export function NodeDialog({
 
   const isTrigger = entry?.category === "trigger";
   // A supply node is no step: it has no input, no output, and does not run alone.
-  const isSupply = entry?.supplies !== undefined;
+  const isSupply = entry?.supplies !== undefined || asTool;
   const isWebhookNode = graphNode?.type === "trigger.webhook";
   // A service calls the test URL of some triggers, not a person. The URL is not for them.
   const serviceHint = entry?.webhookTest?.hint;
@@ -785,25 +788,44 @@ export function NodeDialog({
                           }
                         />
                       )}
+                      {asTool && (
+                        <Field>
+                          <FieldLabel htmlFor="tool-description">Tool description</FieldLabel>
+                          <Textarea
+                            id="tool-description"
+                            rows={2}
+                            placeholder={entry?.description ?? "What the tool does, for the model"}
+                            value={graphNode.toolDescription ?? ""}
+                            onChange={(event) =>
+                              onChange((n) => ({
+                                ...n,
+                                toolDescription: event.target.value || undefined,
+                              }))
+                            }
+                          />
+                        </Field>
+                      )}
                       {entry && !isWebhookNode && credentialTypes.length > 0 && picker}
                       {entry && (
-                        <SchemaForm
-                          tables={tables}
-                          workflows={workflows}
-                          defaultTimezone={defaultTimezone}
-                          after={
-                            isWebhookNode && credentialTypes.length > 0
-                              ? { authentication: picker }
-                              : undefined
-                          }
-                          schema={
-                            graphNode.type === MCP_NODE
-                              ? withoutProperties(entry.configSchema, ["tool", "arguments"])
-                              : entry.configSchema
-                          }
-                          value={graphNode.config}
-                          onChange={(config) => onChange((n) => ({ ...n, config }))}
-                        />
+                        <FromAIContext.Provider value={asTool}>
+                          <SchemaForm
+                            tables={tables}
+                            workflows={workflows}
+                            defaultTimezone={defaultTimezone}
+                            after={
+                              isWebhookNode && credentialTypes.length > 0
+                                ? { authentication: picker }
+                                : undefined
+                            }
+                            schema={
+                              graphNode.type === MCP_NODE
+                                ? withoutProperties(entry.configSchema, ["tool", "arguments"])
+                                : entry.configSchema
+                            }
+                            value={graphNode.config}
+                            onChange={(config) => onChange((n) => ({ ...n, config }))}
+                          />
+                        </FromAIContext.Provider>
                       )}
                       {graphNode.type === MCP_NODE && (
                         <McpToolFields

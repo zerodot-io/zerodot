@@ -161,6 +161,7 @@ function nodeManifest(node) {
     stateful: node.stateful === true,
     rawConfigKeys: node.rawConfigKeys,
     webhookTest: node.webhookTest,
+    usableAsTool: typeof node.usableAsTool === "boolean" ? node.usableAsTool : undefined,
     hasRun: typeof node.run === "function",
     // Supply values hold functions. They cannot cross the process boundary.
     hasSupply: node.supplies !== undefined || typeof node.supply === "function" || Array.isArray(node.supplyPorts),

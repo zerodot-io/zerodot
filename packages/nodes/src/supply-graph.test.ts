@@ -97,3 +97,49 @@ describe("supply graph check", () => {
     assert.ok(problems.some((p) => p.includes("Connect it to a supply port only")));
   });
 });
+
+describe("node tool graph check", () => {
+  const slack = defineNode({
+    ...base,
+    type: "test.slack",
+    label: "Slack",
+    category: "integration",
+    config: z.object({ text: z.string() }),
+    defaultConfig: { text: "" },
+    ports: { in: ["in"], out: ["out"] },
+    run: () => ({ port: "out", data: {} }),
+  });
+  const set = defineNode({
+    ...base,
+    type: "test.set",
+    label: "Set",
+    ports: { in: ["in"], out: ["out"] },
+    run: () => ({ port: "out", data: {} }),
+  });
+  const reg = createRegistry([agent, slack, set]);
+  const g = (text: string, extra: Graph["edges"] = [], type = "test.slack"): Graph => ({
+    schema: 1,
+    nodes: [node("a", "test.agent"), { ...node("s", type), config: { text } }],
+    edges: [edge("s", "supply", "a", "supply:tools"), ...extra],
+  });
+
+  it("accepts an integration node on the tool port with $fromAI", () => {
+    assert.deepEqual(checkGraphNodes(g('{{ $fromAI("text") }}'), reg), []);
+  });
+
+  it("rejects a node that cannot be a tool, and data edges on a tool", () => {
+    assert.match(checkGraphNodes(g("", [], "test.set"), reg)[0] ?? "", /cannot be a tool/);
+    const problems = checkGraphNodes(g("", [edge("s", "out", "a", "in")]), reg);
+    assert.ok(problems.some((p) => p.includes("gives a supply")));
+  });
+
+  it("rejects $fromAI outside a tool and a key that is not text", () => {
+    const loose: Graph = {
+      schema: 1,
+      nodes: [{ ...node("s", "test.slack"), config: { text: '{{ $fromAI("x") }}' } }],
+      edges: [],
+    };
+    assert.match(checkGraphNodes(loose, reg)[0] ?? "", /only in a node connected as a tool/);
+    assert.match(checkGraphNodes(g("{{ $fromAI($input.a) }}"), reg)[0] ?? "", /config.text/);
+  });
+});

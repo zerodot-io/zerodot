@@ -157,3 +157,100 @@ describe("supply nodes", () => {
     );
   });
 });
+
+describe("node as tool", () => {
+  const slack = defineNode({
+    type: "test.slack",
+    label: "Send message",
+    description: "Sends a message",
+    category: "integration",
+    icon: "CircleIcon",
+    config: z.object({ channel: z.string(), text: z.string(), count: z.unknown() }),
+    defaultConfig: { channel: "", text: "", count: 0 },
+    ports: { in: ["in"], out: ["out"] },
+    run: ({ config, input }) => ({ port: "out", data: { sent: config, input } }),
+  });
+  /** Lists its tools and calls the first one with fixed input. */
+  const agent = defineNode({
+    type: "test.agent",
+    label: "Agent",
+    category: "core",
+    icon: "CircleIcon",
+    config: z.object({}),
+    defaultConfig: {},
+    ports: { in: ["in"], out: ["out"] },
+    supplyPorts: [{ name: "tools", kind: "ai.tool", label: "Tool", multiple: true }],
+    run: async ({ supplies }) => {
+      const tools = supplies?.tools as {
+        spec: { name: string; inputSchema: unknown };
+        call(input: unknown): Promise<unknown>;
+      }[];
+      const first = tools[0];
+      if (!first) throw new Error("no tool");
+      const result = await first.call({ text: "hi", count: 3 });
+      return {
+        port: "out",
+        data: { names: tools.map((t) => t.spec.name), schema: first.spec.inputSchema, result },
+      };
+    },
+  });
+  const toolRegistry = createRegistry([trigger, slack, agent]);
+  const toolGraph = (config: Record<string, unknown>): Graph => ({
+    schema: 1,
+    nodes: [
+      node("t", "trigger.test"),
+      node("a", "test.agent"),
+      { ...node("Send message", "test.slack", config), toolDescription: "" },
+      node("Send message!", "test.slack", { channel: "x", text: "y", count: 1 }, 100),
+    ],
+    edges: [
+      { id: "e1", from: "t", fromPort: "out", to: "a", toPort: "in" },
+      { id: "s1", from: "Send message", fromPort: "supply", to: "a", toPort: "supply:tools" },
+      { id: "s2", from: "Send message!", fromPort: "supply", to: "a", toPort: "supply:tools" },
+    ],
+  });
+
+  it("builds a tool from $fromAI and runs the node with the parent's input", async () => {
+    const ends: NodeEndEvent[] = [];
+    const result = await executeGraph({
+      graph: toolGraph({
+        channel: "{{ $input.name }}",
+        text: 'Say: {{ $fromAI("text", "The message") }}',
+        count: '{{ $fromAI("count", "", "number") }}',
+      }),
+      registry: toolRegistry,
+      triggerInput: { name: "Ada" },
+      mode: "production",
+      signal: new AbortController().signal,
+      hooks: [{ afterNode: (event) => void ends.push(event) }],
+    });
+    assert.equal(result.status, "succeeded", JSON.stringify(result.error));
+    const out = ends.find((e) => e.node.id === "a")?.output as Record<string, unknown>;
+    assert.deepEqual(out.names, ["Send_message", "Send_message_2"]);
+    assert.deepEqual(out.schema, {
+      type: "object",
+      properties: {
+        text: { type: "string", description: "The message" },
+        count: { type: "number" },
+      },
+      required: ["text", "count"],
+      additionalProperties: false,
+    });
+    assert.deepEqual(out.result, {
+      sent: { channel: "Ada", text: "Say: hi", count: 3 },
+      input: { name: "Ada" },
+    });
+  });
+
+  it("fails a $fromAI key that is not literal text", async () => {
+    const result = await executeGraph({
+      graph: toolGraph({ channel: "", text: "{{ $fromAI($input.name) }}", count: 0 }),
+      registry: toolRegistry,
+      triggerInput: {},
+      mode: "production",
+      signal: new AbortController().signal,
+    });
+    assert.equal(result.status, "failed");
+    assert.match(result.error?.message ?? "", /Supply "Send message" \(Tool\): config.text/);
+  });
+});
