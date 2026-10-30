@@ -22,6 +22,7 @@ import {
   useUpdateNodeInternals,
 } from "@xyflow/react";
 import {
+  actionOf,
   inputPortsOf,
   outputPortsOf,
   SUPPLY_OUT_PORT,
@@ -78,6 +79,16 @@ const BORDER: Record<NodeRunStatus, string> = {
   failed: "border-red-500",
   skipped: "border-dashed border-border opacity-60",
 };
+
+/** The text values that an action sets, operation first, for example "create: spreadsheet". */
+function actionSummary(action: { config: Record<string, unknown> } | undefined) {
+  if (!action) return undefined;
+  const { operation, resource, ...rest } = action.config;
+  const values = [operation, resource, ...Object.values(rest)].filter(
+    (value): value is string => typeof value === "string" && value !== "",
+  );
+  return values.length > 0 ? values.join(": ") : undefined;
+}
 
 function ToolbarButton({
   label,
@@ -173,7 +184,11 @@ export function ZerodotNode({ id, data, selected }: NodeProps<ZerodotFlowNode>) 
   const suppliedCount = (port: SupplyPort) =>
     incoming.filter((c) => c.targetHandle === `${SUPPLY_PORT_PREFIX}${port.name}`).length;
   const supplyLeftFor = (index: number) => `${supplyPortX(index, supplyPorts.length) * 100}%`;
-  const subtitle = definition?.subtitle?.(graphNode.config);
+  // The node subtitle. A package node has no subtitle in the browser, so it shows what its action
+  // sets, for example "create: spreadsheet".
+  const subtitle =
+    definition?.subtitle?.(graphNode.config) ??
+    actionSummary(entry ? actionOf(entry, graphNode.config) : undefined);
   // A port with an edge swaps its plus-button handle for a handle on the node edge.
   // React Flow must measure the new handle, or the edge starts at the old spot.
   const updateNodeInternals = useUpdateNodeInternals();
