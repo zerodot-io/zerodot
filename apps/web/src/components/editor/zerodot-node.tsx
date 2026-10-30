@@ -270,7 +270,7 @@ export function ZerodotNode({ id, data, selected }: NodeProps<ZerodotFlowNode>) 
           minHeight: `${Math.max(4, Math.max(outPorts.length, inPorts.length) * 1.5)}rem`,
           // Each supply port needs room for its label under the node.
           ...(supplyPorts.length > 0
-            ? { width: `${Math.max(12, supplyPorts.length * 4)}rem` }
+            ? { width: `${Math.max(12, supplyPorts.length * 4.5)}rem` }
             : {}),
         }}
       >
@@ -280,7 +280,7 @@ export function ZerodotNode({ id, data, selected }: NodeProps<ZerodotFlowNode>) 
             position={Position.Top}
             id={SUPPLY_OUT_PORT}
             isConnectable={!readOnly}
-            className="size-2.5! rotate-45 rounded-none! border-2! border-card! bg-muted-foreground/70!"
+            className="size-3! rotate-45 rounded-none! border! border-muted-foreground/50! bg-card!"
           />
         )}
         {supplyPorts.map((port, index) => (
@@ -291,7 +291,7 @@ export function ZerodotNode({ id, data, selected }: NodeProps<ZerodotFlowNode>) 
             id={`${SUPPLY_PORT_PREFIX}${port.name}`}
             isConnectable={!readOnly}
             style={{ left: supplyLeftFor(index) }}
-            className="size-2.5! rotate-45 rounded-none! border-2! border-card! bg-muted-foreground/70!"
+            className="size-3! rotate-45 rounded-none! border! border-muted-foreground/50! bg-card!"
           />
         ))}
         {graphNode.pinned && (
@@ -328,7 +328,7 @@ export function ZerodotNode({ id, data, selected }: NodeProps<ZerodotFlowNode>) 
               category={entry?.category}
             />
             <div className="min-w-0 text-xs">
-              <div className="line-clamp-2 font-semibold leading-tight">{graphNode.name}</div>
+              <div className="line-clamp-2 font-medium leading-tight">{graphNode.name}</div>
               {subtitle && (
                 <div className="truncate text-[9px] text-muted-foreground/70">{subtitle}</div>
               )}
@@ -443,24 +443,26 @@ export function ZerodotNode({ id, data, selected }: NodeProps<ZerodotFlowNode>) 
         return (
           <div
             key={port.name}
-            className="absolute top-full flex -translate-x-1/2 flex-col items-center pt-2"
+            className="absolute top-full flex -translate-x-1/2 flex-col items-center pt-1.5"
             style={{ left: supplyLeftFor(index) }}
           >
-            {/* A long label wraps, so the ports can sit close. */}
-            <span className="pointer-events-none w-14 text-center text-[9px] text-muted-foreground leading-tight">
+            <span className="pointer-events-none whitespace-nowrap text-[9px] text-muted-foreground leading-tight">
               {port.label}
               {port.required && <span className="text-destructive">*</span>}
             </span>
             {canAdd && (
-              <button
-                type="button"
-                aria-label={`Add ${port.label} to ${graphNode.name}`}
-                title={`Add ${port.label}`}
-                onClick={() => addSupply?.(id, port)}
-                className="nodrag nopan mt-1 grid size-5 place-items-center rounded text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground"
-              >
-                <HugeiconsIcon icon={PlusSignIcon} className="size-3" strokeWidth={2.5} />
-              </button>
+              <>
+                <span aria-hidden className="mt-1 h-3 w-px bg-muted-foreground/40" />
+                <button
+                  type="button"
+                  aria-label={`Add ${port.label} to ${graphNode.name}`}
+                  title={`Add ${port.label}`}
+                  onClick={() => addSupply?.(id, port)}
+                  className="nodrag nopan grid size-4 place-items-center rounded-sm border bg-muted text-muted-foreground transition-colors duration-150 hover:text-foreground"
+                >
+                  <HugeiconsIcon icon={PlusSignIcon} className="size-2.5" strokeWidth={2.5} />
+                </button>
+              </>
             )}
           </div>
         );
