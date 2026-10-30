@@ -5,6 +5,7 @@ import { numberRecord, readFilter, rowObject, storeOf, tableRef } from "./table-
 
 export default defineNode({
   type: "table.update",
+  usableAsTool: true,
   label: "Update Rows",
   description: "Change rows in a table that match a filter",
   category: "data",

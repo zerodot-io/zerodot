@@ -5,6 +5,7 @@ import { storeOf, tableRef } from "./table-common";
 
 export default defineNode({
   type: "table.get",
+  usableAsTool: true,
   label: "Get Row",
   description: "Read one row from a table by ID",
   category: "data",

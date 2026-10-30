@@ -131,6 +131,8 @@ import {
 } from "./zerodot-node";
 
 const nodeTypes = { zerodot: ZerodotNode };
+/** Nodes that the tool port list shows with its supply nodes, at the top. */
+const RECOMMENDED_TOOLS = new Set(["http.request"]);
 const edgeTypes = { zerodot: ZerodotEdge };
 const EVENT_TYPES: RunEvent["type"][] = [
   "run.started",
@@ -1316,8 +1318,11 @@ export function Editor({
     }
     const groups = new Map<string, AddRow[]>();
     // On a tool port, the nodes that run as tools sit in their own group.
-    const groupOf = (entry: CatalogEntry) =>
-      addSupply && entry.supplies === undefined ? "Action in an app" : entry.category;
+    const groupOf = (entry: CatalogEntry) => {
+      if (!addSupply) return entry.category;
+      if (entry.supplies !== undefined || RECOMMENDED_TOOLS.has(entry.type)) return "Recommended";
+      return "Action in an app";
+    };
     const add = (category: string, row: AddRow) =>
       groups.set(category, [...(groups.get(category) ?? []), row]);
     const placed = new Set<string>();
@@ -1339,7 +1344,10 @@ export function Editor({
         });
       }
     }
-    return [...groups];
+    // The recommended group comes first.
+    return [...groups].sort(
+      ([a], [b]) => Number(b === "Recommended") - Number(a === "Recommended"),
+    );
   }, [addQuery, addApp, insertEdgeId, addFrom, addSupply, addBefore, addConsumer, catalogTick]);
 
   async function commitRename() {

@@ -5,6 +5,7 @@ import { credentialHeader } from "./credential-header";
 
 export default defineNode({
   type: "http.request",
+  usableAsTool: true,
   label: "HTTP Request",
   description: "Call any HTTP API and get the response",
   category: "core",

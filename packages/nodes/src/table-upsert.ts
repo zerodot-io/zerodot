@@ -5,6 +5,7 @@ import { numberRecord, rowObject, storeOf, tableRef } from "./table-common";
 
 export default defineNode({
   type: "table.upsert",
+  usableAsTool: true,
   label: "Upsert Row",
   description: "Update a row if it exists, else insert it",
   category: "data",

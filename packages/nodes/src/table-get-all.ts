@@ -8,6 +8,7 @@ export const GET_ALL_MAX_ROWS = 10_000;
 
 export default defineNode({
   type: "table.get_all",
+  usableAsTool: true,
   label: "Get All Rows",
   description: "Read all rows of a table, or the rows that match a filter",
   category: "data",

@@ -90,6 +90,7 @@ function format(date: Date, pattern: string): string {
 
 export default defineNode({
   type: "data.dateTime",
+  usableAsTool: true,
   label: "Date & Time",
   description: "Manipulate date and time values",
   category: "data",
