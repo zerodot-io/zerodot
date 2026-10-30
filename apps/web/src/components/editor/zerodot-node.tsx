@@ -41,6 +41,7 @@ import { createContext, useContext, useEffect, useState } from "react";
 import {
   catalogByType,
   type NodeRunStatus,
+  supplyPortX,
   uniqueName,
   type ZerodotFlowNode,
 } from "../../lib/flow";
@@ -170,7 +171,7 @@ export function ZerodotNode({ id, data, selected }: NodeProps<ZerodotFlowNode>) 
   const supplyPorts = entry?.supplyPorts ?? [];
   const suppliedCount = (port: SupplyPort) =>
     incoming.filter((c) => c.targetHandle === `${SUPPLY_PORT_PREFIX}${port.name}`).length;
-  const supplyLeftFor = (index: number) => `${((index + 1) / (supplyPorts.length + 1)) * 100}%`;
+  const supplyLeftFor = (index: number) => `${supplyPortX(index, supplyPorts.length) * 100}%`;
   const subtitle = definition?.subtitle?.(graphNode.config);
   // A port with an edge swaps its plus-button handle for a handle on the node edge.
   // React Flow must measure the new handle, or the edge starts at the old spot.

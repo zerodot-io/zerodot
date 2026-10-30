@@ -29,6 +29,19 @@ export const isSupplyFlowEdge = (edge: Pick<Edge, "sourceHandle" | "targetHandle
   isSupplyEdge({ fromPort: edge.sourceHandle ?? "out", toPort: edge.targetHandle ?? "in" });
 
 /**
+ * Where a supply port sits along the bottom of its node, from 0 (left) to 1 (right). One port
+ * sits in the middle. With more, the first one (the main supply) sits on the left, and the others
+ * sit together on the right.
+ */
+export function supplyPortX(index: number, count: number): number {
+  if (count <= 1) return 0.5;
+  if (index === 0) return 0.18;
+  const first = count === 2 ? 0.7 : 0.6;
+  const last = 0.84;
+  return count === 2 ? first : first + ((last - first) * (index - 1)) / (count - 2);
+}
+
+/**
  * Supply nodes and tools are no steps, so a run gives them no status. They take the status of the
  * node they supply while it runs or after it succeeded, so the run shows the whole chain.
  */

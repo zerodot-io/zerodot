@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import type { Edge } from "@xyflow/react";
-import { catalogByType, isSupplyFlowEdge, type ZerodotFlowNode } from "./flow";
+import { catalogByType, isSupplyFlowEdge, supplyPortX, type ZerodotFlowNode } from "./flow";
 
 const COLUMN_GAP = 120;
 const ROW_GAP = 48;
@@ -170,7 +170,7 @@ export function arrangeNodes(nodes: ZerodotFlowNode[], edges: Edge[]): ZerodotFl
       const port = row[i]?.port ?? 0;
       const group = row.filter((item) => item.port === port);
       const width = rowWidth(group);
-      const center = at.x + (w * (port + 1)) / (portCount + 1);
+      const center = at.x + w * supplyPortX(port, portCount);
       let x = Math.max(center - width / 2, end + SUPPLY_GAP);
       for (const { n } of group) {
         xs.push(x);
