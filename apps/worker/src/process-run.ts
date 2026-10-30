@@ -22,7 +22,7 @@ import {
   type SubWorkflowRunner,
 } from "@zerodot/engine";
 import { openCredential, registry } from "@zerodot/nodes";
-import { publishRunEvent, runResponseKey } from "@zerodot/queue";
+import { notifyRun, publishRunEvent, runResponseKey } from "@zerodot/queue";
 import type { Redis } from "ioredis";
 import { log } from "./log";
 
@@ -219,6 +219,7 @@ export async function processRun(
   const fail = async (message: string) => {
     await rollupRun(await scope.runs.finish(job.runId, { status: "failed", error: { message } }));
     await publish({ type: "run.finished", runId: job.runId, status: "failed", error: { message } });
+    await notifyRun(redis, job.runId);
   };
 
   const run = await scope.runs.get(job.runId);
@@ -409,6 +410,7 @@ export async function processRun(
       }
       if (e.status === "succeeded" && e.respond) {
         await redis.set(runResponseKey(job.runId), JSON.stringify(e.respond), "EX", 600);
+        await notifyRun(redis, job.runId);
       }
       // Events go out in order on one connection, so they need not be awaited. The event at the
       // end of the run is awaited, and it comes after all of them.
@@ -557,6 +559,7 @@ export async function processRun(
     }
     await rollupRun(await scope.runs.finish(job.runId, { status, error }));
     await publish({ type: "run.finished", runId: job.runId, status, error });
+    await notifyRun(redis, job.runId);
     if (status === "failed" && run.mode === "production") {
       // The error workflow starts only when no retry is queued, so it sees the last failure.
       const retried = await startAutoRetry(deps, scope, run).catch((e) => {

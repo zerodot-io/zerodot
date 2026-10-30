@@ -289,6 +289,27 @@ export const nodeType = z.object({
 
 export const typeParams = z.object({ type: z.string().min(1) });
 
+// ---- API keys ----
+
+export const apiKeyOut = z.object({
+  id: z.uuid(),
+  name: z.string(),
+  prefix: z.string(),
+  role: z.enum(["admin", "member"]),
+  expiresAt: iso.nullable(),
+  lastUsedAt: iso.nullable(),
+  createdAt: iso,
+});
+
+export const apiKeyCreate = z.object({
+  name: z.string().trim().min(1).max(80),
+  role: z.enum(["admin", "member"]).default("member"),
+  expiresInDays: z.number().int().min(1).max(3650).nullable().default(null),
+});
+
+/** The full key shows once, in the answer to the create call. */
+export const apiKeyCreated = apiKeyOut.extend({ key: z.string() });
+
 // ---- Variables ----
 
 export const variableOut = z.object({

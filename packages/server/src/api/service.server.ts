@@ -24,7 +24,10 @@ import { ApiError, badRequest, conflict, notFound } from "./errors";
  */
 
 const TERMINAL = new Set<RunRow["status"]>(["succeeded", "failed", "cancelled"]);
-const POLL_MS = 250;
+/** The worker wakes a waiter when a run ends. This poll only covers a lost wake. */
+const POLL_MS = 1_000;
+/** Poll rate when the services have no waiter. */
+const PLAIN_POLL_MS = 250;
 
 /** Structure checks. With `nodes: true` it also checks node types, configs, and edge ports. */
 export function checkedGraph(graph: Graph, options: { nodes: boolean }): Graph {
@@ -687,10 +690,18 @@ const sleep = (ms: number, signal?: AbortSignal) =>
 export async function waitForRun(ctx: ApiContext, runId: string, signal?: AbortSignal) {
   const deadline = Date.now() + ctx.services.syncTimeoutMs;
   for (;;) {
-    const run = await ctx.scope.runs.get(runId);
-    if (!run) throw notFound("Run");
-    if (TERMINAL.has(run.status) || Date.now() >= deadline || signal?.aborted) return run;
-    await sleep(Math.min(POLL_MS, deadline - Date.now()), signal);
+    // Arm before the read, so a wake that comes during it is not lost.
+    const wake = ctx.services.runWaiter?.arm(runId, signal);
+    try {
+      const run = await ctx.scope.runs.get(runId);
+      if (!run) throw notFound("Run");
+      if (TERMINAL.has(run.status) || Date.now() >= deadline || signal?.aborted) return run;
+      const left = deadline - Date.now();
+      if (wake) await wake.wait(Math.min(POLL_MS, left));
+      else await sleep(Math.min(PLAIN_POLL_MS, left), signal);
+    } finally {
+      wake?.disarm();
+    }
   }
 }
 

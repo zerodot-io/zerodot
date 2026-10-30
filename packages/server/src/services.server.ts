@@ -8,7 +8,12 @@ import {
   runMigrations,
   setBlobSetup,
 } from "@zerodot/db";
-import { createConnection, createRunQueue, createSystemQueue } from "@zerodot/queue";
+import {
+  createConnection,
+  createRunQueue,
+  createRunWaiter,
+  createSystemQueue,
+} from "@zerodot/queue";
 import { z } from "zod";
 import { createHeldLimiter } from "./held-limit";
 
@@ -44,8 +49,22 @@ const env = z.object({
   ZERODOT_TABLE_MAX_ROWS: int(100_000),
   /** Most Postgres connections one process opens. */
   ZERODOT_DB_POOL_MAX: int(10),
-  ZERODOT_WEBHOOK_RATE_LIMIT_PER_MINUTE: int(600),
+  /** Calls for each webhook token in one minute. 0 turns the limit off. */
+  ZERODOT_WEBHOOK_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(0).default(6000),
   ZERODOT_API_RATE_LIMIT_PER_MINUTE: int(600),
+  /**
+   * An admin API key that you choose, for scripted setup. The first call with it saves it in the
+   * project `ZERODOT_BOOTSTRAP_PROJECT` (default: the oldest project), so sign up first.
+   */
+  ZERODOT_BOOTSTRAP_API_KEY: z
+    .string()
+    .regex(/^zerodot_[A-Za-z0-9_-]{32,}$/, "Use zerodot_ and at least 32 letters, digits, - or _")
+    .optional()
+    .or(z.literal("").transform(() => undefined)),
+  ZERODOT_BOOTSTRAP_PROJECT: z
+    .string()
+    .optional()
+    .transform((v) => v || undefined),
   /** `wait=true` on the API holds a request at most this long. */
   ZERODOT_WEBHOOK_SYNC_TIMEOUT_MS: int(30_000),
   /** Most requests one process holds open for a run (`wait=true`, response modes). Over it: 503. */
@@ -87,6 +106,8 @@ async function init() {
     db: handle.db,
     auth,
     redis,
+    /** Wakes a request that holds for a run. The Valkey subscription is shared by all of them. */
+    runWaiter: createRunWaiter(createConnection(config.VALKEY_URL)),
     queue,
     systemQueue,
     /** SSE readers use XREAD BLOCK. Each reader needs its own connection. */

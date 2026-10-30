@@ -20,6 +20,13 @@ async function build(): Promise<ApiServices> {
     baseUrl: app.config.ZERODOT_BASE_URL,
     syncTimeoutMs: app.config.ZERODOT_WEBHOOK_SYNC_TIMEOUT_MS,
     heldLimiter: app.heldLimiter,
+    runWaiter: app.runWaiter,
+    bootstrap: app.config.ZERODOT_BOOTSTRAP_API_KEY
+      ? {
+          key: app.config.ZERODOT_BOOTSTRAP_API_KEY,
+          project: app.config.ZERODOT_BOOTSTRAP_PROJECT,
+        }
+      : undefined,
     rateLimitPerMinute: app.config.ZERODOT_API_RATE_LIMIT_PER_MINUTE,
     enqueue: (input) => enqueueRun(app.queue, input),
     async hit(key) {

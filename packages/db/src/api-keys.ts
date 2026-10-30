@@ -2,7 +2,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { and, desc, eq, sql } from "drizzle-orm";
 import type { Db } from "./client";
-import { apiKey } from "./schema";
+import { apiKey, organization } from "./schema";
 
 export const API_KEY_PREFIX = "zerodot_";
 const SHOWN_PREFIX_LENGTH = API_KEY_PREFIX.length + 4;
@@ -118,4 +118,30 @@ export async function findApiKey(db: Db, key: string): Promise<ApiKeyIdentity | 
     role: row.role,
     expiresAt: row.expiresAt,
   };
+}
+
+/**
+ * Saves a key that the operator chose (`ZERODOT_BOOTSTRAP_API_KEY`) as an admin key. It goes to
+ * the project with `slug`, or to the oldest project when there is no slug. Returns false when
+ * that project does not exist yet. A key that exists already is left as it is.
+ */
+export async function seedApiKey(db: Db, key: string, slug: string | undefined): Promise<boolean> {
+  const [org] = await db
+    .select({ id: organization.id })
+    .from(organization)
+    .where(slug ? eq(organization.slug, slug) : undefined)
+    .orderBy(organization.createdAt)
+    .limit(1);
+  if (!org) return false;
+  await db
+    .insert(apiKey)
+    .values({
+      organizationId: org.id,
+      name: "bootstrap",
+      prefix: key.slice(0, SHOWN_PREFIX_LENGTH),
+      keyHash: hashApiKey(key),
+      role: "admin",
+    })
+    .onConflictDoNothing();
+  return true;
 }

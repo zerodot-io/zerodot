@@ -182,6 +182,7 @@ export async function enqueueRun(
 
 export * from "./admin";
 export * from "./events";
+export * from "./run-wake";
 export * from "./slots";
 
 /**
