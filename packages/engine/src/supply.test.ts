@@ -5,7 +5,7 @@ import { z } from "zod";
 import { executeGraph, type NodeEndEvent } from "./execute";
 import { type Graph, rootNodes } from "./graph";
 import { canBeTool, createRegistry, defineNode, defineSupplyNode } from "./node";
-import { withoutBinary } from "./tool";
+import { toolDescription, withoutBinary } from "./tool";
 
 const trigger = defineNode({
   type: "trigger.test",
@@ -257,6 +257,38 @@ describe("node as tool", () => {
         list: [{ mimeType: "text/plain", size: 2 }],
         other: { data: "x", mimeType: "y", extra: 1 },
       },
+    );
+  });
+
+  it("describes a tool by the action that its config selects", () => {
+    const definition = {
+      label: "Slack",
+      app: "Slack",
+      description: "Send messages, manage channels, and find users",
+      subtitle: (config: Record<string, unknown>) => `${config.resource}: ${config.operation}`,
+      actions: [
+        { label: "Send a message", config: { resource: "message", operation: "send" } },
+        {
+          label: "Send a WhatsApp message",
+          config: { resource: "message", operation: "send", channel: "whatsapp" },
+        },
+        { label: "Find a user", config: { resource: "user", operation: "find" } },
+      ],
+    };
+    const config = { resource: "message", operation: "send", text: "hi" };
+    assert.equal(toolDescription({ config }, definition), "Send a message in Slack");
+    assert.equal(
+      toolDescription({ config: { ...config, channel: "whatsapp" } }, definition),
+      "Send a WhatsApp message in Slack",
+    );
+    assert.equal(
+      toolDescription({ config, toolDescription: " Post to #general " }, definition),
+      "Post to #general",
+    );
+    // No action matches: the description and the subtitle, as before.
+    assert.equal(
+      toolDescription({ config: { resource: "file", operation: "upload" } }, definition),
+      "Send messages, manage channels, and find users. file: upload",
     );
   });
 

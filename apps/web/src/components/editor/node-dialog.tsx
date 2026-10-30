@@ -11,7 +11,7 @@ import {
   PlusSignIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { type ShowRules, visibleCredentialTypes } from "@zerodot/engine";
+import { type ShowRules, toolDescription, visibleCredentialTypes } from "@zerodot/engine";
 import { credentialTypeCatalog } from "@zerodot/nodes";
 import {
   Button,
@@ -792,7 +792,11 @@ export function NodeDialog({
                           <Textarea
                             id="tool-description"
                             rows={2}
-                            placeholder={entry?.description ?? "What the tool does, for the model"}
+                            placeholder={
+                              entry
+                                ? toolDescription({ config: graphNode.config }, entry)
+                                : "What the tool does, for the model"
+                            }
                             value={graphNode.toolDescription ?? ""}
                             onChange={(event) =>
                               onChange((n) => ({

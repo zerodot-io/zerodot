@@ -31,7 +31,14 @@ import {
 import type { CodeLog, SandboxClient } from "./sandbox";
 import { type SupplyCall, type SupplyUseStatus, trackUse } from "./supply-use";
 import type { TableStore } from "./tables";
-import { fromAIInputs, type NodeTool, toolInputSchema, toolName, withoutBinary } from "./tool";
+import {
+  fromAIInputs,
+  type NodeTool,
+  toolDescription,
+  toolInputSchema,
+  toolName,
+  withoutBinary,
+} from "./tool";
 
 export type NodeStatus = "running" | "waiting" | "succeeded" | "failed" | "skipped";
 
@@ -570,14 +577,9 @@ export async function executeGraph(options: ExecuteOptions): Promise<ExecuteResu
     logs: CodeLog[],
   ): NodeTool => {
     const name = toolName(node.name, used);
-    const subtitle = definition.subtitle?.(node.config);
-    const description =
-      node.toolDescription?.trim() ||
-      [definition.description, subtitle].filter(Boolean).join(". ") ||
-      definition.label;
     const spec = {
       name,
-      description,
+      description: toolDescription(node, definition),
       inputSchema: toolInputSchema(fromAIInputs(node, definition)),
     };
     return {
