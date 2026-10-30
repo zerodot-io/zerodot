@@ -281,7 +281,7 @@ export function ZerodotNode({ id, data, selected }: NodeProps<ZerodotFlowNode>) 
             position={Position.Top}
             id={SUPPLY_OUT_PORT}
             isConnectable={!readOnly}
-            className="size-3! rotate-45 rounded-none! border! border-muted-foreground/50! bg-card!"
+            className="size-3! rotate-45 rounded-none! border-2! border-card! bg-muted-foreground/70!"
           />
         )}
         {supplyPorts.map((port, index) => (
@@ -292,7 +292,7 @@ export function ZerodotNode({ id, data, selected }: NodeProps<ZerodotFlowNode>) 
             id={`${SUPPLY_PORT_PREFIX}${port.name}`}
             isConnectable={!readOnly}
             style={{ left: supplyLeftFor(index) }}
-            className="size-3! rotate-45 rounded-none! border! border-muted-foreground/50! bg-card!"
+            className="size-3! rotate-45 rounded-none! border-2! border-card! bg-muted-foreground/70!"
           />
         ))}
         {graphNode.pinned && (
@@ -329,7 +329,7 @@ export function ZerodotNode({ id, data, selected }: NodeProps<ZerodotFlowNode>) 
               category={entry?.category}
             />
             <div className="min-w-0 text-xs">
-              <div className="line-clamp-2 font-medium leading-tight">{graphNode.name}</div>
+              <div className="line-clamp-2 font-semibold leading-tight">{graphNode.name}</div>
               {subtitle && (
                 <div className="truncate text-[9px] text-muted-foreground/70">{subtitle}</div>
               )}
@@ -453,15 +453,18 @@ export function ZerodotNode({ id, data, selected }: NodeProps<ZerodotFlowNode>) 
             </span>
             {canAdd && (
               <>
-                <span aria-hidden className="mt-1 h-3 w-px bg-muted-foreground/40" />
+                <span
+                  aria-hidden
+                  className="mt-1 h-4 border-muted-foreground/40 border-l border-dashed"
+                />
                 <button
                   type="button"
                   aria-label={`Add ${port.label} to ${graphNode.name}`}
                   title={`Add ${port.label}`}
                   onClick={() => addSupply?.(id, port)}
-                  className="nodrag nopan grid size-4 place-items-center rounded-sm border bg-muted text-muted-foreground transition-colors duration-150 hover:text-foreground"
+                  className="nodrag nopan grid size-5 place-items-center text-muted-foreground transition-colors duration-150 hover:text-foreground"
                 >
-                  <HugeiconsIcon icon={PlusSignIcon} className="size-2.5" strokeWidth={2.5} />
+                  <HugeiconsIcon icon={PlusSignIcon} className="size-3" strokeWidth={2.5} />
                 </button>
               </>
             )}
