@@ -17,7 +17,7 @@ export type GraphDiff = {
 };
 
 /** A stable text for a value. Object keys are sorted, so key order does not matter. */
-function canonical(value: unknown): string {
+export function canonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
   if (value !== null && typeof value === "object") {
     const entries = Object.entries(value).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));

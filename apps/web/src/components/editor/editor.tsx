@@ -364,6 +364,13 @@ export function Editor({
 
   // Autosave the draft. Selection and size changes do not change the graph JSON.
   const lastSaved = useRef(JSON.stringify(parseGraph(workflow.draftGraph)));
+  // One save at a time. A save that starts before the last one ends would send an old base.
+  const saving = useRef<Promise<unknown>>(Promise.resolve());
+  const afterSaves = useCallback(<T,>(task: () => Promise<T>): Promise<T> => {
+    const run = saving.current.then(task);
+    saving.current = run.catch(() => undefined);
+    return run;
+  }, []);
   useEffect(() => {
     const json = JSON.stringify(graph);
     if (json === lastSaved.current) return;
@@ -382,10 +389,13 @@ export function Editor({
     setSaveState("saving");
     const timer = setTimeout(async () => {
       try {
-        await saveDraftFn({
-          data: { projectSlug, workflowId: workflow.id, graph, base: lastSaved.current },
+        await afterSaves(async () => {
+          if (json === lastSaved.current) return;
+          await saveDraftFn({
+            data: { projectSlug, workflowId: workflow.id, graph, base: lastSaved.current },
+          });
+          lastSaved.current = json;
         });
-        lastSaved.current = json;
         setSaveState("saved");
         setMessage(null);
       } catch (error) {
@@ -394,7 +404,7 @@ export function Editor({
       }
     }, 800);
     return () => clearTimeout(timer);
-  }, [graph, projectSlug, workflow.id]);
+  }, [graph, projectSlug, workflow.id, afterSaves]);
 
   useEffect(() => () => source.current?.close(), []);
 
@@ -1204,13 +1214,15 @@ export function Editor({
 
   /** Saves the canvas now when autosave has not run yet, so an export matches the canvas. */
   async function saveNow() {
-    if (JSON.stringify(graph) === lastSaved.current) return;
-    if (graph.nodes.some((n) => !catalogByType.has(n.type))) return;
-    await saveDraftFn({
-      data: { projectSlug, workflowId: workflow.id, graph, base: lastSaved.current },
+    await afterSaves(async () => {
+      if (JSON.stringify(graph) === lastSaved.current) return;
+      if (graph.nodes.some((n) => !catalogByType.has(n.type))) return;
+      await saveDraftFn({
+        data: { projectSlug, workflowId: workflow.id, graph, base: lastSaved.current },
+      });
+      lastSaved.current = JSON.stringify(graph);
+      setSaveState("saved");
     });
-    lastSaved.current = JSON.stringify(graph);
-    setSaveState("saved");
   }
 
   /** Download the saved draft. Autosave runs first, so the file matches the canvas. */
@@ -1234,10 +1246,13 @@ export function Editor({
   async function publish() {
     setMessage(null);
     try {
-      const result = await publishFn({
-        data: { projectSlug, workflowId: workflow.id, graph, base: lastSaved.current },
+      const result = await afterSaves(async () => {
+        const published = await publishFn({
+          data: { projectSlug, workflowId: workflow.id, graph, base: lastSaved.current },
+        });
+        lastSaved.current = JSON.stringify(graph);
+        return published;
       });
-      lastSaved.current = JSON.stringify(graph);
       setPublishedJson(lastSaved.current);
       setSaveState("saved");
       setMessage(`Published version ${result.version}`);
