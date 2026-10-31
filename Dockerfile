@@ -7,13 +7,20 @@ WORKDIR /app
 ENV ZERODOT_NODES_DIR=/nodes
 RUN mkdir -p /nodes && chown node:node /nodes
 
+# The root package.json without its version. A release changes only the version, so the
+# install layer below stays cached.
+FROM base AS manifest
+COPY package.json ./
+RUN node -e "const p = require('./package.json'); delete p.version; require('fs').writeFileSync('package.json', JSON.stringify(p))"
+
 FROM base AS build
 # isolated-vm (the code sandbox) is a native module. It needs a compiler.
 RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ \
   && rm -rf /var/lib/apt/lists/*
 # Install first from manifests only. This layer stays cached until the lockfile changes,
 # so the isolated-vm compile does not rerun on every source edit.
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY --from=manifest /app/package.json ./
+COPY pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/api/package.json apps/api/
 COPY apps/sandbox/package.json apps/sandbox/
 COPY apps/web/package.json apps/web/
