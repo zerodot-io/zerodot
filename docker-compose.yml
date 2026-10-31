@@ -188,6 +188,9 @@ services:
 
   postgres:
     image: postgres:17
+    # Each worker opens about ZERODOT_WORKER_CONCURRENCY + ZERODOT_SYSTEM_CONCURRENCY + 5
+    # connections, web and api 10 each. Raise this when you add workers.
+    command: ["postgres", "-c", "max_connections=${ZERODOT_DB_MAX_CONNECTIONS:-200}"]
     environment:
       POSTGRES_USER: zerodot
       # Set at the first start only. scripts/install.sh writes a random one to .env.

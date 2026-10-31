@@ -314,12 +314,16 @@ for (const w of [worker, systemWorker]) {
   });
 }
 
+// The release tag of the image. Display only: jobs still match on APP_VERSION, so queued runs
+// survive an upgrade.
+const displayVersion = process.env.APP_VERSION || APP_VERSION;
+
 const heartbeat = startHeartbeat(
   eventsRedis,
   () =>
     workerInfo({
       id: workerId,
-      version: APP_VERSION,
+      version: displayVersion,
       concurrency: env.ZERODOT_WORKER_CONCURRENCY,
       startedAt,
       activeRuns: activeRuns.ids(),
@@ -337,7 +341,7 @@ listenForCancel(cancelRedis, activeRuns).catch((error) =>
 const server = createServer((req, res) => {
   if (req.url === "/healthz") {
     res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify({ ok: true, service: "worker", version: APP_VERSION }));
+    res.end(JSON.stringify({ ok: true, service: "worker", version: displayVersion }));
     return;
   }
   if (req.url === "/metrics") {
@@ -356,7 +360,7 @@ const server = createServer((req, res) => {
             ],
             runsProcessed: jobsCompleted,
             runsFailed: jobsFailed,
-            version: APP_VERSION,
+            version: displayVersion,
           }),
         );
       })
