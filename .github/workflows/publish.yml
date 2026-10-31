@@ -36,8 +36,9 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: APP_VERSION=${{ steps.meta.outputs.version }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # Registry cache, not gha: a tag run cannot read the gha cache of an earlier tag.
+          cache-from: type=registry,ref=${{ env.IMAGE }}:buildcache
+          cache-to: type=registry,ref=${{ env.IMAGE }}:buildcache,mode=max,oci-mediatypes=true,image-manifest=true
 
   release:
     runs-on: ubuntu-latest
