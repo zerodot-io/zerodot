@@ -111,7 +111,8 @@ export function toolInputSchema(inputs: Map<string, FromAIInput>): ToolSpec["inp
 }
 
 /**
- * The input that the model gave a tool, checked against its keys, with the defaults added.
+ * The input that the model gave a tool, checked against its keys, with the defaults added and
+ * other keys left out.
  * Throws with each problem, so the model can call the tool again with good input.
  */
 export function checkToolInput(
@@ -146,9 +147,8 @@ export function checkToolInput(
       );
     }
   }
-  for (const key of Object.keys(values)) {
-    if (!inputs.has(key)) problems.push(`"${key}" is not an input of this tool`);
-  }
+  // Keys that are not inputs are left out, as a schema check that strips them does.
+  for (const key of Object.keys(values)) if (!inputs.has(key)) delete values[key];
   if (problems.length > 0) throw new Error(`The tool input is not valid: ${problems.join("; ")}`);
   return values;
 }

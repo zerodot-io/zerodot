@@ -326,10 +326,10 @@ describe("node as tool", () => {
       required: ["tags"],
       additionalProperties: false,
     });
-    assert.deepEqual(checkToolInput(inputs, { tags: ["a"] }), { tags: ["a"], n: 2 });
+    assert.deepEqual(checkToolInput(inputs, { tags: ["a"], extra: 1 }), { tags: ["a"], n: 2 });
     assert.throws(
       () => checkToolInput(inputs, { n: "2", tags: [], extra: 1 }),
-      /"n" must be a number; "tags" must be a non-empty object or a non-empty array; "extra" is not an input/,
+      /"n" must be a number; "tags" must be a non-empty object or a non-empty array$/,
     );
   });
 
