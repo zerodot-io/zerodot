@@ -258,3 +258,4 @@ Also keep `.env`. To restore on a new server, use the same `ZERODOT_SECRET_KEY` 
 - Postgres and Valkey have no published ports.
 - Keep `ZERODOT_ENABLE_EXECUTE_COMMAND=false` unless you trust everyone who can edit workflows.
 - Run more code sandboxes with `SANDBOX_REPLICAS` in `.env`.
+- Run more workers with `WORKER_REPLICAS` in `.env`, or more runs in each worker with `ZERODOT_WORKER_CONCURRENCY`.
