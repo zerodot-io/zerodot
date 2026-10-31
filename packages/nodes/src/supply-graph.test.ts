@@ -98,6 +98,59 @@ describe("supply graph check", () => {
   });
 });
 
+describe("nested supply graph check", () => {
+  const embedding = defineSupplyNode({
+    ...base,
+    type: "test.embedding",
+    label: "Embedding",
+    supplies: "ai.embedding",
+    supply: () => ({}),
+  });
+  /** A tool supply with its own embedding port. */
+  const storeTool = defineSupplyNode({
+    ...base,
+    type: "test.store-tool",
+    label: "Store tool",
+    supplies: "ai.tool",
+    supplyPorts: [{ name: "embedding", kind: "ai.embedding", label: "Embedding" }],
+    supply: () => ({}),
+  });
+  /** A supply that takes its own kind, so two of them can make a loop. */
+  const chain = defineSupplyNode({
+    ...base,
+    type: "test.chain",
+    label: "Chain",
+    supplies: "ai.embedding",
+    supplyPorts: [{ name: "embedding", kind: "ai.embedding", label: "Embedding" }],
+    supply: () => ({}),
+  });
+  const reg = createRegistry([agent, embedding, storeTool, chain]);
+
+  it("accepts a supply node with supply ports", () => {
+    const g: Graph = {
+      schema: 1,
+      nodes: [node("a", "test.agent"), node("v", "test.store-tool"), node("e", "test.embedding")],
+      edges: [
+        edge("v", "supply", "a", "supply:tools"),
+        edge("e", "supply", "v", "supply:embedding"),
+      ],
+    };
+    assert.deepEqual(checkGraphNodes(g, reg), []);
+  });
+
+  it("rejects supply nodes that make a loop", () => {
+    const g: Graph = {
+      schema: 1,
+      nodes: [node("c1", "test.chain"), node("c2", "test.chain")],
+      edges: [
+        edge("c1", "supply", "c2", "supply:embedding"),
+        edge("c2", "supply", "c1", "supply:embedding"),
+      ],
+    };
+    assert.ok(checkGraphNodes(g, reg).some((p) => p.includes("the supply nodes make a loop")));
+  });
+});
+
 describe("node tool graph check", () => {
   const slack = defineNode({
     ...base,

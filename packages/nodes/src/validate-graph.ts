@@ -78,8 +78,8 @@ export function checkGraphNodes(graph: Graph, registry: NodeRegistry): string[] 
 
 /**
  * Supply rules: a supply edge goes from a supply node into a supply port of the same kind, a
- * single port takes one node, and a supply node has no data edges and no supply ports. A required
- * port with no node is not checked here, so a draft can be saved. The run reports it.
+ * single port takes one node, a supply node has no data edges, and supply edges make no loop. A
+ * required port with no node is not checked here, so a draft can be saved. The run reports it.
  */
 function supplyProblems(graph: Graph, registry: NodeRegistry): string[] {
   const problems: string[] = [];
@@ -131,12 +131,28 @@ function supplyProblems(graph: Graph, registry: NodeRegistry): string[] {
       problems.push(`"${port.label}" of "${to.name}" takes one node`);
     }
   }
+  // A supply node can have supply ports, so supply edges can go in a circle.
+  const supplyEdges = graph.edges.filter(isSupplyEdge);
+  const done = new Set<string>();
+  const open = new Set<string>();
+  const inLoop = (id: string): boolean => {
+    if (open.has(id)) return true;
+    if (done.has(id)) return false;
+    open.add(id);
+    const found = supplyEdges.some((e) => e.to === id && inLoop(e.from));
+    open.delete(id);
+    done.add(id);
+    return found;
+  };
+  for (const node of graph.nodes) {
+    if (!done.has(node.id) && inLoop(node.id)) {
+      problems.push(`"${node.name}": the supply nodes make a loop`);
+      break;
+    }
+  }
   for (const node of graph.nodes) {
     const definition = registry.get(node.type);
     if (!definition) continue;
-    if (definition.supplies !== undefined && definition.supplyPorts?.length) {
-      problems.push(`"${node.name}": a supply node cannot have supply ports`);
-    }
     // $fromAI needs a node that runs as a tool, in the literal form.
     try {
       const inputs = fromAIInputs(node, definition);

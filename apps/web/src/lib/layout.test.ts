@@ -17,6 +17,12 @@ catalogByType.set("test.agent", {
     { name: "tools", kind: "ai.tool", label: "Tool", multiple: true },
   ],
 });
+catalogByType.set("test.store-tool", {
+  ...base,
+  type: "test.store-tool",
+  supplies: "ai.tool",
+  supplyPorts: [{ name: "embedding", kind: "ai.embedding", label: "Embedding" }],
+});
 catalogByType.set("test.manager", {
   ...base,
   type: "test.manager",
@@ -102,5 +108,30 @@ describe("arrangeNodes with supply nodes", () => {
     for (const [i, a] of all.entries()) {
       for (const b of all.slice(i + 1)) assert.ok(!overlaps(a, b));
     }
+  });
+
+  it("puts the supply nodes of a supply node in a row under it", () => {
+    const nodes = [
+      node("agent", "test.agent", 0, 0, 96),
+      node("model", "test.model", 500, 500),
+      node("store", "test.store-tool", 300, 300),
+      node("embedding", "test.embedding", 900, 900),
+    ];
+    const edges = [
+      supply("model", "agent", "model"),
+      supply("store", "agent", "tools"),
+      supply("embedding", "store", "embedding"),
+    ];
+    const placed = new Map(arrangeNodes(nodes, edges).map((n) => [n.id, n]));
+    const at = (id: string) => {
+      const n = placed.get(id);
+      if (!n) throw new Error(id);
+      return n.position;
+    };
+    assert.equal(at("store").y, at("model").y);
+    assert.ok(at("embedding").y > at("store").y + 64, "the embedding is under the store");
+    // The embedding is under the one port of the store: the middle of it.
+    assert.equal(at("embedding").x + 32, at("store").x + 32);
+    assert.ok(at("model").x + 64 < at("store").x, "the model is left of the store");
   });
 });
