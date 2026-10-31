@@ -22,6 +22,7 @@ import {
   SUPPLY_OUT_PORT,
   SUPPLY_PORT_PREFIX,
   type SupplyPort,
+  supplyPortsOf,
   TOOL_KIND,
 } from "@zerodot/engine";
 import { catalog, registry } from "@zerodot/nodes";
@@ -527,11 +528,13 @@ export function Editor({
       if (supplies !== undefined || isSupplyFlowEdge(connection)) {
         const parent = nodes.find((n) => n.id === connection.target);
         const portName = (connection.targetHandle ?? "").slice(SUPPLY_PORT_PREFIX.length);
-        const port = parent
-          ? catalogByType
-              .get(parent.data.graphNode.type)
-              ?.supplyPorts?.find((p) => p.name === portName)
-          : undefined;
+        const parentEntry = parent && catalogByType.get(parent.data.graphNode.type);
+        const port =
+          parent && parentEntry
+            ? supplyPortsOf(parentEntry, parent.data.graphNode.config).find(
+                (p) => p.name === portName,
+              )
+            : undefined;
         if (
           !port ||
           connection.sourceHandle !== SUPPLY_OUT_PORT ||
@@ -782,7 +785,8 @@ export function Editor({
     const parent = nodes.find((n) => n.id === to.nodeId);
     if (!parent) return;
     const node = newNode(type, nodes, config);
-    const ports = catalogByType.get(parent.data.graphNode.type)?.supplyPorts ?? [];
+    const parentEntry = catalogByType.get(parent.data.graphNode.type);
+    const ports = parentEntry ? supplyPortsOf(parentEntry, parent.data.graphNode.config) : [];
     const index = Math.max(
       0,
       ports.findIndex((p) => p.name === to.port.name),

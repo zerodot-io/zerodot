@@ -26,6 +26,7 @@ import {
   type ResolvedCredential,
   type RunResponse,
   type SubWorkflowRunner,
+  supplyPortsOf,
   TOOL_KIND,
 } from "./node";
 import type { CodeLog, SandboxClient } from "./sandbox";
@@ -560,7 +561,7 @@ export async function executeGraph(options: ExecuteOptions): Promise<ExecuteResu
     if (path.has(parent.id)) throw new Error("The supply nodes make a loop");
     const below = new Set(path).add(parent.id);
     const supplies: Record<string, unknown> = {};
-    for (const port of definition.supplyPorts) {
+    for (const port of supplyPortsOf(definition, parent.config)) {
       // Left to right on the canvas, so the order is the one a person sees.
       const connected = supplyEdges
         .filter((e) => e.to === parent.id && supplyPortOf(e) === port.name)

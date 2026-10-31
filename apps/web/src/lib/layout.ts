@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import type { Edge } from "@xyflow/react";
+import { type SupplyPort, supplyPortsOf } from "@zerodot/engine";
 import { catalogByType, isSupplyFlowEdge, supplyPortX, type ZerodotFlowNode } from "./flow";
 
 const COLUMN_GAP = 120;
@@ -20,6 +21,12 @@ const FALLBACK_HEIGHT = 80;
  * Places nodes in left-to-right columns by depth. Parts that are not linked stack top to bottom.
  * Supply nodes go in a row under their parent, each one under its supply port.
  */
+/** The supply ports that a node shows with its config. */
+function portsOf(n: ZerodotFlowNode): SupplyPort[] {
+  const entry = catalogByType.get(n.data.graphNode.type);
+  return entry ? supplyPortsOf(entry, n.data.graphNode.config) : [];
+}
+
 export function arrangeNodes(nodes: ZerodotFlowNode[], edges: Edge[]): ZerodotFlowNode[] {
   const allIds = new Set(nodes.map((n) => n.id));
   const supplyEdges = edges.filter(
@@ -125,7 +132,7 @@ export function arrangeNodes(nodes: ZerodotFlowNode[], edges: Edge[]): ZerodotFl
   // The supply nodes of each parent, in port order, then left to right as they are now.
   const rows = new Map<string, { n: ZerodotFlowNode; port: number }[]>();
   for (const parentNode of nodes) {
-    const ports = catalogByType.get(parentNode.data.graphNode.type)?.supplyPorts ?? [];
+    const ports = portsOf(parentNode);
     const row = supplyEdges
       .filter((e) => e.target === parentNode.id && owner.get(e.source) === parentNode.id)
       .flatMap((e) => {
@@ -237,7 +244,7 @@ export function arrangeNodes(nodes: ZerodotFlowNode[], edges: Edge[]): ZerodotFl
     const at = next.get(parentId) ?? parentNode?.position;
     if (!row || !parentNode || !at) return;
     const { w, h } = baseSize(parentNode);
-    const portCount = catalogByType.get(parentNode.data.graphNode.type)?.supplyPorts?.length ?? 1;
+    const portCount = portsOf(parentNode).length || 1;
     const xs: number[] = [];
     let end = Number.NEGATIVE_INFINITY;
     for (let i = 0; i < row.length; ) {

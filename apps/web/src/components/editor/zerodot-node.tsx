@@ -28,6 +28,7 @@ import {
   SUPPLY_OUT_PORT,
   SUPPLY_PORT_PREFIX,
   type SupplyPort,
+  supplyPortsOf,
 } from "@zerodot/engine";
 import { registry } from "@zerodot/nodes";
 import {
@@ -180,7 +181,7 @@ export function ZerodotNode({ id, data, selected }: NodeProps<ZerodotFlowNode>) 
     : portSource
       ? inputPortsOf(portSource, graphNode.config)
       : (entry?.ports.in ?? []);
-  const supplyPorts = entry?.supplyPorts ?? [];
+  const supplyPorts = entry ? supplyPortsOf(entry, graphNode.config) : [];
   const suppliedCount = (port: SupplyPort) =>
     incoming.filter((c) => c.targetHandle === `${SUPPLY_PORT_PREFIX}${port.name}`).length;
   const supplyLeftFor = (index: number) => `${supplyPortX(index, supplyPorts.length) * 100}%`;

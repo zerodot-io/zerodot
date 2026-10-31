@@ -91,6 +91,7 @@ From 1.5:
 - A node that runs as a tool gets its `supplies` too, for each call.
 - A supply node can declare `supplyPorts`. `supply` then gets the values in `supplies` (for example, a vector store tool with an embedding supply).
 - The engine builds a supply value one time for the run when its config and credential use no `$input`, `$node`, or `$fromAI`, and the supply nodes under it do not either. Otherwise it builds the value for each run of the parent.
+- A supply port can have `showWhen` and `hideWhen`, as a config field has. A hidden port gives no value and is not required. The rules read the saved config, before expressions resolve.
 - When a supply value has a `close()` function, the engine calls it when the value is not used again: at the end of the run for a value it keeps, or when the parent is done. The last value built closes first. Use this to keep one connection for the run.
 
 ## Option icons
@@ -114,6 +115,6 @@ The type is `ItemIcon`: `{ icon?: string; iconUrl?: string }`.
 | Contract | Adds                                                                            |
 | -------- | ------------------------------------------------------------------------------- |
 | 1.4      | Supply ports and supply nodes, nodes as agent tools (`usableAsTool`, `$fromAI`) |
-| 1.5      | Supplies for tool runs and supply nodes, run cache, `close()` on supply values  |
+| 1.5      | Supplies for tool runs and supply nodes, run cache, `close()`, port `showWhen`  |
 
 MIT license.

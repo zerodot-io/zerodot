@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import type { z } from "zod";
 import type { CodeLog, SandboxClient } from "./sandbox";
-import type { ShowRules } from "./show-when";
+import { isVisible, type ShowRules } from "./show-when";
 import type { TableStore } from "./tables";
 
 /** The workflow that a sub-workflow node runs: one of the organization, or a graph in the config. */
@@ -74,7 +74,7 @@ export type SupplyPort = {
   required?: boolean;
   /** More than one supply node can connect. The node then gets a list. */
   multiple?: boolean;
-};
+} & ShowRules;
 
 /**
  * What a supply node gets when its parent runs. Expressions in the config are resolved with the
@@ -378,6 +378,18 @@ export function outputPortsOf(
   } catch {
     return definition.ports.out;
   }
+}
+
+/**
+ * The supply ports of a node that show with this config (see `showWhen` and `hideWhen` of a
+ * port). The rules read the config as it is saved, before expressions resolve. A hidden port
+ * gives no value and is not required.
+ */
+export function supplyPortsOf(
+  definition: Pick<NodeDefinition, "supplyPorts">,
+  config: Record<string, unknown>,
+): SupplyPort[] {
+  return (definition.supplyPorts ?? []).filter((port) => isVisible(port, (key) => config[key]));
 }
 
 /** The input ports of a node with this config. */

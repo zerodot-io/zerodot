@@ -539,4 +539,51 @@ describe("nested supplies, run cache, and close", () => {
     assert.equal(result.status, "failed");
     assert.match(result.error?.message ?? "", /The supply nodes make a loop/);
   });
+
+  it("skips a supply port that its showWhen hides", async () => {
+    const reranked = defineNode({
+      type: "test.reranked",
+      label: "Reranked",
+      category: "core",
+      icon: "CircleIcon",
+      config: z.object({ rerank: z.boolean() }),
+      defaultConfig: { rerank: false },
+      ports: { in: ["in"], out: ["out"] },
+      supplyPorts: [
+        {
+          name: "reranker",
+          kind: "test.embed",
+          label: "Reranker",
+          required: true,
+          showWhen: { rerank: [true] },
+        },
+      ],
+      run: ({ supplies }) => ({ port: "out", data: { has: supplies?.reranker !== undefined } }),
+    });
+    const graphFor = (rerank: boolean): Graph => ({
+      schema: 1,
+      nodes: [
+        node("t", "trigger.test"),
+        node("r", "test.reranked", { rerank }),
+        node("e", "test.embedding", { name: "E" }),
+      ],
+      edges: [flow("t", "r"), edge("e", "r", "reranker")],
+    });
+    const runOne = async (rerank: boolean) => {
+      const ends: NodeEndEvent[] = [];
+      const result = await executeGraph({
+        graph: graphFor(rerank),
+        registry: createRegistry([trigger, embedding, reranked]),
+        triggerInput: {},
+        mode: "production",
+        signal: new AbortController().signal,
+        hooks: [{ afterNode: (event) => void ends.push(event) }],
+      });
+      return { result, out: ends.find((e) => e.node.id === "r")?.output };
+    };
+    assert.deepEqual((await runOne(true)).out, { has: true });
+    const hidden = await runOne(false);
+    assert.equal(hidden.result.status, "succeeded", JSON.stringify(hidden.result.error));
+    assert.deepEqual(hidden.out, { has: false });
+  });
 });
