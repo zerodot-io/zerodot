@@ -16,7 +16,7 @@ You need:
    bash install.sh zerodot.example.com
    ```
 
-   In Docker mode the script pulls the prebuilt images from GHCR (`ghcr.io/zerodot-io/zerodot-web`, `-api`, `-worker`, `-sandbox`). It does not build on the server. If the pull fails, it builds the images on the server instead. That takes about 10 minutes and needs 4 GB of RAM or more.
+   In Docker mode the script pulls the prebuilt image from GHCR (`ghcr.io/zerodot-io/zerodot`). The web, api, worker and sandbox services all use this one image. It does not build on the server. If the pull fails, it builds the image on the server instead. That takes about 10 minutes and needs 4 GB of RAM or more.
 
 3. Open `https://zerodot.example.com` and sign up. The first user is the instance admin.
    Then open **System > Access** and turn **Public signup** off.

@@ -1,7 +1,7 @@
 name: ghcr-stats
 
-# Counts the pulls of the web image once a day. The count goes to the ghcr-stats branch, not main.
-# The README badge reads web.json from that branch. A pull of the web image is one install or update.
+# Counts the pulls of the zerodot image once a day. The count goes to the ghcr-stats branch, not main.
+# The README badge reads zerodot.json from that branch. web, api, worker and sandbox use this one image.
 on:
   workflow_dispatch:
   schedule:
@@ -22,13 +22,13 @@ jobs:
         with:
           owner: zerodot-io
           repo: zerodot
-          name: zerodot-web
-          path: web.json
+          name: zerodot
+          path: zerodot.json
       - name: Commit the count
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add web.json
+          git add zerodot.json
           if ! git diff --cached --quiet; then
             git commit -m "chore: update ghcr stats"
             git push

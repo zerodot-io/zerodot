@@ -39,29 +39,14 @@ ARG APP_VERSION
 ENV APP_VERSION=$APP_VERSION
 RUN pnpm run build
 
-FROM base AS web
+# One image for all services. The command selects one: web, api, worker or sandbox.
+FROM base AS app
 COPY --from=build --chmod=a+rX /app /app
 # vite preview bundles its config into node_modules/.vite-temp at start.
 RUN mkdir -p apps/web/node_modules/.vite-temp && chown node:node apps/web/node_modules/.vite-temp
-ENV PORT=3000
-EXPOSE 3000
-USER node
-CMD ["pnpm", "--filter", "@zerodot/web", "start"]
-
-FROM base AS api
-COPY --from=build --chmod=a+rX /app /app
+COPY --chmod=a+rx scripts/docker-entrypoint.sh /usr/local/bin/zerodot
 ENV ZERODOT_API_PORT=3003
-EXPOSE 3003
+EXPOSE 3000 3003
 USER node
-CMD ["node", "apps/api/dist/index.js"]
-
-FROM base AS worker
-COPY --from=build --chmod=a+rX /app /app
-USER node
-CMD ["node", "apps/worker/dist/index.js"]
-
-FROM base AS sandbox
-COPY --from=build --chmod=a+rX /app /app
-USER node
-# isolated-vm needs --no-node-snapshot on Node 20 and later.
-CMD ["node", "--no-node-snapshot", "apps/sandbox/dist/index.js"]
+ENTRYPOINT ["zerodot"]
+CMD ["web"]

@@ -9,8 +9,9 @@ services:
 
   # UI only. The sign-in session is read from the database, so web needs the same secrets as api.
   web:
-    image: ghcr.io/zerodot-io/zerodot-web:${ZERODOT_VERSION:-latest}
-    build: { context: ., target: web }
+    image: ghcr.io/zerodot-io/zerodot:${ZERODOT_VERSION:-latest}
+    build: { context: . }
+    command: [web]
     environment:
       DATABASE_URL: postgres://zerodot:${ZERODOT_DB_PASSWORD:-zerodot}@postgres:5432/zerodot
       VALKEY_URL: redis://:${ZERODOT_VALKEY_PASSWORD:-}@valkey:6379
@@ -45,8 +46,9 @@ services:
 
   # Public API, webhooks, auth and live event streams. It keeps working when web is down.
   api:
-    image: ghcr.io/zerodot-io/zerodot-api:${ZERODOT_VERSION:-latest}
-    build: { context: ., target: api }
+    image: ghcr.io/zerodot-io/zerodot:${ZERODOT_VERSION:-latest}
+    build: { context: . }
+    command: [api]
     environment:
       DATABASE_URL: postgres://zerodot:${ZERODOT_DB_PASSWORD:-zerodot}@postgres:5432/zerodot
       VALKEY_URL: redis://:${ZERODOT_VALKEY_PASSWORD:-}@valkey:6379
@@ -81,8 +83,9 @@ services:
       valkey: { condition: service_healthy }
 
   worker:
-    image: ghcr.io/zerodot-io/zerodot-worker:${ZERODOT_VERSION:-latest}
-    build: { context: ., target: worker }
+    image: ghcr.io/zerodot-io/zerodot:${ZERODOT_VERSION:-latest}
+    build: { context: . }
+    command: [worker]
     environment:
       DATABASE_URL: postgres://zerodot:${ZERODOT_DB_PASSWORD:-zerodot}@postgres:5432/zerodot
       VALKEY_URL: redis://:${ZERODOT_VALKEY_PASSWORD:-}@valkey:6379
@@ -122,8 +125,9 @@ services:
       sandbox: { condition: service_started }
 
   sandbox:
-    image: ghcr.io/zerodot-io/zerodot-sandbox:${ZERODOT_VERSION:-latest}
-    build: { context: ., target: sandbox }
+    image: ghcr.io/zerodot-io/zerodot:${ZERODOT_VERSION:-latest}
+    build: { context: . }
+    command: [sandbox]
     # Only the internal network, and it has no way out. No published port.
     networks: [internal]
     read_only: true
