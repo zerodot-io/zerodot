@@ -2,7 +2,14 @@
 
 import { createServerFn, createServerOnlyFn } from "@tanstack/react-start";
 import type { forOrganization } from "@zerodot/db";
-import { type CodeLog, type Graph, GraphError, graphSchema, validateGraph } from "@zerodot/engine";
+import {
+  type CodeLog,
+  canonical,
+  type Graph,
+  GraphError,
+  graphSchema,
+  validateGraph,
+} from "@zerodot/engine";
 import type { WorkflowShare } from "@zerodot/server/api/service.server";
 import { z } from "zod";
 
@@ -250,11 +257,20 @@ export const DRAFT_CHANGED =
 
 /**
  * True when the saved draft is still `base`, the draft JSON that the editor last loaded or saved.
- * Both sides parse the graph first, so the defaults and the key order are the same.
+ * Both sides parse the graph first, so the defaults are the same. The key order is not compared:
+ * jsonb sorts the keys of a node config, and the editor keeps them in the order they were added.
  */
 function draftIs(saved: unknown, base: string): boolean {
   const parsed = graphSchema.safeParse(saved);
-  return parsed.success && JSON.stringify(parsed.data) === base;
+  if (!parsed.success) return false;
+  let raw: unknown;
+  try {
+    raw = JSON.parse(base);
+  } catch {
+    return false;
+  }
+  const loaded = graphSchema.safeParse(raw);
+  return loaded.success && canonical(parsed.data) === canonical(loaded.data);
 }
 
 export const saveDraftFn = createServerFn({ method: "POST" })
