@@ -924,9 +924,14 @@ export function Editor({
               ?.kind
           : undefined;
       };
+      // A supply port that its showWhen hides now loses its nodes too.
+      const supplyIn = new Set(
+        supplyPortsOf(entry, next.config).map((p) => `${SUPPLY_PORT_PREFIX}${p.name}`),
+      );
       const gone = (e: Edge) =>
         isSupplyFlowEdge(e)
-          ? e.source === next.id && entry.supplyModes !== undefined && portKind(e) !== gives
+          ? (e.source === next.id && entry.supplyModes !== undefined && portKind(e) !== gives) ||
+            (e.target === next.id && !supplyIn.has(e.targetHandle ?? ""))
           : (e.source === next.id && !ports.has(e.sourceHandle ?? "out")) ||
             (e.target === next.id && !inPorts.has(e.targetHandle ?? "in"));
       const removed = edges.filter(gone).length;
