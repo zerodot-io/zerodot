@@ -218,6 +218,17 @@ function maskSecrets<T>(value: T, secrets: string[]): T {
   return walk(value) as T;
 }
 
+/** Scope keys that keep their value for the whole run. */
+const STATIC_SCOPE_KEYS = new Set(["$vars", "$env", "$credentials", "$trigger", "$run"]);
+
+function hasClose(value: unknown): boolean {
+  return (
+    value !== null &&
+    (typeof value === "object" || typeof value === "function") &&
+    typeof (value as { close?: unknown }).close === "function"
+  );
+}
+
 function* configTexts(value: unknown): Generator<string> {
   if (typeof value === "string") yield value;
   else if (Array.isArray(value)) for (const item of value) yield* configTexts(item);
@@ -477,17 +488,77 @@ export async function executeGraph(options: ExecuteOptions): Promise<ExecuteResu
   };
 
   /**
+   * Supply values that stay the same for the whole run, by supply node id. With the credential
+   * values of the node, so a parent that gets a value from here masks them too.
+   */
+  const supplyCache = new Map<string, { value: unknown; secrets: string[]; masked: string[] }>();
+  /** Supply values with a `close` function that live to the end of the run, in build order. */
+  const runClosers: unknown[] = [];
+
+  /**
+   * True when the value of a supply node is the same for each parent run: its config and its
+   * credential use no expression that changes in the run (`$input`, `$node`, `$fromAI`), and the
+   * same is true for the supply nodes under it. A tool on its ports changes with the input.
+   */
+  const staticSupply = (
+    node: GraphNode,
+    definition: NodeDefinition,
+    seen: Set<string>,
+  ): boolean => {
+    if (seen.has(node.id)) return false;
+    const rawKeys = new Set(definition.rawConfigKeys ?? []);
+    const texts = [
+      ...Object.entries(node.config).flatMap(([key, value]) =>
+        rawKeys.has(key) ? [] : [...configTexts(value)],
+      ),
+      ...(node.credentialExpression ? [node.credentialExpression] : []),
+    ];
+    for (const text of texts) {
+      if (!text.includes("{{")) continue;
+      for (const [name] of text.matchAll(/\$[A-Za-z_]\w*/g)) {
+        if (!STATIC_SCOPE_KEYS.has(name)) return false;
+      }
+    }
+    const inner = new Set(seen).add(node.id);
+    return supplyEdges
+      .filter((e) => e.to === node.id)
+      .every((e) => {
+        const child = nodesById.get(e.from);
+        if (!child || child.disabled) return true;
+        const childDefinition = registry.get(child.type);
+        return childDefinition?.supply !== undefined && staticSupply(child, childDefinition, inner);
+      });
+  };
+
+  /** Calls `close` of each value, the last built first. An error does not stop the others. */
+  const closeAll = async (values: unknown[]) => {
+    for (const value of values.splice(0).reverse()) {
+      try {
+        await (value as { close(): unknown }).close();
+      } catch {
+        // The run has its result. A supply that cannot close does not change it.
+      }
+    }
+  };
+
+  /**
    * Builds the values of the supply nodes connected to the supply ports of a node. The config of
    * a supply node resolves with the scope of the parent. Undefined for a node with no supply ports.
+   * A supply node with supply ports gets the values of its own supply nodes. Values that are
+   * built again for each parent run and have a `close` function go in `sink.closers`: the caller
+   * closes them when the parent is done. Values from the run cache close at the end of the run.
    */
   const suppliesFor = async (
     parent: GraphNode,
     definition: NodeDefinition,
     scope: Record<string, unknown>,
     input: unknown,
-    sink: { secrets: string[]; masked: string[]; logs: CodeLog[] },
+    sink: { secrets: string[]; masked: string[]; logs: CodeLog[]; closers: unknown[] },
+    path: Set<string> = new Set(),
   ): Promise<Record<string, unknown> | undefined> => {
     if (!definition.supplyPorts?.length) return undefined;
+    if (path.has(parent.id)) throw new Error("The supply nodes make a loop");
+    const below = new Set(path).add(parent.id);
     const supplies: Record<string, unknown> = {};
     for (const port of definition.supplyPorts) {
       // Left to right on the canvas, so the order is the one a person sees.
@@ -510,20 +581,42 @@ export async function executeGraph(options: ExecuteOptions): Promise<ExecuteResu
           if (!supplier) throw new Error(`Unknown node type "${node.type}"`);
           if (!supplier.supply && port.kind === TOOL_KIND && canBeTool(supplier)) {
             values.push(
-              track(nodeTool(node, supplier, scope, input, toolNames, sink.logs), node, parent),
+              track(
+                nodeTool(node, supplier, scope, input, toolNames, sink.logs, below),
+                node,
+                parent,
+              ),
             );
             continue;
           }
           if (!supplier.supply || supplier.supplies !== port.kind) {
             throw new Error(`The node does not give "${port.kind}"`);
           }
-          const { config, credential } = await resolveNode(
+          if (below.has(node.id)) throw new Error("The supply nodes make a loop");
+          const cached = supplyCache.get(node.id);
+          if (cached) {
+            sink.secrets.push(...cached.secrets);
+            sink.masked.push(...cached.masked);
+            sink.masked.sort((a, b) => b.length - a.length);
+            values.push(track(cached.value, node, parent));
+            continue;
+          }
+          const keep = staticSupply(node, supplier, new Set());
+          const secrets: string[] = [];
+          const masked: string[] = [];
+          const { config, credential } = await resolveNode(node, supplier, scope, secrets, masked);
+          // A kept value lives to the end of the run, so the values under it do too.
+          const nested = await suppliesFor(
             node,
             supplier,
             scope,
-            sink.secrets,
-            sink.masked,
+            input,
+            { secrets, masked, logs: sink.logs, closers: keep ? runClosers : sink.closers },
+            below,
           );
+          sink.secrets.push(...secrets);
+          sink.masked.push(...masked);
+          sink.masked.sort((a, b) => b.length - a.length);
           const value = await supplier.supply({
             config,
             credential,
@@ -540,7 +633,10 @@ export async function executeGraph(options: ExecuteOptions): Promise<ExecuteResu
             tables: options.tables ?? null,
             runWorkflow: options.runWorkflow ?? null,
             node: { id: node.id, name: node.name },
+            ...(nested ? { supplies: nested } : {}),
           });
+          if (hasClose(value)) (keep ? runClosers : sink.closers).push(value);
+          if (keep) supplyCache.set(node.id, { value, secrets, masked });
           values.push(track(value, node, parent));
         } catch (error) {
           const { message } = toError(error);
@@ -575,6 +671,7 @@ export async function executeGraph(options: ExecuteOptions): Promise<ExecuteResu
     input: unknown,
     used: Set<string>,
     logs: CodeLog[],
+    path: Set<string>,
   ): NodeTool => {
     const name = toolName(node.name, used);
     const spec = {
@@ -587,6 +684,7 @@ export async function executeGraph(options: ExecuteOptions): Promise<ExecuteResu
       call: async (given, callSignal) => {
         const secrets: string[] = [];
         const masked: string[] = [];
+        const closers: unknown[] = [];
         try {
           const values =
             given !== null && typeof given === "object" && !Array.isArray(given)
@@ -599,6 +697,14 @@ export async function executeGraph(options: ExecuteOptions): Promise<ExecuteResu
             toolScope,
             secrets,
             masked,
+          );
+          const supplies = await suppliesFor(
+            node,
+            definition,
+            toolScope,
+            input,
+            { secrets, masked, logs, closers },
+            path,
           );
           const ran = await definition.run({
             config,
@@ -618,6 +724,7 @@ export async function executeGraph(options: ExecuteOptions): Promise<ExecuteResu
             resumeUrl: null,
             runWorkflow: options.runWorkflow ?? null,
             loopBack: false,
+            ...(supplies ? { supplies } : {}),
           });
           if (ran.waitUntil !== undefined) throw new Error("A node that waits cannot be a tool");
           const data = withoutBinary(ran.data);
@@ -625,6 +732,8 @@ export async function executeGraph(options: ExecuteOptions): Promise<ExecuteResu
         } catch (error) {
           const { message } = scrubError(toError(error), secrets);
           throw new Error(`Tool "${name}": ${message}`);
+        } finally {
+          await closeAll(closers);
         }
       },
     };
@@ -861,6 +970,8 @@ export async function executeGraph(options: ExecuteOptions): Promise<ExecuteResu
       /** Values of `$credentials` fields. They are removed from the output and the logs too. */
       const masked: string[] = [];
       const logs: CodeLog[] = [];
+      /** Supply values built for this attempt only. They close when it ends. */
+      const closers: unknown[] = [];
       try {
         if (!definition) throw new Error(`Unknown node type "${node.type}"`);
         await hydrateSaved();
@@ -873,6 +984,7 @@ export async function executeGraph(options: ExecuteOptions): Promise<ExecuteResu
           secrets,
           masked,
           logs,
+          closers,
         });
         const ran = await definition.run({
           config,
@@ -955,6 +1067,8 @@ export async function executeGraph(options: ExecuteOptions): Promise<ExecuteResu
         });
         if (signal.aborted) throw new Error("Run cancelled");
         if (n < maxAttempts) await sleep(node.retry?.backoffMs ?? 0);
+      } finally {
+        await closeAll(closers);
       }
     }
 
@@ -1007,14 +1121,21 @@ export async function executeGraph(options: ExecuteOptions): Promise<ExecuteResu
     }
   };
 
+  let cancelled = false;
   try {
     await walk(start, target?.kind === "only" ? target.input : options.triggerInput);
   } catch (error) {
-    if (signal.aborted) {
-      await call("onRunEnd", { status: "cancelled", error: null, failedNodeId: null });
-      return { status: "cancelled", error: null };
-    }
-    failure = { message: toError(error).message, nodeId: start.id };
+    if (signal.aborted) cancelled = true;
+    else failure = { message: toError(error).message, nodeId: start.id };
+  } finally {
+    // The run cache ends with the walk. A run that waits builds its supplies again on resume.
+    await closeAll(runClosers);
+    supplyCache.clear();
+  }
+
+  if (cancelled) {
+    await call("onRunEnd", { status: "cancelled", error: null, failedNodeId: null });
+    return { status: "cancelled", error: null };
   }
 
   if (waiting) {

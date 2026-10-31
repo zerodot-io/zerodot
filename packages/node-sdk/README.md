@@ -86,6 +86,13 @@ supplyPorts: [
 
 `TOOL_KIND` (`"ai.tool"`) is the kind of a tool port. A tool port also takes normal nodes that can be tools.
 
+From 1.5:
+
+- A node that runs as a tool gets its `supplies` too, for each call.
+- A supply node can declare `supplyPorts`. `supply` then gets the values in `supplies` (for example, a vector store tool with an embedding supply).
+- The engine builds a supply value one time for the run when its config and credential use no `$input`, `$node`, or `$fromAI`, and the supply nodes under it do not either. Otherwise it builds the value for each run of the parent.
+- When a supply value has a `close()` function, the engine calls it when the value is not used again: at the end of the run for a value it keeps, or when the parent is done. The last value built closes first. Use this to keep one connection for the run.
+
 ## Option icons
 
 An option of a select can show an icon. Both fields are optional. `iconUrl` (a data URL, see `fileIcon`) wins over `icon` (a Hugeicons name, for example `Globe02Icon`).
@@ -107,5 +114,6 @@ The type is `ItemIcon`: `{ icon?: string; iconUrl?: string }`.
 | Contract | Adds                                                                            |
 | -------- | ------------------------------------------------------------------------------- |
 | 1.4      | Supply ports and supply nodes, nodes as agent tools (`usableAsTool`, `$fromAI`) |
+| 1.5      | Supplies for tool runs and supply nodes, run cache, `close()` on supply values  |
 
 MIT license.

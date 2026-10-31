@@ -95,6 +95,11 @@ export type SupplyContext<Config> = {
   runWorkflow?: SubWorkflowRunner | null;
   /** The supply node. */
   node: { id: string; name: string };
+  /**
+   * Values of the supply nodes connected to the `supplyPorts` of this supply node, by port name,
+   * as in `NodeRunContext.supplies`.
+   */
+  supplies?: Record<string, unknown>;
 };
 
 export const FORM_FIELD_TYPES = [
@@ -351,7 +356,13 @@ export type NodeDefinition<Schema extends z.ZodType = z.ZodType> = {
    */
   usableAsTool?: boolean;
   // Method syntax keeps parameter bivariance, so a typed node fits the registry type.
-  /** Builds the value of a supply node. */
+  /**
+   * Builds the value of a supply node. The engine builds it one time for the run when the config
+   * and the credential use no `$input`, `$node`, or `$fromAI` (nor do the supply nodes under it).
+   * Otherwise it builds it for each run of the parent. When the value has a `close()` function,
+   * the engine calls it when the value is not used again: at the end of the run, or when the
+   * parent is done.
+   */
   supply?(ctx: SupplyContext<z.output<Schema>>): unknown;
   /** A supply node made with `defineSupplyNode` gets a `run` that throws. It is never called. */
   run(ctx: NodeRunContext<z.output<Schema>>): Promise<NodeResult> | NodeResult;
