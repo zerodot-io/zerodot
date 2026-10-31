@@ -2,6 +2,7 @@ import { Combobox as ComboboxPrimitive } from "@base-ui/react/combobox";
 import { ArrowDown01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { cn } from "../../lib/utils";
+import { usePortalContainer } from "./drawer";
 
 export type ComboboxOption = { value: string; label: string };
 
@@ -52,7 +53,7 @@ function Combobox({
           <HugeiconsIcon icon={ArrowDown01Icon} className="size-4" />
         </ComboboxPrimitive.Trigger>
       </div>
-      <ComboboxPrimitive.Portal>
+      <ComboboxPrimitive.Portal container={usePortalContainer()}>
         <ComboboxPrimitive.Positioner sideOffset={4} className="isolate z-50">
           <ComboboxPrimitive.Popup className="w-(--anchor-width) min-w-56 overflow-hidden rounded-xl bg-card text-muted-foreground shadow-elevation-xl">
             <ComboboxPrimitive.Empty className="p-3 text-base empty:hidden">

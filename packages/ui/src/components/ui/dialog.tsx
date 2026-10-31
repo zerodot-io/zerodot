@@ -3,8 +3,17 @@ import { Cancel01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { cva, type VariantProps } from "class-variance-authority";
 import type * as React from "react";
+import { useIsMobile } from "../../lib/use-mobile";
 import { cn } from "../../lib/utils";
 import { Button } from "./button";
+import {
+  Drawer,
+  DrawerClose,
+  DrawerContent,
+  DrawerDescription,
+  DrawerTitle,
+  useInDrawer,
+} from "./drawer";
 
 const dialogContentVariants = cva(
   "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-3xl bg-card px-5 pt-4.5 pb-5 text-sm text-muted-foreground shadow-elevation-xl duration-100 outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
@@ -22,8 +31,32 @@ const dialogContentVariants = cva(
   },
 );
 
-function Dialog({ ...props }: DialogPrimitive.Root.Props) {
-  return <DialogPrimitive.Root data-slot="dialog" {...props} />;
+function Dialog({
+  open,
+  onOpenChange,
+  children,
+}: {
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  children: React.ReactNode;
+}) {
+  // On a phone the dialog is a bottom drawer. One that opens inside another drawer stacks on it.
+  if (useIsMobile()) {
+    return (
+      <Drawer open={open} onOpenChange={onOpenChange}>
+        {children}
+      </Drawer>
+    );
+  }
+  return (
+    <DialogPrimitive.Root
+      data-slot="dialog"
+      open={open}
+      onOpenChange={onOpenChange && ((next) => onOpenChange(next))}
+    >
+      {children}
+    </DialogPrimitive.Root>
+  );
 }
 
 function DialogTrigger({ className, ...props }: DialogPrimitive.Trigger.Props) {
@@ -67,6 +100,23 @@ function DialogContent({
   VariantProps<typeof dialogContentVariants> & {
     showCloseButton?: boolean;
   }) {
+  if (useInDrawer()) {
+    return (
+      <DrawerContent showCloseButton={showCloseButton}>
+        {/* The scroll is on this inner box. The drawer itself has a cover below it that must not scroll. */}
+        <div
+          className={cn(
+            "mt-4 flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-5 pb-5 text-muted-foreground",
+            className,
+            // The desktop width and position do not apply to a bottom drawer.
+            "static w-full max-w-none translate-x-0 translate-y-0",
+          )}
+        >
+          {children}
+        </div>
+      </DrawerContent>
+    );
+  }
   return (
     <DialogPortal>
       <DialogOverlay />
@@ -105,6 +155,7 @@ function DialogFooter({
 }: React.ComponentProps<"div"> & {
   showCloseButton?: boolean;
 }) {
+  const inDrawer = useInDrawer();
   return (
     <div
       data-slot="dialog-footer"
@@ -115,36 +166,53 @@ function DialogFooter({
       {...props}
     >
       {children}
-      {showCloseButton && (
-        <DialogPrimitive.Close render={<Button variant="outline" />}>Close</DialogPrimitive.Close>
-      )}
+      {showCloseButton &&
+        (inDrawer ? (
+          <DrawerClose asChild>
+            <Button variant="outline">Close</Button>
+          </DrawerClose>
+        ) : (
+          <DialogPrimitive.Close render={<Button variant="outline" />}>Close</DialogPrimitive.Close>
+        ))}
     </div>
   );
 }
 
-function DialogTitle({ className, ...props }: DialogPrimitive.Title.Props) {
+const titleClass = "text-xl leading-base font-semibold tracking-normal text-foreground";
+
+function DialogTitle({ className, children }: { className?: string; children: React.ReactNode }) {
+  if (useInDrawer()) {
+    return <DrawerTitle className={cn(titleClass, "pr-8", className)}>{children}</DrawerTitle>;
+  }
   return (
-    <DialogPrimitive.Title
-      data-slot="dialog-title"
-      className={cn(
-        "text-xl leading-base font-semibold tracking-normal text-foreground",
-        className,
-      )}
-      {...props}
-    />
+    <DialogPrimitive.Title data-slot="dialog-title" className={cn(titleClass, className)}>
+      {children}
+    </DialogPrimitive.Title>
   );
 }
 
-function DialogDescription({ className, ...props }: DialogPrimitive.Description.Props) {
+const descriptionClass =
+  "text-base leading-lg tracking-normal text-muted-foreground *:[a]:underline *:[a]:underline-offset-3 *:[a]:hover:text-foreground";
+
+function DialogDescription({
+  className,
+  children,
+}: {
+  className?: string;
+  children: React.ReactNode;
+}) {
+  if (useInDrawer()) {
+    return (
+      <DrawerDescription className={cn(descriptionClass, className)}>{children}</DrawerDescription>
+    );
+  }
   return (
     <DialogPrimitive.Description
       data-slot="dialog-description"
-      className={cn(
-        "text-base leading-lg tracking-normal text-muted-foreground *:[a]:underline *:[a]:underline-offset-3 *:[a]:hover:text-foreground",
-        className,
-      )}
-      {...props}
-    />
+      className={cn(descriptionClass, className)}
+    >
+      {children}
+    </DialogPrimitive.Description>
   );
 }
 

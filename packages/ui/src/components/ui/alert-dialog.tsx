@@ -1,11 +1,43 @@
 import { AlertDialog as AlertDialogPrimitive } from "@base-ui/react/alert-dialog";
 import type * as React from "react";
+import { useIsMobile } from "../../lib/use-mobile";
 import { cn } from "../../lib/utils";
-
 import { Button } from "./button";
+import {
+  Drawer,
+  DrawerClose,
+  DrawerContent,
+  DrawerDescription,
+  DrawerTitle,
+  useInDrawer,
+} from "./drawer";
 
-function AlertDialog({ ...props }: AlertDialogPrimitive.Root.Props) {
-  return <AlertDialogPrimitive.Root data-slot="alert-dialog" {...props} />;
+function AlertDialog({
+  open,
+  onOpenChange,
+  children,
+}: {
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  children: React.ReactNode;
+}) {
+  // On a phone the alert is a bottom drawer.
+  if (useIsMobile()) {
+    return (
+      <Drawer open={open} onOpenChange={onOpenChange}>
+        {children}
+      </Drawer>
+    );
+  }
+  return (
+    <AlertDialogPrimitive.Root
+      data-slot="alert-dialog"
+      open={open}
+      onOpenChange={onOpenChange && ((next) => onOpenChange(next))}
+    >
+      {children}
+    </AlertDialogPrimitive.Root>
+  );
 }
 
 function AlertDialogTrigger({ ...props }: AlertDialogPrimitive.Trigger.Props) {
@@ -36,6 +68,17 @@ function AlertDialogContent({
 }: AlertDialogPrimitive.Popup.Props & {
   size?: "default" | "sm";
 }) {
+  if (useInDrawer()) {
+    return (
+      <DrawerContent
+        data-size={size}
+        showCloseButton={false}
+        className={cn("group/alert-dialog-content gap-4 p-4 pt-0", className)}
+      >
+        {props.children}
+      </DrawerContent>
+    );
+  }
   return (
     <AlertDialogPortal>
       <AlertDialogOverlay />
@@ -95,6 +138,11 @@ function AlertDialogTitle({
   className,
   ...props
 }: React.ComponentProps<typeof AlertDialogPrimitive.Title>) {
+  if (useInDrawer()) {
+    return (
+      <DrawerTitle className={cn("text-base font-medium", className)}>{props.children}</DrawerTitle>
+    );
+  }
   return (
     <AlertDialogPrimitive.Title
       data-slot="alert-dialog-title"
@@ -111,6 +159,13 @@ function AlertDialogDescription({
   className,
   ...props
 }: React.ComponentProps<typeof AlertDialogPrimitive.Description>) {
+  if (useInDrawer()) {
+    return (
+      <DrawerDescription className={cn("text-sm text-muted-foreground", className)}>
+        {props.children}
+      </DrawerDescription>
+    );
+  }
   return (
     <AlertDialogPrimitive.Description
       data-slot="alert-dialog-description"
@@ -134,6 +189,15 @@ function AlertDialogCancel({
   ...props
 }: AlertDialogPrimitive.Close.Props &
   Pick<React.ComponentProps<typeof Button>, "variant" | "size">) {
+  if (useInDrawer()) {
+    return (
+      <DrawerClose asChild>
+        <Button variant={variant} size={size} className={className} disabled={props.disabled}>
+          {props.children}
+        </Button>
+      </DrawerClose>
+    );
+  }
   return (
     <AlertDialogPrimitive.Close
       data-slot="alert-dialog-cancel"

@@ -10,6 +10,7 @@ export * from "./components/ui/label";
 export * from "./components/ui/logo";
 export * from "./components/ui/popover";
 export * from "./components/ui/separator";
+export * from "./lib/use-mobile";
 export * from "./lib/utils";
 
 // Label for the organization concept in UI. Code uses "organization".
@@ -17,6 +18,7 @@ export const PROJECT_LABEL = "project";
 export * from "./components/ui/alert-dialog";
 export * from "./components/ui/badge";
 export * from "./components/ui/dialog";
+export * from "./components/ui/drawer";
 export * from "./components/ui/empty";
 export * from "./components/ui/input-group";
 export * from "./components/ui/item";

@@ -4,6 +4,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { cva } from "class-variance-authority";
 import * as React from "react";
 import { cn } from "../../lib/utils";
+import { usePortalContainer } from "./drawer";
 
 type DropdownMenuSize = "xs" | "sm" | "md" | "lg";
 
@@ -59,7 +60,7 @@ function DropdownMenuContent({
   const inheritedSize = React.useContext(DropdownMenuSizeContext);
   const resolvedSize = size ?? inheritedSize;
   return (
-    <MenuPrimitive.Portal>
+    <MenuPrimitive.Portal container={usePortalContainer()}>
       <MenuPrimitive.Positioner
         className="isolate z-50 outline-none"
         align={align}

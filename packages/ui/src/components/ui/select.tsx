@@ -4,6 +4,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { cva, type VariantProps } from "class-variance-authority";
 import * as React from "react";
 import { cn } from "../../lib/utils";
+import { usePortalContainer } from "./drawer";
 
 type SelectOption = {
   label: string;
@@ -130,14 +131,16 @@ function SelectContent({
     SelectPrimitive.Positioner.Props,
     "align" | "alignOffset" | "side" | "sideOffset" | "alignItemWithTrigger"
   >) {
+  const container = usePortalContainer();
   return (
-    <SelectPrimitive.Portal>
+    <SelectPrimitive.Portal container={container}>
       <SelectPrimitive.Positioner
         side={side}
         sideOffset={sideOffset}
         align={align}
         alignOffset={alignOffset}
-        alignItemWithTrigger={alignItemWithTrigger}
+        // In a drawer the popup takes the absolute position. A drag of the drawer moves it, and that breaks a fixed position.
+        alignItemWithTrigger={container ? false : alignItemWithTrigger}
         className="isolate z-50"
       >
         <SelectPrimitive.Popup

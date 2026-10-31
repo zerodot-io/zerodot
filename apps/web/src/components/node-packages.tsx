@@ -501,7 +501,7 @@ function PackageRow({
   const hasDetails = item.description !== "" || item.nodes.length > 0;
   const hasUpdate = item.compatible && isNewer(item.latest, item.version);
   return (
-    <li className="flex items-start gap-4 px-4 py-4">
+    <li className="flex items-start gap-4 px-4 py-4 max-md:flex-wrap">
       <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted">
         <NodeIcon name={item.icon ?? "PackageIcon"} src={item.iconUrl ?? undefined} />
       </span>
@@ -529,7 +529,7 @@ function PackageRow({
           )}
         </div>
         {summary && <p className="text-pretty">{summary}</p>}
-        <div className="flex items-center gap-3 text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-x-3 text-muted-foreground">
           <span className="font-mono">{item.name}</span>
           {hasDetails && (
             <button
@@ -560,31 +560,35 @@ function PackageRow({
           </div>
         )}
       </div>
-      {canChange &&
-        (installed ? (
-          <div className="flex gap-2">
-            <Button
-              variant={hasUpdate ? "default" : "outline"}
-              disabled={busy || item.source === "env"}
-              title={item.source === "env" ? "Change it in ZERODOT_NODE_PACKAGES" : undefined}
-              onClick={onVersion}
-            >
-              {hasUpdate ? "Update" : "Version"}
+      {/* On a phone the buttons go under the text, in line with it. */}
+      {canChange && (
+        <div className="flex shrink-0 gap-2 max-md:w-full max-md:pl-14">
+          {installed ? (
+            <>
+              <Button
+                variant={hasUpdate ? "default" : "outline"}
+                disabled={busy || item.source === "env"}
+                title={item.source === "env" ? "Change it in ZERODOT_NODE_PACKAGES" : undefined}
+                onClick={onVersion}
+              >
+                {hasUpdate ? "Update" : "Version"}
+              </Button>
+              <Button
+                variant="outline"
+                disabled={busy || item.source === "env"}
+                title={item.source === "env" ? "Remove it from ZERODOT_NODE_PACKAGES" : undefined}
+                onClick={onRemove}
+              >
+                Remove
+              </Button>
+            </>
+          ) : (
+            <Button disabled={busy || !item.compatible} onClick={onInstall}>
+              {busy ? "Installing" : "Install"}
             </Button>
-            <Button
-              variant="outline"
-              disabled={busy || item.source === "env"}
-              title={item.source === "env" ? "Remove it from ZERODOT_NODE_PACKAGES" : undefined}
-              onClick={onRemove}
-            >
-              Remove
-            </Button>
-          </div>
-        ) : (
-          <Button disabled={busy || !item.compatible} onClick={onInstall}>
-            {busy ? "Installing" : "Install"}
-          </Button>
-        ))}
+          )}
+        </div>
+      )}
     </li>
   );
 }
@@ -625,7 +629,7 @@ function RegistryList({
 }) {
   return (
     <section aria-label="Community registries" className="overflow-hidden rounded-xl border">
-      <div className="flex items-start justify-between gap-4 bg-muted/50 px-4 py-3">
+      <div className="flex items-start justify-between gap-4 bg-muted/50 px-4 py-3 max-md:flex-col max-md:gap-3">
         <div className="flex min-w-0 flex-col gap-1">
           <h2 className="flex items-baseline gap-2 font-medium">
             Community registries
