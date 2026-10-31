@@ -22,6 +22,8 @@ import {
   SUPPLY_OUT_PORT,
   SUPPLY_PORT_PREFIX,
   type SupplyPort,
+  suppliesOf,
+  supplyModeConfig,
   supplyPortsOf,
   TOOL_KIND,
 } from "@zerodot/engine";
@@ -215,6 +217,19 @@ const searchText = (entry: {
     .join(" ")}`.toLowerCase();
 
 const NO_ERROR_WORKFLOW = "__none";
+
+/**
+ * The kind that a node gives from its supply handle with this config: its supply kind, or the tool
+ * kind when it can run as a tool. Undefined for another handle.
+ */
+const supplyOutKind = (
+  entry: CatalogEntry,
+  config: Record<string, unknown>,
+  handle: string | null | undefined,
+) => {
+  if (handle !== SUPPLY_OUT_PORT) return undefined;
+  return suppliesOf(entry, config) ?? (entry.usableAsTool ? TOOL_KIND : undefined);
+};
 
 /** A trigger that registers its test address at a service, so a person does not call the address. */
 const hasServiceTest = (type: string) => catalogByType.get(type)?.webhookTest !== undefined;
@@ -518,12 +533,10 @@ export function Editor({
       };
       const sourceNode = nodes.find((n) => n.id === connection.source);
       const sourceEntry = sourceNode && catalogByType.get(sourceNode.data.graphNode.type);
-      // A node that can be a tool gives the tool kind from its supply handle.
       const supplies =
-        sourceEntry?.supplies ??
-        (connection.sourceHandle === SUPPLY_OUT_PORT && sourceEntry?.usableAsTool
-          ? TOOL_KIND
-          : undefined);
+        sourceNode && sourceEntry
+          ? supplyOutKind(sourceEntry, sourceNode.data.graphNode.config, connection.sourceHandle)
+          : undefined;
       // A supply node connects only to a supply port of its kind.
       if (supplies !== undefined || isSupplyFlowEdge(connection)) {
         const parent = nodes.find((n) => n.id === connection.target);
@@ -552,6 +565,15 @@ export function Editor({
       }
       // The target port must exist with the config of the node (a Merge node has 2 to 10 inputs).
       const targetNode = nodes.find((n) => n.id === connection.target);
+      const targetEntry = targetNode && catalogByType.get(targetNode.data.graphNode.type);
+      // A node in a supply mode takes no data.
+      if (
+        targetNode &&
+        targetEntry &&
+        suppliesOf(targetEntry, targetNode.data.graphNode.config) !== undefined
+      ) {
+        return false;
+      }
       const targetDefinition = targetNode && registry.get(targetNode.data.graphNode.type);
       if (
         targetNode &&
@@ -759,8 +781,9 @@ export function Editor({
       const graphNode = nodes.find((n) => n.id === nodeId)?.data.graphNode;
       const entry = graphNode && catalogByType.get(graphNode.type);
       if (!entry) return;
-      if (handle === SUPPLY_OUT_PORT && (entry.supplies !== undefined || entry.usableAsTool)) {
-        setAddConsumer({ nodeId, kind: entry.supplies ?? TOOL_KIND });
+      const kind = supplyOutKind(entry, graphNode.config, handle);
+      if (kind !== undefined) {
+        setAddConsumer({ nodeId, kind });
       } else if (handle.startsWith(SUPPLY_PORT_PREFIX)) {
         const port = entry.supplyPorts?.find((p) => `${SUPPLY_PORT_PREFIX}${p.name}` === handle);
         if (!port) return;
@@ -784,7 +807,10 @@ export function Editor({
   ) {
     const parent = nodes.find((n) => n.id === to.nodeId);
     if (!parent) return;
-    const node = newNode(type, nodes, config);
+    // A node with supply modes starts in the mode that gives the kind of the port.
+    const entry = catalogByType.get(type);
+    const mode = entry ? supplyModeConfig(entry, to.port.kind) : undefined;
+    const node = newNode(type, nodes, mode ? { ...config, ...mode } : config);
     const parentEntry = catalogByType.get(parent.data.graphNode.type);
     const ports = parentEntry ? supplyPortsOf(parentEntry, parent.data.graphNode.config) : [];
     const index = Math.max(
@@ -880,16 +906,29 @@ export function Editor({
     const next = update(current.data.graphNode);
     setNodes((all) => all.map((n) => (n.id === openId ? { ...n, data: { graphNode: next } } : n)));
     // A switch can lose a case. Remove the edges that left from a port that is gone.
-    const definition = registry.get(next.type);
-    if (definition) {
+    const entry = catalogByType.get(next.type);
+    const definition = registry.get(next.type) ?? entry;
+    if (definition && entry) {
       const ports = new Set(outputPortsOf(definition, next.config));
       // A Merge node can lose an input. Its edges are removed too, so the graph has no edge into a
       // port that is gone. Raising the count again does not bring them back (undo does).
       const inPorts = new Set(inputPortsOf(definition, next.config));
+      // A node with supply modes can stop giving the kind of the port it is connected to.
+      const gives = supplyOutKind(entry, next.config, SUPPLY_OUT_PORT);
+      const portKind = (e: Edge) => {
+        const parent = nodes.find((n) => n.id === e.target);
+        const parentEntry = parent && catalogByType.get(parent.data.graphNode.type);
+        const name = (e.targetHandle ?? "").slice(SUPPLY_PORT_PREFIX.length);
+        return parent && parentEntry
+          ? supplyPortsOf(parentEntry, parent.data.graphNode.config).find((p) => p.name === name)
+              ?.kind
+          : undefined;
+      };
       const gone = (e: Edge) =>
-        !isSupplyFlowEdge(e) &&
-        ((e.source === next.id && !ports.has(e.sourceHandle ?? "out")) ||
-          (e.target === next.id && !inPorts.has(e.targetHandle ?? "in")));
+        isSupplyFlowEdge(e)
+          ? e.source === next.id && entry.supplyModes !== undefined && portKind(e) !== gives
+          : (e.source === next.id && !ports.has(e.sourceHandle ?? "out")) ||
+            (e.target === next.id && !inPorts.has(e.targetHandle ?? "in"));
       const removed = edges.filter(gone).length;
       setEdges((all) => all.filter((e) => !gone(e)));
       if (removed > 0) {
@@ -1322,6 +1361,7 @@ export function Editor({
       if (addSupply) {
         return (
           entry.supplies === addSupply.port.kind ||
+          supplyModeConfig(entry, addSupply.port.kind) !== undefined ||
           (addSupply.port.kind === TOOL_KIND && entry.usableAsTool)
         );
       }
@@ -1367,7 +1407,13 @@ export function Editor({
     // On a tool port, the nodes that run as tools sit in their own group.
     const groupOf = (entry: CatalogEntry) => {
       if (!addSupply) return entry.category;
-      if (entry.supplies !== undefined || RECOMMENDED_TOOLS.has(entry.type)) return "Recommended";
+      if (
+        entry.supplies !== undefined ||
+        supplyModeConfig(entry, addSupply.port.kind) !== undefined ||
+        RECOMMENDED_TOOLS.has(entry.type)
+      ) {
+        return "Recommended";
+      }
       return "Action in an app";
     };
     const add = (category: string, row: AddRow) =>
@@ -2324,7 +2370,11 @@ export function Editor({
                     }
                     asTool={
                       selected !== null &&
-                      edges.some((e) => e.source === selected.id && isSupplyFlowEdge(e))
+                      edges.some((e) => e.source === selected.id && isSupplyFlowEdge(e)) &&
+                      suppliesOf(
+                        catalogByType.get(selected.data.graphNode.type) ?? {},
+                        selected.data.graphNode.config,
+                      ) === undefined
                     }
                     inputPorts={selectedInputPorts}
                     io={selectedIo}

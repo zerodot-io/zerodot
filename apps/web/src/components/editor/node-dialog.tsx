@@ -11,7 +11,12 @@ import {
   PlusSignIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { type ShowRules, toolDescription, visibleCredentialTypes } from "@zerodot/engine";
+import {
+  type ShowRules,
+  suppliesOf,
+  toolDescription,
+  visibleCredentialTypes,
+} from "@zerodot/engine";
 import { credentialTypeCatalog } from "@zerodot/nodes";
 import {
   Button,
@@ -593,7 +598,11 @@ export function NodeDialog({
 
   const isTrigger = entry?.category === "trigger";
   // A supply node is no step: it has no input, no output, and does not run alone.
-  const isSupply = entry?.supplies !== undefined || asTool;
+  const isSupply =
+    (entry !== undefined &&
+      graphNode !== undefined &&
+      suppliesOf(entry, graphNode.config) !== undefined) ||
+    asTool;
   const isWebhookNode = graphNode?.type === "trigger.webhook";
   // A service calls the test URL of some triggers, not a person. The URL is not for them.
   const serviceHint = entry?.webhookTest?.hint;

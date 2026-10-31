@@ -26,6 +26,7 @@ import {
   type ResolvedCredential,
   type RunResponse,
   type SubWorkflowRunner,
+  suppliesOf,
   supplyPortsOf,
   TOOL_KIND,
 } from "./node";
@@ -620,7 +621,8 @@ export async function executeGraph(options: ExecuteOptions): Promise<ExecuteResu
         const supplier = registry.get(node.type);
         try {
           if (!supplier) throw new Error(`Unknown node type "${node.type}"`);
-          if (!supplier.supply && port.kind === TOOL_KIND && canBeTool(supplier)) {
+          const kind = suppliesOf(supplier, node.config);
+          if (kind === undefined && port.kind === TOOL_KIND && canBeTool(supplier, node.config)) {
             values.push(
               track(
                 nodeTool(node, supplier, scope, input, toolNames, sink.logs, below),
@@ -630,7 +632,7 @@ export async function executeGraph(options: ExecuteOptions): Promise<ExecuteResu
             );
             continue;
           }
-          if (!supplier.supply || supplier.supplies !== port.kind) {
+          if (!supplier.supply || kind !== port.kind) {
             throw new Error(`The node does not give "${port.kind}"`);
           }
           if (below.has(node.id)) throw new Error("The supply nodes make a loop");

@@ -4,7 +4,17 @@ import { describe, it } from "node:test";
 import { z } from "zod";
 import { executeGraph, type NodeEndEvent } from "./execute";
 import { type Graph, rootNodes } from "./graph";
-import { canBeTool, createRegistry, defineNode, defineSupplyNode } from "./node";
+import {
+  canBeTool,
+  createRegistry,
+  defineNode,
+  defineSupplyNode,
+  inputPortsOf,
+  outputPortsOf,
+  suppliesOf,
+  supplyModeConfig,
+  TOOL_KIND,
+} from "./node";
 import { toolDescription, withoutBinary } from "./tool";
 
 const trigger = defineNode({
@@ -740,5 +750,117 @@ describe("nested supplies, run cache, and close", () => {
       assert.equal(said("h1"), "build 2");
       assert.equal(said("h2"), "build 2");
     });
+  });
+});
+
+describe("supply modes", () => {
+  /** A step with mode "step", a greeter with mode "greet", and a tool with mode "tool". */
+  const store = defineNode({
+    type: "test.store",
+    label: "Store",
+    category: "integration",
+    icon: "CircleIcon",
+    config: z.object({ mode: z.enum(["step", "greet", "tool"]), who: z.string() }),
+    defaultConfig: { mode: "step", who: "" },
+    ports: { in: ["in"], out: ["out"] },
+    supplyModes: [
+      { kind: "test.greet", showWhen: { mode: ["greet"] } },
+      { kind: TOOL_KIND, showWhen: { mode: ["tool"] } },
+    ],
+    run: ({ config }) => ({ port: "out", data: { stepped: config.who } }),
+    supply: ({ config, node }) =>
+      config.mode === "tool"
+        ? {
+            spec: { name: node.name, description: "", inputSchema: {} },
+            call: async () => `tool:${config.who}`,
+          }
+        : () => `${node.name}:${config.who}`,
+  });
+  const agent = defineNode({
+    type: "test.toolHost",
+    label: "Agent",
+    category: "core",
+    icon: "CircleIcon",
+    config: z.object({}),
+    defaultConfig: {},
+    ports: { in: ["in"], out: ["out"] },
+    supplyPorts: [{ name: "tools", kind: TOOL_KIND, label: "Tool", multiple: true }],
+    run: async ({ supplies }) => {
+      const tools = supplies?.tools as { call(input: unknown): Promise<unknown> }[];
+      return { port: "out", data: await Promise.all(tools.map((t) => t.call({}))) };
+    },
+  });
+  const modeRegistry = createRegistry([trigger, host, store, agent]);
+  const runModes = async (graph: Graph) => {
+    const ends: NodeEndEvent[] = [];
+    const result = await executeGraph({
+      graph,
+      registry: modeRegistry,
+      triggerInput: { name: "Ada" },
+      mode: "production",
+      signal: new AbortController().signal,
+      hooks: [{ afterNode: (event) => void ends.push(event) }],
+    });
+    return { result, ends };
+  };
+
+  it("gives the kind of the mode that the config selects", () => {
+    assert.equal(suppliesOf(store, { mode: "step" }), undefined);
+    assert.equal(suppliesOf(store, { mode: "greet" }), "test.greet");
+    assert.equal(suppliesOf(store, { mode: "tool" }), TOOL_KIND);
+    assert.deepEqual(inputPortsOf(store, { mode: "greet" }), []);
+    assert.deepEqual(outputPortsOf(store, { mode: "greet" }), []);
+    assert.deepEqual(outputPortsOf(store, { mode: "step" }), ["out"]);
+    assert.equal(canBeTool(store, { mode: "step" }), true);
+    assert.equal(canBeTool(store, { mode: "tool" }), false);
+    assert.deepEqual(supplyModeConfig(store, TOOL_KIND), { mode: "tool" });
+    assert.equal(supplyModeConfig(store, "test.other"), undefined);
+  });
+
+  it("builds the supply in a supply mode and runs as a step in the other modes", async () => {
+    const { result, ends } = await runModes({
+      schema: 1,
+      nodes: [
+        node("t", "trigger.test"),
+        node("h", "test.host"),
+        node("m", "test.store", { mode: "greet", who: "{{ $input.name }}" }),
+        node("s", "test.store", { mode: "step", who: "x" }),
+      ],
+      edges: [
+        { id: "e1", from: "t", fromPort: "out", to: "h", toPort: "in" },
+        { id: "e2", from: "h", fromPort: "out", to: "s", toPort: "in" },
+        supplyEdge("m", "main"),
+      ],
+    });
+    assert.equal(result.status, "succeeded", JSON.stringify(result.error));
+    assert.deepEqual(ends.find((e) => e.node.id === "h")?.output, { main: "m:Ada", extra: [] });
+    assert.deepEqual(ends.find((e) => e.node.id === "s")?.output, { stepped: "x" });
+  });
+
+  it("uses the tool of a tool mode as it is, and wraps the node as a tool in a step mode", async () => {
+    const { result, ends } = await runModes({
+      schema: 1,
+      nodes: [
+        node("t", "trigger.test"),
+        node("a", "test.toolHost"),
+        node("given", "test.store", { mode: "tool", who: "g" }),
+        node("wrapped", "test.store", { mode: "step", who: "w" }, 100),
+      ],
+      edges: [
+        { id: "e1", from: "t", fromPort: "out", to: "a", toPort: "in" },
+        { id: "s1", from: "given", fromPort: "supply", to: "a", toPort: "supply:tools" },
+        { id: "s2", from: "wrapped", fromPort: "supply", to: "a", toPort: "supply:tools" },
+      ],
+    });
+    assert.equal(result.status, "succeeded", JSON.stringify(result.error));
+    assert.deepEqual(ends.find((e) => e.node.id === "a")?.output, ["tool:g", { stepped: "w" }]);
+  });
+
+  it("fails a supply port whose kind the mode does not give", async () => {
+    const { result } = await runModes(
+      graphWith([node("m", "test.store", { mode: "tool", who: "" })], [supplyEdge("m", "main")]),
+    );
+    assert.equal(result.status, "failed");
+    assert.match(result.error?.message ?? "", /does not give "test.greet"/);
   });
 });

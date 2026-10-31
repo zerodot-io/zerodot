@@ -9,6 +9,7 @@ import {
   type NodeRegistry,
   outputPortsOf,
   SUPPLY_OUT_PORT,
+  suppliesOf,
   supplyPortOf,
   TOOL_KIND,
 } from "@zerodot/engine";
@@ -92,11 +93,13 @@ function supplyProblems(graph: Graph, registry: NodeRegistry): string[] {
     const to = byId.get(edge.to);
     const fromDefinition = from ? registry.get(from.type) : undefined;
     const toDefinition = to ? registry.get(to.type) : undefined;
+    const fromKind = from && fromDefinition ? suppliesOf(fromDefinition, from.config) : undefined;
     if (!isSupplyEdge(edge)) {
-      if (from && (fromDefinition?.supplies !== undefined || suppliers.has(from.id))) {
+      if (from && (fromKind !== undefined || suppliers.has(from.id))) {
         problems.push(`"${from.name}" gives a supply. Connect it to a supply port only`);
       }
-      if (to && (toDefinition?.supplies !== undefined || suppliers.has(to.id))) {
+      const toKind = to && toDefinition ? suppliesOf(toDefinition, to.config) : undefined;
+      if (to && (toKind !== undefined || suppliers.has(to.id))) {
         problems.push(`"${to.name}" gives a supply. It cannot take data`);
       }
       continue;
@@ -108,8 +111,8 @@ function supplyProblems(graph: Graph, registry: NodeRegistry): string[] {
       continue;
     }
     const asTool =
-      fromDefinition.supplies === undefined && port.kind === TOOL_KIND && canBeTool(fromDefinition);
-    if (edge.fromPort !== SUPPLY_OUT_PORT || (fromDefinition.supplies === undefined && !asTool)) {
+      fromKind === undefined && port.kind === TOOL_KIND && canBeTool(fromDefinition, from.config);
+    if (edge.fromPort !== SUPPLY_OUT_PORT || (fromKind === undefined && !asTool)) {
       problems.push(
         port.kind === TOOL_KIND
           ? `Edge "${edge.id}": "${from.name}" cannot be a tool`
@@ -117,9 +120,9 @@ function supplyProblems(graph: Graph, registry: NodeRegistry): string[] {
       );
       continue;
     }
-    if (!asTool && port.kind !== fromDefinition.supplies) {
+    if (!asTool && port.kind !== fromKind) {
       problems.push(
-        `Edge "${edge.id}": "${port.label}" of "${to.name}" takes "${port.kind}", not "${fromDefinition.supplies}"`,
+        `Edge "${edge.id}": "${port.label}" of "${to.name}" takes "${port.kind}", not "${fromKind}"`,
       );
       continue;
     }
@@ -156,7 +159,10 @@ function supplyProblems(graph: Graph, registry: NodeRegistry): string[] {
     // $fromAI needs a node that runs as a tool, in the literal form.
     try {
       const inputs = fromAIInputs(node, definition);
-      if (inputs.size > 0 && (!suppliers.has(node.id) || definition.supplies !== undefined)) {
+      if (
+        inputs.size > 0 &&
+        (!suppliers.has(node.id) || suppliesOf(definition, node.config) !== undefined)
+      ) {
         problems.push(`"${node.name}": $fromAI works only in a node connected as a tool`);
       }
     } catch (error) {

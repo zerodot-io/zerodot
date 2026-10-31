@@ -196,3 +196,45 @@ describe("node tool graph check", () => {
     assert.match(checkGraphNodes(g("{{ $fromAI($input.a) }}"), reg)[0] ?? "", /config.text/);
   });
 });
+
+describe("supply mode graph check", () => {
+  const store = defineNode({
+    ...base,
+    category: "integration",
+    type: "test.store",
+    label: "Store",
+    config: z.object({ mode: z.string() }),
+    defaultConfig: { mode: "step" },
+    ports: { in: ["in"], out: ["out"] },
+    supplyModes: [{ kind: "ai.model", showWhen: { mode: ["model"] } }],
+    run: () => ({ port: "out", data: {} }),
+    supply: () => ({}),
+  });
+  const modeRegistry = createRegistry([agent, store]);
+  const withMode = (mode: string, edges: Graph["edges"]): Graph => ({
+    schema: 1,
+    nodes: [node("a", "test.agent"), { ...node("s", "test.store"), config: { mode } }],
+    edges,
+  });
+
+  it("accepts the node on a port of its mode kind, and as a tool in a step mode", () => {
+    assert.deepEqual(
+      checkGraphNodes(withMode("model", [edge("s", "supply", "a", "supply:model")]), modeRegistry),
+      [],
+    );
+    assert.deepEqual(
+      checkGraphNodes(withMode("step", [edge("s", "supply", "a", "supply:tools")]), modeRegistry),
+      [],
+    );
+  });
+
+  it("rejects a kind the mode does not give, and data edges in a supply mode", () => {
+    const wrong = checkGraphNodes(
+      withMode("model", [edge("s", "supply", "a", "supply:tools")]),
+      modeRegistry,
+    );
+    assert.match(wrong[0] ?? "", /takes "ai.tool", not "ai.model"/);
+    const data = checkGraphNodes(withMode("model", [edge("s", "out", "a", "in")]), modeRegistry);
+    assert.ok(data.some((p) => /"s" gives a supply. Connect it to a supply port only/.test(p)));
+  });
+});

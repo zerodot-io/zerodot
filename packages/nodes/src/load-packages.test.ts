@@ -50,6 +50,12 @@ describe("loadNodePackages", () => {
             node("http.request"),
             node("ext.nope", { run: undefined }),
             node("ext.trigger", { category: "trigger" }),
+            node("ext.modeNoSupply", { supplyModes: [{ kind: "ai.tool" }] }),
+            node("ext.modeTwice", {
+              supplies: "ai.tool",
+              supplyModes: [{ kind: "ai.tool" }],
+              supply: () => ({}),
+            }),
           ],
         };
       },
@@ -59,7 +65,13 @@ describe("loadNodePackages", () => {
       assert.deepEqual(reports[0]?.added, ["ext.hello"]);
       assert.deepEqual(
         reports[0]?.skipped.map((s) => s.reason),
-        ["no run()", 'a trigger type starts with "trigger."', "type exists"],
+        [
+          "no run()",
+          'a trigger type starts with "trigger."',
+          "no supply()",
+          "supplies and supplyModes together",
+          "type exists",
+        ],
       );
       assert.match(reports[1]?.error ?? "", /Cannot find/);
       assert.match(reports[2]?.error ?? "", /nodes/);

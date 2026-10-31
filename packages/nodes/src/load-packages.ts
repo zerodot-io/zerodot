@@ -36,6 +36,11 @@ function problemWith(value: unknown): string | null {
   if (typeof node.label !== "string") return "no label";
   if (typeof node.run !== "function") return "no run()";
   if (node.supplies !== undefined && typeof node.supply !== "function") return "no supply()";
+  if (node.supplyModes !== undefined) {
+    if (!Array.isArray(node.supplyModes)) return "supplyModes is not a list";
+    if (node.supplies !== undefined) return "supplies and supplyModes together";
+    if (typeof node.supply !== "function") return "no supply()";
+  }
   if (typeof node.config !== "object" || node.config === null) return "no config schema";
   if (typeof node.ports !== "object" || node.ports === null) return "no ports";
   if (node.category === "trigger" && node.type.startsWith("trigger.") === false) {
