@@ -122,7 +122,31 @@ describe("$fromAI", () => {
       calls: [{ key: "x", description: "d", type: "json" }],
       invalid: false,
     });
-    assert.equal(fromAICalls('{{ $fromAI("x", "d", "date") }}').invalid, true);
-    assert.equal(fromAICalls("{{ $fromAI($input.a) }}").invalid, true);
+    assert.equal(fromAICalls('{{ $fromAI("x", "d", "date") }}').error, "Invalid type: date");
+    // The arguments are text: an expression as a key is the key "$input.a".
+    assert.deepEqual(fromAICalls("{{ $fromAI($input.a) }}").calls, [
+      { key: "$input.a", description: "", type: "string" },
+    ]);
+  });
+
+  it("reads quotes, any case, and a default of the type", async () => {
+    const { ToolInput, fromAICalls } = await import("./expression");
+    assert.deepEqual(fromAICalls("{{ $FROMAI(`k`, 'it\\'s', \"Number\", 5) }}").calls, [
+      { key: "k", description: "it's", type: "number", defaultValue: 5 },
+    ]);
+    const defaults = (type: string, value: string) =>
+      fromAICalls(`{{ $fromAI("k", "", "${type}", ${value}) }}`).calls[0]?.defaultValue;
+    assert.equal(defaults("boolean", '"TRUE"'), true);
+    assert.equal(defaults("number", '"x"'), "x");
+    assert.deepEqual(defaults("json", "'[1]'"), [1]);
+    assert.equal(defaults("string", "7"), "7");
+    assert.match(fromAICalls('{{ $fromAI("x" }}').error ?? "", /^Unbalanced parentheses/);
+    // The model left the key out: the default is used.
+    assert.equal(
+      resolveTemplate('{{ $fromAI("n", "", "number", 5) + 1 }}', {
+        $fromAI: new ToolInput({}),
+      }),
+      6,
+    );
   });
 });

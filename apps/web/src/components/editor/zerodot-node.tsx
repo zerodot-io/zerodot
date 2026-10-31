@@ -28,6 +28,8 @@ import {
   SUPPLY_OUT_PORT,
   SUPPLY_PORT_PREFIX,
   type SupplyPort,
+  suppliesOf,
+  supplyPortsOf,
 } from "@zerodot/engine";
 import { registry } from "@zerodot/nodes";
 import {
@@ -172,15 +174,18 @@ export function ZerodotNode({ id, data, selected }: NodeProps<ZerodotFlowNode>) 
   const portSource = definition ?? entry;
   const isTrigger = entry?.category === "trigger";
   // A node on a tool port runs as a tool. It draws as a supply node, with no data ports.
-  const asTool = connections.some((c) => c.sourceHandle === SUPPLY_OUT_PORT);
-  const isSupply = entry?.supplies !== undefined || asTool;
+  // A node in a supply mode is a supply node, not a tool.
+  const supplyKind = entry ? suppliesOf(entry, graphNode.config) : undefined;
+  const asTool =
+    supplyKind === undefined && connections.some((c) => c.sourceHandle === SUPPLY_OUT_PORT);
+  const isSupply = supplyKind !== undefined || asTool;
   const outPorts = asTool ? [] : portSource ? outputPortsOf(portSource, graphNode.config) : ["out"];
   const inPorts = asTool
     ? []
     : portSource
       ? inputPortsOf(portSource, graphNode.config)
       : (entry?.ports.in ?? []);
-  const supplyPorts = entry?.supplyPorts ?? [];
+  const supplyPorts = entry ? supplyPortsOf(entry, graphNode.config) : [];
   const suppliedCount = (port: SupplyPort) =>
     incoming.filter((c) => c.targetHandle === `${SUPPLY_PORT_PREFIX}${port.name}`).length;
   const supplyLeftFor = (index: number) => `${supplyPortX(index, supplyPorts.length) * 100}%`;

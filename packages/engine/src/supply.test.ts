@@ -4,7 +4,17 @@ import { describe, it } from "node:test";
 import { z } from "zod";
 import { executeGraph, type NodeEndEvent } from "./execute";
 import { type Graph, rootNodes } from "./graph";
-import { canBeTool, createRegistry, defineNode, defineSupplyNode } from "./node";
+import {
+  canBeTool,
+  createRegistry,
+  defineNode,
+  defineSupplyNode,
+  inputPortsOf,
+  outputPortsOf,
+  suppliesOf,
+  supplyModeConfig,
+  TOOL_KIND,
+} from "./node";
 import { toolDescription, withoutBinary } from "./tool";
 
 const trigger = defineNode({
@@ -299,6 +309,40 @@ describe("node as tool", () => {
     assert.equal(canBeTool({ category: "data" }), false);
   });
 
+  it("checks keys, duplicates, defaults, and the input of the model", async () => {
+    const { checkToolInput, fromAIInputs, toolInputSchema } = await import("./tool");
+    const inputsOf = (text: string) => fromAIInputs({ config: { text } }, {});
+    assert.throws(() => inputsOf('{{ $fromAI("") }}'), /You must specify a key/);
+    assert.throws(() => inputsOf('{{ $fromAI("a b") }}'), /Parameter key `a b` is invalid/);
+    assert.throws(() => inputsOf(`{{ $fromAI("${"k".repeat(65)}") }}`), /is invalid/);
+    assert.throws(
+      () => inputsOf('{{ $fromAI("k", "one") }} {{ $fromAI("k", "two") }}'),
+      /Duplicate key 'k' found with different description or type/,
+    );
+    const inputs = inputsOf(
+      '{{ $fromAI("n", "How many", "number", 2) }} {{ $fromAI("tags", "", "json") }}',
+    );
+    assert.deepEqual(toolInputSchema(inputs), {
+      type: "object",
+      properties: {
+        n: { type: "number", description: "How many", default: 2 },
+        tags: {
+          anyOf: [
+            { type: "object", minProperties: 1 },
+            { type: "array", minItems: 1 },
+          ],
+        },
+      },
+      required: ["tags"],
+      additionalProperties: false,
+    });
+    assert.deepEqual(checkToolInput(inputs, { tags: ["a"], extra: 1 }), { tags: ["a"], n: 2 });
+    assert.throws(
+      () => checkToolInput(inputs, { n: "2", tags: [], extra: 1 }),
+      /"n" must be a number; "tags" must be a non-empty object or a non-empty array$/,
+    );
+  });
+
   it("fails a $fromAI key that is not literal text", async () => {
     const result = await executeGraph({
       graph: toolGraph({ channel: "", text: "{{ $fromAI($input.name) }}", count: 0 }),
@@ -309,5 +353,514 @@ describe("node as tool", () => {
     });
     assert.equal(result.status, "failed");
     assert.match(result.error?.message ?? "", /Supply "Send message" \(Tool\): config.text/);
+  });
+});
+
+describe("nested supplies, run cache, and close", () => {
+  /** Counts builds and closes of each embedding value, by the `name` of its config. */
+  const built: string[] = [];
+  const closed: string[] = [];
+  const embedding = defineSupplyNode({
+    type: "test.embedding",
+    label: "Embedding",
+    category: "core",
+    icon: "CircleIcon",
+    config: z.object({ name: z.string() }),
+    defaultConfig: { name: "" },
+    supplies: "test.embed",
+    supply: ({ config }) => {
+      built.push(config.name);
+      return {
+        embed: (text: string) => `${config.name}(${text})`,
+        close: () => void closed.push(config.name),
+      };
+    },
+  });
+  /** A store that uses its embedding supply. It can be a tool. */
+  const store = defineNode({
+    type: "test.store",
+    label: "Store",
+    category: "integration",
+    icon: "CircleIcon",
+    config: z.object({}),
+    defaultConfig: {},
+    ports: { in: ["in"], out: ["out"] },
+    supplyPorts: [{ name: "embedding", kind: "test.embed", label: "Embedding", required: true }],
+    run: ({ supplies }) => {
+      const value = supplies?.embedding as { embed(text: string): string };
+      return { port: "out", data: { vector: value.embed("q") } };
+    },
+  });
+  /** A supply node with its own supply port. */
+  const storeSupply = defineSupplyNode({
+    type: "test.store-supply",
+    label: "Store supply",
+    category: "core",
+    icon: "CircleIcon",
+    config: z.object({}),
+    defaultConfig: {},
+    supplies: "test.greet",
+    supplyPorts: [{ name: "embedding", kind: "test.embed", label: "Embedding", required: true }],
+    supply: ({ supplies }) => {
+      const value = supplies?.embedding as { embed(text: string): string };
+      return () => value.embed("s");
+    },
+  });
+  /** A host with one greet port, so it can run more than once in a run. */
+  const one = defineNode({
+    type: "test.one",
+    label: "One",
+    category: "core",
+    icon: "CircleIcon",
+    config: z.object({}),
+    defaultConfig: {},
+    ports: { in: ["in"], out: ["out"] },
+    supplyPorts: [{ name: "main", kind: "test.greet", label: "Main", required: true }],
+    run: ({ supplies, input }) => {
+      const main = supplies?.main as () => string;
+      return { port: "out", data: { said: main(), input } };
+    },
+  });
+  const agent = defineNode({
+    type: "test.agent2",
+    label: "Agent",
+    category: "core",
+    icon: "CircleIcon",
+    config: z.object({}),
+    defaultConfig: {},
+    ports: { in: ["in"], out: ["out"] },
+    supplyPorts: [{ name: "tools", kind: "ai.tool", label: "Tool", multiple: true }],
+    run: async ({ supplies }) => {
+      const tools = supplies?.tools as { call(input: unknown): Promise<unknown> }[];
+      const results = [];
+      for (const tool of tools) results.push(await tool.call({}));
+      return { port: "out", data: results };
+    },
+  });
+  const nestedRegistry = createRegistry([trigger, embedding, store, storeSupply, one, agent]);
+  const edge = (from: string, to: string, port: string) => ({
+    id: `${from}-${to}`,
+    from,
+    fromPort: "supply",
+    to,
+    toPort: `supply:${port}`,
+  });
+  const flow = (from: string, to: string) => ({
+    id: `${from}-${to}`,
+    from,
+    fromPort: "out",
+    to,
+    toPort: "in",
+  });
+  const runNested = async (graph: Graph) => {
+    built.length = 0;
+    closed.length = 0;
+    const ends: NodeEndEvent[] = [];
+    const result = await executeGraph({
+      graph,
+      registry: nestedRegistry,
+      triggerInput: { name: "Ada" },
+      mode: "production",
+      signal: new AbortController().signal,
+      hooks: [{ afterNode: (event) => void ends.push(event) }],
+    });
+    return { result, ends };
+  };
+
+  it("gives a node that runs as a tool its supplies", async () => {
+    const { result, ends } = await runNested({
+      schema: 1,
+      nodes: [
+        node("t", "trigger.test"),
+        node("a", "test.agent2"),
+        node("s", "test.store"),
+        node("e", "test.embedding", { name: "E" }),
+      ],
+      edges: [flow("t", "a"), edge("s", "a", "tools"), edge("e", "s", "embedding")],
+    });
+    assert.equal(result.status, "succeeded", JSON.stringify(result.error));
+    assert.deepEqual(ends.find((e) => e.node.id === "a")?.output, [{ vector: "E(q)" }]);
+    assert.deepEqual(closed, ["E"]);
+  });
+
+  it("gives a supply node the values of its own supply ports", async () => {
+    const { result, ends } = await runNested({
+      schema: 1,
+      nodes: [
+        node("t", "trigger.test"),
+        node("h", "test.one"),
+        node("v", "test.store-supply"),
+        node("e", "test.embedding", { name: "E" }),
+      ],
+      edges: [flow("t", "h"), edge("v", "h", "main"), edge("e", "v", "embedding")],
+    });
+    assert.equal(result.status, "succeeded", JSON.stringify(result.error));
+    const out = ends.find((e) => e.node.id === "h")?.output as { said: string } | undefined;
+    assert.equal(out?.said, "E(s)");
+  });
+
+  it("builds a static supply one time for the run and closes it at the end", async () => {
+    const { result } = await runNested({
+      schema: 1,
+      nodes: [
+        node("t", "trigger.test"),
+        node("h1", "test.one"),
+        node("h2", "test.one"),
+        node("v", "test.store-supply"),
+        node("e", "test.embedding", { name: "{{ $env.MODEL ?? 'E' }}" }),
+      ],
+      edges: [
+        flow("t", "h1"),
+        flow("h1", "h2"),
+        edge("v", "h1", "main"),
+        edge("v", "h2", "main"),
+        edge("e", "v", "embedding"),
+      ],
+    });
+    assert.equal(result.status, "succeeded", JSON.stringify(result.error));
+    assert.deepEqual(built, ["E"]);
+    assert.deepEqual(closed, ["E"]);
+  });
+
+  it("builds a supply that uses $input for each parent run and closes it after each", async () => {
+    const { result } = await runNested({
+      schema: 1,
+      nodes: [
+        node("t", "trigger.test"),
+        node("h1", "test.one"),
+        node("h2", "test.one"),
+        node("v", "test.store-supply"),
+        node("e", "test.embedding", { name: "{{ $input.name ?? 'next' }}" }),
+      ],
+      edges: [
+        flow("t", "h1"),
+        flow("h1", "h2"),
+        edge("v", "h1", "main"),
+        edge("v", "h2", "main"),
+        edge("e", "v", "embedding"),
+      ],
+    });
+    assert.equal(result.status, "succeeded", JSON.stringify(result.error));
+    assert.deepEqual(built, ["Ada", "next"]);
+    assert.deepEqual(closed, ["Ada", "next"]);
+  });
+
+  it("fails supply nodes that make a loop", async () => {
+    const chain = defineSupplyNode({
+      type: "test.chain",
+      label: "Chain",
+      category: "core",
+      icon: "CircleIcon",
+      config: z.object({}),
+      defaultConfig: {},
+      supplies: "test.embed",
+      supplyPorts: [{ name: "embedding", kind: "test.embed", label: "Embedding" }],
+      supply: () => ({ embed: (text: string) => text }),
+    });
+    const result = await executeGraph({
+      graph: {
+        schema: 1,
+        nodes: [
+          node("t", "trigger.test"),
+          node("h", "test.one"),
+          node("v", "test.store-supply"),
+          node("c1", "test.chain"),
+          node("c2", "test.chain"),
+        ],
+        edges: [
+          flow("t", "h"),
+          edge("v", "h", "main"),
+          edge("c1", "v", "embedding"),
+          edge("c2", "c1", "embedding"),
+          edge("c1", "c2", "embedding"),
+        ],
+      },
+      registry: createRegistry([trigger, store, storeSupply, one, chain]),
+      triggerInput: {},
+      mode: "production",
+      signal: new AbortController().signal,
+    });
+    assert.equal(result.status, "failed");
+    assert.match(result.error?.message ?? "", /The supply nodes make a loop/);
+  });
+
+  it("skips a supply port that its showWhen hides", async () => {
+    const reranked = defineNode({
+      type: "test.reranked",
+      label: "Reranked",
+      category: "core",
+      icon: "CircleIcon",
+      config: z.object({ rerank: z.boolean() }),
+      defaultConfig: { rerank: false },
+      ports: { in: ["in"], out: ["out"] },
+      supplyPorts: [
+        {
+          name: "reranker",
+          kind: "test.embed",
+          label: "Reranker",
+          required: true,
+          showWhen: { rerank: [true] },
+        },
+      ],
+      run: ({ supplies }) => ({ port: "out", data: { has: supplies?.reranker !== undefined } }),
+    });
+    const graphFor = (rerank: boolean): Graph => ({
+      schema: 1,
+      nodes: [
+        node("t", "trigger.test"),
+        node("r", "test.reranked", { rerank }),
+        node("e", "test.embedding", { name: "E" }),
+      ],
+      edges: [flow("t", "r"), edge("e", "r", "reranker")],
+    });
+    const runOne = async (rerank: boolean) => {
+      const ends: NodeEndEvent[] = [];
+      const result = await executeGraph({
+        graph: graphFor(rerank),
+        registry: createRegistry([trigger, embedding, reranked]),
+        triggerInput: {},
+        mode: "production",
+        signal: new AbortController().signal,
+        hooks: [{ afterNode: (event) => void ends.push(event) }],
+      });
+      return { result, out: ends.find((e) => e.node.id === "r")?.output };
+    };
+    assert.deepEqual((await runOne(true)).out, { has: true });
+    const hidden = await runOne(false);
+    assert.equal(hidden.result.status, "succeeded", JSON.stringify(hidden.result.error));
+    assert.deepEqual(hidden.out, { has: false });
+  });
+
+  describe("close and the run cache", () => {
+    const events: { node: string; status: string; method?: string; error?: string }[] = [];
+    let builds = 0;
+    let closes = 0;
+    /** A static supply. It counts builds and closes, logs on each call, and can hang on close. */
+    const counter = defineSupplyNode({
+      type: "test.counter",
+      label: "Counter",
+      category: "core",
+      icon: "CircleIcon",
+      config: z.object({ hang: z.boolean() }),
+      defaultConfig: { hang: false },
+      supplies: "test.greet",
+      supply: ({ config, log }) => {
+        builds++;
+        const build = builds;
+        const say = () => {
+          log?.([{ level: "info", message: `call of build ${build}` }]);
+          return `build ${build}`;
+        };
+        return Object.assign(say, {
+          close: () => {
+            closes++;
+            return config.hang ? new Promise(() => undefined) : undefined;
+          },
+        });
+      },
+    });
+    let failFirst = false;
+    const flaky = defineNode({
+      type: "test.flaky",
+      label: "Flaky",
+      category: "core",
+      icon: "CircleIcon",
+      config: z.object({}),
+      defaultConfig: {},
+      ports: { in: ["in"], out: ["out"] },
+      supplyPorts: [{ name: "main", kind: "test.greet", label: "Main", required: true }],
+      run: ({ supplies }) => {
+        const main = supplies?.main as () => string;
+        const said = main();
+        if (failFirst) {
+          failFirst = false;
+          throw new Error("lost connection");
+        }
+        return { port: "out", data: { said } };
+      },
+    });
+    const counterRegistry = createRegistry([trigger, counter, flaky]);
+    const runCounter = async (graph: Graph) => {
+      builds = 0;
+      closes = 0;
+      events.length = 0;
+      const ends: NodeEndEvent[] = [];
+      const result = await executeGraph({
+        graph,
+        registry: counterRegistry,
+        triggerInput: {},
+        mode: "production",
+        signal: new AbortController().signal,
+        supplyCloseMs: 20,
+        hooks: [
+          {
+            afterNode: (event) => void ends.push(event),
+            onSupplyUse: (event) =>
+              void events.push({
+                node: event.node.id,
+                status: event.status,
+                method: event.call?.method,
+                error: event.call?.error?.message,
+              }),
+          },
+        ],
+      });
+      return { result, ends };
+    };
+    const twoHosts = (hang: boolean, retry?: { max: number; backoffMs: number }): Graph => ({
+      schema: 1,
+      nodes: [
+        node("t", "trigger.test"),
+        { ...node("h1", "test.flaky"), ...(retry ? { retry } : {}) },
+        node("h2", "test.flaky"),
+        node("c", "test.counter", { hang }),
+      ],
+      edges: [flow("t", "h1"), flow("h1", "h2"), edge("c", "h1", "main"), edge("c", "h2", "main")],
+    });
+
+    it("writes the logs of a cached value to the node that uses it now", async () => {
+      const { result, ends } = await runCounter(twoHosts(false));
+      assert.equal(result.status, "succeeded", JSON.stringify(result.error));
+      assert.equal(builds, 1);
+      const logsOf = (id: string) =>
+        ends.find((e) => e.node.id === id)?.logs?.map((l) => l.message);
+      assert.deepEqual(logsOf("h1"), ["[c] call of build 1"]);
+      assert.deepEqual(logsOf("h2"), ["[c] call of build 1"]);
+    });
+
+    it("does not wait for a close that hangs, and reports it", async () => {
+      const { result } = await runCounter(twoHosts(true));
+      assert.equal(result.status, "succeeded", JSON.stringify(result.error));
+      assert.equal(closes, 1);
+      assert.deepEqual(
+        events.filter((e) => e.method === "close"),
+        [{ node: "c", status: "failed", method: "close", error: "It did not close in 20 ms" }],
+      );
+    });
+
+    it("builds cached values again after a node attempt fails", async () => {
+      failFirst = true;
+      const { result, ends } = await runCounter(twoHosts(false, { max: 1, backoffMs: 0 }));
+      assert.equal(result.status, "succeeded", JSON.stringify(result.error));
+      // The failed attempt closed build 1. The retry and h2 share build 2.
+      assert.equal(builds, 2);
+      assert.equal(closes, 2);
+      const said = (id: string) =>
+        (ends.findLast((e) => e.node.id === id)?.output as { said: string } | undefined)?.said;
+      assert.equal(said("h1"), "build 2");
+      assert.equal(said("h2"), "build 2");
+    });
+  });
+});
+
+describe("supply modes", () => {
+  /** A step with mode "step", a greeter with mode "greet", and a tool with mode "tool". */
+  const store = defineNode({
+    type: "test.store",
+    label: "Store",
+    category: "integration",
+    icon: "CircleIcon",
+    config: z.object({ mode: z.enum(["step", "greet", "tool"]), who: z.string() }),
+    defaultConfig: { mode: "step", who: "" },
+    ports: { in: ["in"], out: ["out"] },
+    supplyModes: [
+      { kind: "test.greet", showWhen: { mode: ["greet"] } },
+      { kind: TOOL_KIND, showWhen: { mode: ["tool"] } },
+    ],
+    run: ({ config }) => ({ port: "out", data: { stepped: config.who } }),
+    supply: ({ config, node }) =>
+      config.mode === "tool"
+        ? {
+            spec: { name: node.name, description: "", inputSchema: {} },
+            call: async () => `tool:${config.who}`,
+          }
+        : () => `${node.name}:${config.who}`,
+  });
+  const agent = defineNode({
+    type: "test.toolHost",
+    label: "Agent",
+    category: "core",
+    icon: "CircleIcon",
+    config: z.object({}),
+    defaultConfig: {},
+    ports: { in: ["in"], out: ["out"] },
+    supplyPorts: [{ name: "tools", kind: TOOL_KIND, label: "Tool", multiple: true }],
+    run: async ({ supplies }) => {
+      const tools = supplies?.tools as { call(input: unknown): Promise<unknown> }[];
+      return { port: "out", data: await Promise.all(tools.map((t) => t.call({}))) };
+    },
+  });
+  const modeRegistry = createRegistry([trigger, host, store, agent]);
+  const runModes = async (graph: Graph) => {
+    const ends: NodeEndEvent[] = [];
+    const result = await executeGraph({
+      graph,
+      registry: modeRegistry,
+      triggerInput: { name: "Ada" },
+      mode: "production",
+      signal: new AbortController().signal,
+      hooks: [{ afterNode: (event) => void ends.push(event) }],
+    });
+    return { result, ends };
+  };
+
+  it("gives the kind of the mode that the config selects", () => {
+    assert.equal(suppliesOf(store, { mode: "step" }), undefined);
+    assert.equal(suppliesOf(store, { mode: "greet" }), "test.greet");
+    assert.equal(suppliesOf(store, { mode: "tool" }), TOOL_KIND);
+    assert.deepEqual(inputPortsOf(store, { mode: "greet" }), []);
+    assert.deepEqual(outputPortsOf(store, { mode: "greet" }), []);
+    assert.deepEqual(outputPortsOf(store, { mode: "step" }), ["out"]);
+    assert.equal(canBeTool(store, { mode: "step" }), true);
+    assert.equal(canBeTool(store, { mode: "tool" }), false);
+    assert.deepEqual(supplyModeConfig(store, TOOL_KIND), { mode: "tool" });
+    assert.equal(supplyModeConfig(store, "test.other"), undefined);
+  });
+
+  it("builds the supply in a supply mode and runs as a step in the other modes", async () => {
+    const { result, ends } = await runModes({
+      schema: 1,
+      nodes: [
+        node("t", "trigger.test"),
+        node("h", "test.host"),
+        node("m", "test.store", { mode: "greet", who: "{{ $input.name }}" }),
+        node("s", "test.store", { mode: "step", who: "x" }),
+      ],
+      edges: [
+        { id: "e1", from: "t", fromPort: "out", to: "h", toPort: "in" },
+        { id: "e2", from: "h", fromPort: "out", to: "s", toPort: "in" },
+        supplyEdge("m", "main"),
+      ],
+    });
+    assert.equal(result.status, "succeeded", JSON.stringify(result.error));
+    assert.deepEqual(ends.find((e) => e.node.id === "h")?.output, { main: "m:Ada", extra: [] });
+    assert.deepEqual(ends.find((e) => e.node.id === "s")?.output, { stepped: "x" });
+  });
+
+  it("uses the tool of a tool mode as it is, and wraps the node as a tool in a step mode", async () => {
+    const { result, ends } = await runModes({
+      schema: 1,
+      nodes: [
+        node("t", "trigger.test"),
+        node("a", "test.toolHost"),
+        node("given", "test.store", { mode: "tool", who: "g" }),
+        node("wrapped", "test.store", { mode: "step", who: "w" }, 100),
+      ],
+      edges: [
+        { id: "e1", from: "t", fromPort: "out", to: "a", toPort: "in" },
+        { id: "s1", from: "given", fromPort: "supply", to: "a", toPort: "supply:tools" },
+        { id: "s2", from: "wrapped", fromPort: "supply", to: "a", toPort: "supply:tools" },
+      ],
+    });
+    assert.equal(result.status, "succeeded", JSON.stringify(result.error));
+    assert.deepEqual(ends.find((e) => e.node.id === "a")?.output, ["tool:g", { stepped: "w" }]);
+  });
+
+  it("fails a supply port whose kind the mode does not give", async () => {
+    const { result } = await runModes(
+      graphWith([node("m", "test.store", { mode: "tool", who: "" })], [supplyEdge("m", "main")]),
+    );
+    assert.equal(result.status, "failed");
+    assert.match(result.error?.message ?? "", /does not give "test.greet"/);
   });
 });

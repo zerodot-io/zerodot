@@ -45,11 +45,16 @@ An AI Agent can use a node as a tool. Set `usableAsTool` to control this. If you
 defineNode({ type: "acme.greet", usableAsTool: true /* ... */ });
 ```
 
-In a tool node, `$fromAI` marks a value that the model gives. zerodot makes the input schema of the tool from these calls. The type is `string` (default), `number`, `boolean`, or `json`.
+In a tool node, `$fromAI(key, description?, type?, defaultValue?)` marks a value that the model gives. zerodot makes the input schema of the tool from these calls.
+
+- The type is `string` (default), `number`, `boolean`, or `json` (a non-empty object or list). The case does not matter.
+- A key has 1 to 64 letters, numbers, underscores, or hyphens. All calls with the same key must have the same description and type.
+- With a default value, the key is optional: the default is used when the model leaves it out. The default is read as the type (`"true"` is `true` for a boolean).
+- The arguments are text in `"`, `'`, or backtick quotes. They are not expressions.
 
 ```text
 {{ $fromAI("name", "The name of the person") }}
-{{ $fromAI("count", "How many times", "number") }}
+{{ $fromAI("count", "How many times", "number", 1) }}
 ```
 
 The model gets the output of `run`. Binary data is sent as its type, file name and size only.
@@ -86,6 +91,39 @@ supplyPorts: [
 
 `TOOL_KIND` (`"ai.tool"`) is the kind of a tool port. A tool port also takes normal nodes that can be tools.
 
+From 1.5:
+
+- A node that runs as a tool gets its `supplies` too, for each call.
+- A supply node can declare `supplyPorts`. `supply` then gets the values in `supplies` (for example, a vector store tool with an embedding supply).
+- The engine builds a supply value one time for the run when its config and credential use no `$input`, `$node`, or `$fromAI`, and the supply nodes under it do not either. Otherwise it builds the value for each run of the parent.
+- A supply port can have `showWhen` and `hideWhen`, as a config field has. A hidden port gives no value and is not required. The rules read the saved config, before expressions resolve.
+- When a supply value has a `close()` function, the engine calls it when the value is not used again: at the end of the run for a value it keeps, or when the parent is done. The last value built closes first. A close that fails or takes more than 5 seconds shows on the supply node and does not stop the run. Use this to keep one connection for the run.
+- A value from the run cache writes its logs to the node that uses it now. When a node attempt that used cached values fails, the engine closes them and builds them again for the next use, so a retry gets a new connection.
+
+### Supply modes
+
+One node can be a step with some configs and a supply with others. For example, a vector store that inserts documents as a step and retrieves them as a supply. Use `defineNode` with `run`, `supply` and `supplyModes`:
+
+```ts
+defineNode({
+  type: "acme.vectorStore",
+  // ...
+  ports: { in: ["in"], out: ["out"] },
+  supplyModes: [
+    { kind: "ai.vectorStore", showWhen: { mode: ["retrieve"] } },
+    { kind: TOOL_KIND, showWhen: { mode: ["retrieveAsTool"] } },
+  ],
+  run: ({ config }) => insertOrGet(config),
+  supply: ({ config, node }) =>
+    config.mode === "retrieveAsTool" ? retrieveTool(toolName(node.name, new Set())) : vectorStore(),
+});
+```
+
+- The first mode whose rules match the saved config gives the kind. The rules read the config before expressions resolve, so the mode field must be a plain value. `suppliesOf(definition, config)` gives the kind, or `undefined` for a step.
+- In a supply mode, the node has no in or out ports, and it is not a tool node. In a mode that gives `TOOL_KIND`, `supply` returns the tool itself (a `NodeTool`: `spec` and `call`). `$fromAI` does not work in a supply mode.
+- When the user adds the node on a supply port, the editor sets the values of the first `showWhen` condition of the mode for that kind. When the user changes the mode, the editor removes the connections that are not valid now.
+- Do not set `supplies` together with `supplyModes`.
+
 ## Option icons
 
 An option of a select can show an icon. Both fields are optional. `iconUrl` (a data URL, see `fileIcon`) wins over `icon` (a Hugeicons name, for example `Globe02Icon`).
@@ -107,5 +145,6 @@ The type is `ItemIcon`: `{ icon?: string; iconUrl?: string }`.
 | Contract | Adds                                                                            |
 | -------- | ------------------------------------------------------------------------------- |
 | 1.4      | Supply ports and supply nodes, nodes as agent tools (`usableAsTool`, `$fromAI`) |
+| 1.5      | Supplies for tool runs and supply nodes, run cache, `close()`, port `showWhen`  |
 
 MIT license.

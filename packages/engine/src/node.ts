@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import type { z } from "zod";
 import type { CodeLog, SandboxClient } from "./sandbox";
-import type { ShowRules } from "./show-when";
+import { isVisible, type ShowRules } from "./show-when";
 import type { TableStore } from "./tables";
 
 /** The workflow that a sub-workflow node runs: one of the organization, or a graph in the config. */
@@ -74,7 +74,10 @@ export type SupplyPort = {
   required?: boolean;
   /** More than one supply node can connect. The node then gets a list. */
   multiple?: boolean;
-};
+} & ShowRules;
+
+/** A config with which a node gives a supply of `kind` (see `supplyModes`). */
+export type SupplyMode = { kind: string } & ShowRules;
 
 /**
  * What a supply node gets when its parent runs. Expressions in the config are resolved with the
@@ -95,6 +98,11 @@ export type SupplyContext<Config> = {
   runWorkflow?: SubWorkflowRunner | null;
   /** The supply node. */
   node: { id: string; name: string };
+  /**
+   * Values of the supply nodes connected to the `supplyPorts` of this supply node, by port name,
+   * as in `NodeRunContext.supplies`.
+   */
+  supplies?: Record<string, unknown>;
 };
 
 export const FORM_FIELD_TYPES = [
@@ -346,22 +354,70 @@ export type NodeDefinition<Schema extends z.ZodType = z.ZodType> = {
    */
   supplies?: string;
   /**
+   * For a node that is a supply with some configs and a step with others (a vector store that
+   * inserts as a step and retrieves as a supply). The node gives the `kind` of the first mode whose
+   * rules match the config, as it is saved, before expressions resolve. It then has no in or out
+   * ports and uses `supply`. When no mode matches, it is a step and uses `run`. Do not set it
+   * together with `supplies`.
+   */
+  supplyModes?: SupplyMode[];
+  /**
    * The node can connect to a supply port of kind `TOOL_KIND` and run as a tool: the model fills
    * the config values that use `$fromAI`. Default: true for an "integration" node.
    */
   usableAsTool?: boolean;
   // Method syntax keeps parameter bivariance, so a typed node fits the registry type.
-  /** Builds the value of a supply node. */
+  /**
+   * Builds the value of a supply node. The engine builds it one time for the run when the config
+   * and the credential use no `$input`, `$node`, or `$fromAI` (nor do the supply nodes under it).
+   * Otherwise it builds it for each run of the parent. When the value has a `close()` function,
+   * the engine calls it when the value is not used again: at the end of the run, or when the
+   * parent is done. It waits 5 seconds at most. A cached value is built again after a parent
+   * attempt that used it fails.
+   */
   supply?(ctx: SupplyContext<z.output<Schema>>): unknown;
   /** A supply node made with `defineSupplyNode` gets a `run` that throws. It is never called. */
   run(ctx: NodeRunContext<z.output<Schema>>): Promise<NodeResult> | NodeResult;
 };
 
-/** The output ports of a node with this config. */
+/**
+ * The kind of supply that a node gives with this config, or undefined when the node is a step
+ * (see `supplies` and `supplyModes`).
+ */
+export function suppliesOf(
+  definition: Pick<NodeDefinition, "supplies" | "supplyModes">,
+  config: Record<string, unknown>,
+): string | undefined {
+  if (definition.supplies !== undefined) return definition.supplies;
+  return definition.supplyModes?.find((mode) => isVisible(mode, (key) => config[key]))?.kind;
+}
+
+/**
+ * Config values that put a node in its first mode that gives `kind`, for a node that the user adds
+ * on a supply port. They come from the first `showWhen` condition of the mode. Undefined when no
+ * mode gives `kind`.
+ */
+export function supplyModeConfig(
+  definition: Pick<NodeDefinition, "supplyModes">,
+  kind: string,
+): Record<string, unknown> | undefined {
+  const mode = definition.supplyModes?.find((m) => m.kind === kind);
+  if (!mode) return undefined;
+  const condition = Array.isArray(mode.showWhen) ? mode.showWhen[0] : mode.showWhen;
+  const config: Record<string, unknown> = {};
+  for (const [key, accepted] of Object.entries(condition ?? {})) {
+    const value = accepted.find((one) => typeof one !== "object" || one === null);
+    if (value !== undefined) config[key] = value;
+  }
+  return config;
+}
+
+/** The output ports of a node with this config. A node in a supply mode has none. */
 export function outputPortsOf(
-  definition: Pick<NodeDefinition, "ports" | "outPorts">,
+  definition: Pick<NodeDefinition, "ports" | "outPorts" | "supplyModes">,
   config: Record<string, unknown>,
 ): string[] {
+  if (suppliesOf({ supplyModes: definition.supplyModes }, config) !== undefined) return [];
   try {
     return definition.outPorts?.(config) ?? definition.ports.out;
   } catch {
@@ -369,11 +425,24 @@ export function outputPortsOf(
   }
 }
 
-/** The input ports of a node with this config. */
+/**
+ * The supply ports of a node that show with this config (see `showWhen` and `hideWhen` of a
+ * port). The rules read the config as it is saved, before expressions resolve. A hidden port
+ * gives no value and is not required.
+ */
+export function supplyPortsOf(
+  definition: Pick<NodeDefinition, "supplyPorts">,
+  config: Record<string, unknown>,
+): SupplyPort[] {
+  return (definition.supplyPorts ?? []).filter((port) => isVisible(port, (key) => config[key]));
+}
+
+/** The input ports of a node with this config. A node in a supply mode has none. */
 export function inputPortsOf(
-  definition: Pick<NodeDefinition, "ports" | "inPorts">,
+  definition: Pick<NodeDefinition, "ports" | "inPorts" | "supplyModes">,
   config: Record<string, unknown>,
 ): string[] {
+  if (suppliesOf({ supplyModes: definition.supplyModes }, config) !== undefined) return [];
   try {
     return definition.inPorts?.(config) ?? definition.ports.in;
   } catch {
@@ -390,11 +459,19 @@ export function defineNode<Schema extends z.ZodType>(
 /** The supply kind of a tool. A port of this kind also takes nodes that can be tools. */
 export const TOOL_KIND = "ai.tool";
 
-/** True when a node can run as a tool (see `usableAsTool`). Supply nodes and triggers cannot. */
+/**
+ * True when a node can run as a tool (see `usableAsTool`). Supply nodes and triggers cannot. With
+ * no config, a node with `supplyModes` is checked as a step.
+ */
 export function canBeTool(
-  definition: Pick<NodeDefinition, "supplies" | "category" | "usableAsTool" | "join">,
+  definition: Pick<
+    NodeDefinition,
+    "supplies" | "supplyModes" | "category" | "usableAsTool" | "join"
+  >,
+  config?: Record<string, unknown>,
 ): boolean {
   if (definition.supplies !== undefined || definition.category === "trigger") return false;
+  if (config && suppliesOf(definition, config) !== undefined) return false;
   // A join node waits for all of its parents. A tool call has one input only.
   if (definition.join) return false;
   return definition.usableAsTool ?? definition.category === "integration";

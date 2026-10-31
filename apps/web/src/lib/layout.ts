@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import type { Edge } from "@xyflow/react";
+import { type SupplyPort, supplyPortsOf } from "@zerodot/engine";
 import { catalogByType, isSupplyFlowEdge, supplyPortX, type ZerodotFlowNode } from "./flow";
 
 const COLUMN_GAP = 120;
@@ -20,6 +21,12 @@ const FALLBACK_HEIGHT = 80;
  * Places nodes in left-to-right columns by depth. Parts that are not linked stack top to bottom.
  * Supply nodes go in a row under their parent, each one under its supply port.
  */
+/** The supply ports that a node shows with its config. */
+function portsOf(n: ZerodotFlowNode): SupplyPort[] {
+  const entry = catalogByType.get(n.data.graphNode.type);
+  return entry ? supplyPortsOf(entry, n.data.graphNode.config) : [];
+}
+
 export function arrangeNodes(nodes: ZerodotFlowNode[], edges: Edge[]): ZerodotFlowNode[] {
   const allIds = new Set(nodes.map((n) => n.id));
   const supplyEdges = edges.filter(
@@ -106,11 +113,26 @@ export function arrangeNodes(nodes: ZerodotFlowNode[], edges: Edge[]): ZerodotFl
     );
     if (first !== undefined) owner.set(supplyId, first);
   }
+  // A supply node can have supply ports too. Its own supply nodes go in a row under it. A loop of
+  // supply edges gets no owner, so the rows stay a tree.
+  const ownedBy = (id: string, ancestor: string): boolean => {
+    for (let at: string | undefined = id, n = 0; at !== undefined && n < nodes.length; n++) {
+      if (at === ancestor) return true;
+      at = owner.get(at);
+    }
+    return false;
+  };
+  for (const e of [...supplyEdges].sort(
+    (a, b) => (byId.get(a.target)?.position.x ?? 0) - (byId.get(b.target)?.position.x ?? 0),
+  )) {
+    if (ids.has(e.target) || owner.has(e.source) || ownedBy(e.target, e.source)) continue;
+    owner.set(e.source, e.target);
+  }
 
   // The supply nodes of each parent, in port order, then left to right as they are now.
   const rows = new Map<string, { n: ZerodotFlowNode; port: number }[]>();
-  for (const parentNode of layoutNodes) {
-    const ports = catalogByType.get(parentNode.data.graphNode.type)?.supplyPorts ?? [];
+  for (const parentNode of nodes) {
+    const ports = portsOf(parentNode);
     const row = supplyEdges
       .filter((e) => e.target === parentNode.id && owner.get(e.source) === parentNode.id)
       .flatMap((e) => {
@@ -121,18 +143,24 @@ export function arrangeNodes(nodes: ZerodotFlowNode[], edges: Edge[]): ZerodotFl
       .sort((a, b) => a.port - b.port || a.n.position.x - b.n.position.x);
     if (row.length > 0) rows.set(parentNode.id, row);
   }
-  const rowWidth = (row: { n: ZerodotFlowNode }[]) =>
-    row.reduce((sum, { n }) => sum + baseSize(n).w, 0) + SUPPLY_GAP * (row.length - 1);
+  const rowWidth = (row: { n: ZerodotFlowNode }[]): number =>
+    row.reduce((sum, { n }) => sum + size(n).w, 0) + SUPPLY_GAP * (row.length - 1);
 
-  // The layout sees a parent with its row of supply nodes as one tall block.
-  const size = (n: ZerodotFlowNode) => {
+  // The layout sees a parent with its rows of supply nodes, down to the last level, as one block.
+  const sizes = new Map<string, { w: number; h: number }>();
+  const size = (n: ZerodotFlowNode): { w: number; h: number } => {
+    const known = sizes.get(n.id);
+    if (known) return known;
     const own = baseSize(n);
     const row = rows.get(n.id);
-    if (!row) return own;
-    return {
-      w: Math.max(own.w, rowWidth(row)),
-      h: own.h + SUPPLY_DROP + Math.max(...row.map(({ n: m }) => baseSize(m).h)),
-    };
+    const block = row
+      ? {
+          w: Math.max(own.w, rowWidth(row)),
+          h: own.h + SUPPLY_DROP + Math.max(...row.map(({ n: m }) => size(m).h)),
+        }
+      : own;
+    sizes.set(n.id, block);
+    return block;
   };
 
   const next = new Map<string, { x: number; y: number }>();
@@ -208,13 +236,15 @@ export function arrangeNodes(nodes: ZerodotFlowNode[], edges: Edge[]): ZerodotFl
   }
 
   // Each group of a port is centered under its diamond. A group that would overlap the group
-  // before it moves right. Then the whole row is centered under the parent.
-  for (const [parentId, row] of rows) {
-    const parentNode = nodes.find((n) => n.id === parentId);
+  // before it moves right. Then the whole row is centered under the parent. A supply node in the
+  // row places its own row next, under it.
+  const placeRow = (parentId: string) => {
+    const row = rows.get(parentId);
+    const parentNode = byId.get(parentId);
     const at = next.get(parentId) ?? parentNode?.position;
-    if (!parentNode || !at) continue;
+    if (!row || !parentNode || !at) return;
     const { w, h } = baseSize(parentNode);
-    const portCount = catalogByType.get(parentNode.data.graphNode.type)?.supplyPorts?.length ?? 1;
+    const portCount = portsOf(parentNode).length || 1;
     const xs: number[] = [];
     let end = Number.NEGATIVE_INFINITY;
     for (let i = 0; i < row.length; ) {
@@ -225,7 +255,7 @@ export function arrangeNodes(nodes: ZerodotFlowNode[], edges: Edge[]): ZerodotFl
       let x = Math.max(center - width / 2, end + SUPPLY_GAP);
       for (const { n } of group) {
         xs.push(x);
-        x += baseSize(n).w + SUPPLY_GAP;
+        x += size(n).w + SUPPLY_GAP;
       }
       end = x - SUPPLY_GAP;
       i += group.length;
@@ -234,9 +264,13 @@ export function arrangeNodes(nodes: ZerodotFlowNode[], edges: Edge[]): ZerodotFl
     const shift = Math.min(0, at.x + w / 2 - (first + end) / 2);
     const y = at.y + h + SUPPLY_DROP;
     row.forEach(({ n }, index) => {
-      next.set(n.id, { x: (xs[index] ?? at.x) + shift, y });
+      // The node sits in the middle of its block, over its own row.
+      const left = (xs[index] ?? at.x) + shift;
+      next.set(n.id, { x: left + (size(n).w - baseSize(n).w) / 2, y });
     });
-  }
+    for (const { n } of row) placeRow(n.id);
+  };
+  for (const n of layoutNodes) placeRow(n.id);
 
   return nodes.map((n) => ({ ...n, position: next.get(n.id) ?? n.position }));
 }

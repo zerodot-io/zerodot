@@ -98,6 +98,59 @@ describe("supply graph check", () => {
   });
 });
 
+describe("nested supply graph check", () => {
+  const embedding = defineSupplyNode({
+    ...base,
+    type: "test.embedding",
+    label: "Embedding",
+    supplies: "ai.embedding",
+    supply: () => ({}),
+  });
+  /** A tool supply with its own embedding port. */
+  const storeTool = defineSupplyNode({
+    ...base,
+    type: "test.store-tool",
+    label: "Store tool",
+    supplies: "ai.tool",
+    supplyPorts: [{ name: "embedding", kind: "ai.embedding", label: "Embedding" }],
+    supply: () => ({}),
+  });
+  /** A supply that takes its own kind, so two of them can make a loop. */
+  const chain = defineSupplyNode({
+    ...base,
+    type: "test.chain",
+    label: "Chain",
+    supplies: "ai.embedding",
+    supplyPorts: [{ name: "embedding", kind: "ai.embedding", label: "Embedding" }],
+    supply: () => ({}),
+  });
+  const reg = createRegistry([agent, embedding, storeTool, chain]);
+
+  it("accepts a supply node with supply ports", () => {
+    const g: Graph = {
+      schema: 1,
+      nodes: [node("a", "test.agent"), node("v", "test.store-tool"), node("e", "test.embedding")],
+      edges: [
+        edge("v", "supply", "a", "supply:tools"),
+        edge("e", "supply", "v", "supply:embedding"),
+      ],
+    };
+    assert.deepEqual(checkGraphNodes(g, reg), []);
+  });
+
+  it("rejects supply nodes that make a loop", () => {
+    const g: Graph = {
+      schema: 1,
+      nodes: [node("c1", "test.chain"), node("c2", "test.chain")],
+      edges: [
+        edge("c1", "supply", "c2", "supply:embedding"),
+        edge("c2", "supply", "c1", "supply:embedding"),
+      ],
+    };
+    assert.ok(checkGraphNodes(g, reg).some((p) => p.includes("the supply nodes make a loop")));
+  });
+});
+
 describe("node tool graph check", () => {
   const slack = defineNode({
     ...base,
@@ -141,5 +194,47 @@ describe("node tool graph check", () => {
     };
     assert.match(checkGraphNodes(loose, reg)[0] ?? "", /only in a node connected as a tool/);
     assert.match(checkGraphNodes(g("{{ $fromAI($input.a) }}"), reg)[0] ?? "", /config.text/);
+  });
+});
+
+describe("supply mode graph check", () => {
+  const store = defineNode({
+    ...base,
+    category: "integration",
+    type: "test.store",
+    label: "Store",
+    config: z.object({ mode: z.string() }),
+    defaultConfig: { mode: "step" },
+    ports: { in: ["in"], out: ["out"] },
+    supplyModes: [{ kind: "ai.model", showWhen: { mode: ["model"] } }],
+    run: () => ({ port: "out", data: {} }),
+    supply: () => ({}),
+  });
+  const modeRegistry = createRegistry([agent, store]);
+  const withMode = (mode: string, edges: Graph["edges"]): Graph => ({
+    schema: 1,
+    nodes: [node("a", "test.agent"), { ...node("s", "test.store"), config: { mode } }],
+    edges,
+  });
+
+  it("accepts the node on a port of its mode kind, and as a tool in a step mode", () => {
+    assert.deepEqual(
+      checkGraphNodes(withMode("model", [edge("s", "supply", "a", "supply:model")]), modeRegistry),
+      [],
+    );
+    assert.deepEqual(
+      checkGraphNodes(withMode("step", [edge("s", "supply", "a", "supply:tools")]), modeRegistry),
+      [],
+    );
+  });
+
+  it("rejects a kind the mode does not give, and data edges in a supply mode", () => {
+    const wrong = checkGraphNodes(
+      withMode("model", [edge("s", "supply", "a", "supply:tools")]),
+      modeRegistry,
+    );
+    assert.match(wrong[0] ?? "", /takes "ai.tool", not "ai.model"/);
+    const data = checkGraphNodes(withMode("model", [edge("s", "out", "a", "in")]), modeRegistry);
+    assert.ok(data.some((p) => /"s" gives a supply. Connect it to a supply port only/.test(p)));
   });
 });

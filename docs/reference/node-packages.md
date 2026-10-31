@@ -41,6 +41,17 @@ A package has `"zerodot": { "sdk": "^1.0" }` in its `package.json`: the range of
 - A package that uses new SDK features sets `zerodot.sdk` to the new minor version (for example `^1.5`). Release it only after the zerodot release that has that SDK.
 - When the range of a package is newer than this zerodot, the error tells the user to update zerodot. When it is older, the error tells the user to ask the author for an update.
 
+### SDK 1.5: supplies, tools, and supply modes
+
+SDK 1.5.0 ships with zerodot 0.2.14. `@zerodot/ai-agent` 0.2.0 and `@zerodot/postgres` 1.3.0 (vector store) need it. The [node-sdk readme](../../packages/node-sdk/README.md) has the full contract and examples.
+
+- **Supply nodes** give a value (a chat model, a memory, an embedding model, a vector store, a tool) to a supply port at the bottom of another node. They are not steps. A supply node can have supply ports too, for example a vector store with an Embedding port.
+- **Supply ports** can have `showWhen` and `hideWhen`, as config fields have. A hidden port gives no value and is not required. When a config change hides a port, the editor removes its connections.
+- **Run cache and close.** When the config and the credential of a supply node use no `$input`, `$node`, or `$fromAI`, zerodot builds the value one time for the run. Otherwise it builds the value for each run of the parent. A value with a `close()` function is closed when it is not used again, for example to close a database connection. A close that takes more than 5 seconds is reported on the node and does not stop the run.
+- **Nodes as tools.** A step node on the Tool port of an AI Agent runs as a tool. The tool name comes from the node name. The description is the text in the node settings, or a default from the node. `$fromAI(key, description, type, default)` marks a value that the model gives. A key has 1 to 64 letters, numbers, `_`, or `-`. The model input is checked, and keys that are not `$fromAI` keys are left out.
+- **Supply modes.** One node can be a step with some configs and a supply with others. For example, the Postgres Vector Store inserts, gets, updates, and deletes as a step, and gives a vector store or a tool in its Retrieve modes. In a supply mode the node has no input or output. When you add the node from a supply port, the editor selects the mode for that port. When you change the mode, the editor removes the connections that do not fit.
+- Supply nodes, supply ports, and supply modes work only in official `@zerodot/*` packages. A community package that uses them is skipped.
+
 ## Community registries
 
 > **Warning:** zerodot does not check community packages, except verified versions. A package runs in its own process, so it cannot read the secret keys, the database, or the files of zerodot, and it cannot reach addresses inside the network of the server. But it gets the credentials and the data that your workflows give to its nodes, and it can send them to any server on the internet. Add a registry and install a package only when you trust the author.

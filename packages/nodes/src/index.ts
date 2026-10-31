@@ -6,6 +6,7 @@ import {
   type Graph,
   type NodeDefinition,
   type ShowRules,
+  type SupplyMode,
   type SupplyPort,
 } from "@zerodot/engine";
 import { z } from "zod";
@@ -129,7 +130,9 @@ export type NodeCatalogEntry = {
   supplyPorts?: SupplyPort[];
   /** The kind of value a supply node gives. Set only for a supply node. */
   supplies?: string;
-  /** The node can connect to a tool port and run as a tool. */
+  /** The configs with which the node gives a supply. It is a step with other configs. */
+  supplyModes?: SupplyMode[];
+  /** The node can connect to a tool port and run as a tool, when it is a step. */
   usableAsTool: boolean;
   defaultConfig: unknown;
   credentialTypes: string[];
@@ -154,6 +157,7 @@ const catalogEntry = (node: NodeDefinition): NodeCatalogEntry => ({
   ports: node.ports,
   supplyPorts: node.supplyPorts,
   supplies: node.supplies,
+  supplyModes: node.supplyModes,
   usableAsTool: canBeTool(node),
   defaultConfig: node.defaultConfig,
   credentialTypes: node.credentialTypes ?? [],
