@@ -586,4 +586,125 @@ describe("nested supplies, run cache, and close", () => {
     assert.equal(hidden.result.status, "succeeded", JSON.stringify(hidden.result.error));
     assert.deepEqual(hidden.out, { has: false });
   });
+
+  describe("close and the run cache", () => {
+    const events: { node: string; status: string; method?: string; error?: string }[] = [];
+    let builds = 0;
+    let closes = 0;
+    /** A static supply. It counts builds and closes, logs on each call, and can hang on close. */
+    const counter = defineSupplyNode({
+      type: "test.counter",
+      label: "Counter",
+      category: "core",
+      icon: "CircleIcon",
+      config: z.object({ hang: z.boolean() }),
+      defaultConfig: { hang: false },
+      supplies: "test.greet",
+      supply: ({ config, log }) => {
+        builds++;
+        const build = builds;
+        const say = () => {
+          log?.([{ level: "info", message: `call of build ${build}` }]);
+          return `build ${build}`;
+        };
+        return Object.assign(say, {
+          close: () => {
+            closes++;
+            return config.hang ? new Promise(() => undefined) : undefined;
+          },
+        });
+      },
+    });
+    let failFirst = false;
+    const flaky = defineNode({
+      type: "test.flaky",
+      label: "Flaky",
+      category: "core",
+      icon: "CircleIcon",
+      config: z.object({}),
+      defaultConfig: {},
+      ports: { in: ["in"], out: ["out"] },
+      supplyPorts: [{ name: "main", kind: "test.greet", label: "Main", required: true }],
+      run: ({ supplies }) => {
+        const main = supplies?.main as () => string;
+        const said = main();
+        if (failFirst) {
+          failFirst = false;
+          throw new Error("lost connection");
+        }
+        return { port: "out", data: { said } };
+      },
+    });
+    const counterRegistry = createRegistry([trigger, counter, flaky]);
+    const runCounter = async (graph: Graph) => {
+      builds = 0;
+      closes = 0;
+      events.length = 0;
+      const ends: NodeEndEvent[] = [];
+      const result = await executeGraph({
+        graph,
+        registry: counterRegistry,
+        triggerInput: {},
+        mode: "production",
+        signal: new AbortController().signal,
+        supplyCloseMs: 20,
+        hooks: [
+          {
+            afterNode: (event) => void ends.push(event),
+            onSupplyUse: (event) =>
+              void events.push({
+                node: event.node.id,
+                status: event.status,
+                method: event.call?.method,
+                error: event.call?.error?.message,
+              }),
+          },
+        ],
+      });
+      return { result, ends };
+    };
+    const twoHosts = (hang: boolean, retry?: { max: number; backoffMs: number }): Graph => ({
+      schema: 1,
+      nodes: [
+        node("t", "trigger.test"),
+        { ...node("h1", "test.flaky"), ...(retry ? { retry } : {}) },
+        node("h2", "test.flaky"),
+        node("c", "test.counter", { hang }),
+      ],
+      edges: [flow("t", "h1"), flow("h1", "h2"), edge("c", "h1", "main"), edge("c", "h2", "main")],
+    });
+
+    it("writes the logs of a cached value to the node that uses it now", async () => {
+      const { result, ends } = await runCounter(twoHosts(false));
+      assert.equal(result.status, "succeeded", JSON.stringify(result.error));
+      assert.equal(builds, 1);
+      const logsOf = (id: string) =>
+        ends.find((e) => e.node.id === id)?.logs?.map((l) => l.message);
+      assert.deepEqual(logsOf("h1"), ["[c] call of build 1"]);
+      assert.deepEqual(logsOf("h2"), ["[c] call of build 1"]);
+    });
+
+    it("does not wait for a close that hangs, and reports it", async () => {
+      const { result } = await runCounter(twoHosts(true));
+      assert.equal(result.status, "succeeded", JSON.stringify(result.error));
+      assert.equal(closes, 1);
+      assert.deepEqual(
+        events.filter((e) => e.method === "close"),
+        [{ node: "c", status: "failed", method: "close", error: "It did not close in 20 ms" }],
+      );
+    });
+
+    it("builds cached values again after a node attempt fails", async () => {
+      failFirst = true;
+      const { result, ends } = await runCounter(twoHosts(false, { max: 1, backoffMs: 0 }));
+      assert.equal(result.status, "succeeded", JSON.stringify(result.error));
+      // The failed attempt closed build 1. The retry and h2 share build 2.
+      assert.equal(builds, 2);
+      assert.equal(closes, 2);
+      const said = (id: string) =>
+        (ends.findLast((e) => e.node.id === id)?.output as { said: string } | undefined)?.said;
+      assert.equal(said("h1"), "build 2");
+      assert.equal(said("h2"), "build 2");
+    });
+  });
 });

@@ -361,7 +361,8 @@ export type NodeDefinition<Schema extends z.ZodType = z.ZodType> = {
    * and the credential use no `$input`, `$node`, or `$fromAI` (nor do the supply nodes under it).
    * Otherwise it builds it for each run of the parent. When the value has a `close()` function,
    * the engine calls it when the value is not used again: at the end of the run, or when the
-   * parent is done.
+   * parent is done. It waits 5 seconds at most. A cached value is built again after a parent
+   * attempt that used it fails.
    */
   supply?(ctx: SupplyContext<z.output<Schema>>): unknown;
   /** A supply node made with `defineSupplyNode` gets a `run` that throws. It is never called. */

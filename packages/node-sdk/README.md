@@ -92,7 +92,8 @@ From 1.5:
 - A supply node can declare `supplyPorts`. `supply` then gets the values in `supplies` (for example, a vector store tool with an embedding supply).
 - The engine builds a supply value one time for the run when its config and credential use no `$input`, `$node`, or `$fromAI`, and the supply nodes under it do not either. Otherwise it builds the value for each run of the parent.
 - A supply port can have `showWhen` and `hideWhen`, as a config field has. A hidden port gives no value and is not required. The rules read the saved config, before expressions resolve.
-- When a supply value has a `close()` function, the engine calls it when the value is not used again: at the end of the run for a value it keeps, or when the parent is done. The last value built closes first. Use this to keep one connection for the run.
+- When a supply value has a `close()` function, the engine calls it when the value is not used again: at the end of the run for a value it keeps, or when the parent is done. The last value built closes first. A close that fails or takes more than 5 seconds shows on the supply node and does not stop the run. Use this to keep one connection for the run.
+- A value from the run cache writes its logs to the node that uses it now. When a node attempt that used cached values fails, the engine closes them and builds them again for the next use, so a retry gets a new connection.
 
 ## Option icons
 

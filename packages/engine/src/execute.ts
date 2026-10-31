@@ -154,6 +154,8 @@ export type ExecuteOptions = {
   maxNodeRuns?: number;
   /** Wait between node retries. Tests replace it. */
   sleep?: (ms: number) => Promise<void>;
+  /** How long to wait for the `close` of one supply value. Default `SUPPLY_CLOSE_MS`. */
+  supplyCloseMs?: number;
 };
 
 export type ExecuteResult =
@@ -218,6 +220,12 @@ function maskSecrets<T>(value: T, secrets: string[]): T {
   };
   return walk(value) as T;
 }
+
+/** A supply value with a `close` function, the supply node, and the node it was built for. */
+type Closer = { value: unknown; node: GraphNode; parentId: string };
+
+/** How long the engine waits for the `close` of one supply value. */
+const SUPPLY_CLOSE_MS = 5000;
 
 /** Scope keys that keep their value for the whole run. */
 const STATIC_SCOPE_KEYS = new Set(["$vars", "$env", "$credentials", "$trigger", "$run"]);
@@ -494,7 +502,14 @@ export async function executeGraph(options: ExecuteOptions): Promise<ExecuteResu
    */
   const supplyCache = new Map<string, { value: unknown; secrets: string[]; masked: string[] }>();
   /** Supply values with a `close` function that live to the end of the run, in build order. */
-  const runClosers: unknown[] = [];
+  const runClosers: Closer[] = [];
+  /**
+   * Where the supply values from the run cache write their logs: the node attempt that runs now.
+   * The walk runs one node at a time, so that node is the one that uses them.
+   */
+  let activeSink: { logs: CodeLog[]; masked: string[] } | null = null;
+  /** True when the node attempt that runs now got a value from the run cache. */
+  let usedCache = false;
 
   /**
    * True when the value of a supply node is the same for each parent run: its config and its
@@ -531,13 +546,37 @@ export async function executeGraph(options: ExecuteOptions): Promise<ExecuteResu
       });
   };
 
-  /** Calls `close` of each value, the last built first. An error does not stop the others. */
-  const closeAll = async (values: unknown[]) => {
-    for (const value of values.splice(0).reverse()) {
+  /**
+   * Calls `close` of each value, the last built first. A close that fails or takes longer than
+   * `supplyCloseMs` does not stop the others or change the run result. It is reported on the
+   * supply node, and in `logs` when the node attempt that used it is not done yet.
+   */
+  const closeMs = options.supplyCloseMs ?? SUPPLY_CLOSE_MS;
+  const closeAll = async (closers: Closer[], logs?: CodeLog[]) => {
+    for (const { value, node, parentId } of closers.splice(0).reverse()) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
       try {
-        await (value as { close(): unknown }).close();
-      } catch {
-        // The run has its result. A supply that cannot close does not change it.
+        await Promise.race([
+          (value as { close(): unknown }).close(),
+          new Promise((_, reject) => {
+            timer = setTimeout(
+              () => reject(new Error(`It did not close in ${closeMs} ms`)),
+              closeMs,
+            );
+          }),
+        ]);
+      } catch (error) {
+        const { message } = toError(error);
+        logs?.push({ level: "warn", message: `[${node.name}] close: ${message}` });
+        // As `track` does: a hook that fails here must not fail the run.
+        void call("onSupplyUse", {
+          node,
+          parentId,
+          status: "failed",
+          call: { method: "close", input: null, error: { message } },
+        }).catch(() => undefined);
+      } finally {
+        clearTimeout(timer);
       }
     }
   };
@@ -554,7 +593,7 @@ export async function executeGraph(options: ExecuteOptions): Promise<ExecuteResu
     definition: NodeDefinition,
     scope: Record<string, unknown>,
     input: unknown,
-    sink: { secrets: string[]; masked: string[]; logs: CodeLog[]; closers: unknown[] },
+    sink: { secrets: string[]; masked: string[]; logs: CodeLog[]; closers: Closer[] },
     path: Set<string> = new Set(),
   ): Promise<Record<string, unknown> | undefined> => {
     if (!definition.supplyPorts?.length) return undefined;
@@ -596,6 +635,7 @@ export async function executeGraph(options: ExecuteOptions): Promise<ExecuteResu
           if (below.has(node.id)) throw new Error("The supply nodes make a loop");
           const cached = supplyCache.get(node.id);
           if (cached) {
+            usedCache = true;
             sink.secrets.push(...cached.secrets);
             sink.masked.push(...cached.masked);
             sink.masked.sort((a, b) => b.length - a.length);
@@ -603,6 +643,7 @@ export async function executeGraph(options: ExecuteOptions): Promise<ExecuteResu
             continue;
           }
           const keep = staticSupply(node, supplier, new Set());
+          if (keep) usedCache = true;
           const secrets: string[] = [];
           const masked: string[] = [];
           const { config, credential } = await resolveNode(node, supplier, scope, secrets, masked);
@@ -628,7 +669,9 @@ export async function executeGraph(options: ExecuteOptions): Promise<ExecuteResu
                 ...entry,
                 message: `[${node.name}] ${entry.message}`,
               }));
-              sink.logs.push(...(sink.masked.length > 0 ? maskSecrets(named, sink.masked) : named));
+              // A kept value is used by later nodes too. Its logs go to the node that uses it now.
+              const to = (keep ? activeSink : null) ?? sink;
+              to.logs.push(...(to.masked.length > 0 ? maskSecrets(named, to.masked) : named));
             },
             sandbox: options.sandbox ?? null,
             tables: options.tables ?? null,
@@ -636,7 +679,9 @@ export async function executeGraph(options: ExecuteOptions): Promise<ExecuteResu
             node: { id: node.id, name: node.name },
             ...(nested ? { supplies: nested } : {}),
           });
-          if (hasClose(value)) (keep ? runClosers : sink.closers).push(value);
+          if (hasClose(value)) {
+            (keep ? runClosers : sink.closers).push({ value, node, parentId: parent.id });
+          }
           if (keep) supplyCache.set(node.id, { value, secrets, masked });
           values.push(track(value, node, parent));
         } catch (error) {
@@ -685,7 +730,7 @@ export async function executeGraph(options: ExecuteOptions): Promise<ExecuteResu
       call: async (given, callSignal) => {
         const secrets: string[] = [];
         const masked: string[] = [];
-        const closers: unknown[] = [];
+        const closers: Closer[] = [];
         try {
           const values =
             given !== null && typeof given === "object" && !Array.isArray(given)
@@ -734,7 +779,7 @@ export async function executeGraph(options: ExecuteOptions): Promise<ExecuteResu
           const { message } = scrubError(toError(error), secrets);
           throw new Error(`Tool "${name}": ${message}`);
         } finally {
-          await closeAll(closers);
+          await closeAll(closers, logs);
         }
       },
     };
@@ -972,7 +1017,9 @@ export async function executeGraph(options: ExecuteOptions): Promise<ExecuteResu
       const masked: string[] = [];
       const logs: CodeLog[] = [];
       /** Supply values built for this attempt only. They close when it ends. */
-      const closers: unknown[] = [];
+      const closers: Closer[] = [];
+      activeSink = { logs, masked };
+      usedCache = false;
       try {
         if (!definition) throw new Error(`Unknown node type "${node.type}"`);
         await hydrateSaved();
@@ -1020,6 +1067,7 @@ export async function executeGraph(options: ExecuteOptions): Promise<ExecuteResu
             );
           }
         }
+        await closeAll(closers, logs);
         if (result.waitUntil !== undefined && result.waitUntil > Date.now()) {
           waiting = { resumeAt: result.waitUntil, nodeId: node.id };
           await call("afterNode", {
@@ -1054,6 +1102,12 @@ export async function executeGraph(options: ExecuteOptions): Promise<ExecuteResu
         return result;
       } catch (error) {
         lastError = scrubError(toError(error), secrets);
+        await closeAll(closers, logs);
+        // A cached value can be the cause (a lost connection). Build the values again after this.
+        if (usedCache) {
+          await closeAll(runClosers, logs);
+          supplyCache.clear();
+        }
         await call("afterNode", {
           node,
           attempt,
@@ -1069,7 +1123,9 @@ export async function executeGraph(options: ExecuteOptions): Promise<ExecuteResu
         if (signal.aborted) throw new Error("Run cancelled");
         if (n < maxAttempts) await sleep(node.retry?.backoffMs ?? 0);
       } finally {
+        // Only when the attempt ended before the close above, for example with a thrown hook.
         await closeAll(closers);
+        activeSink = null;
       }
     }
 
