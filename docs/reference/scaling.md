@@ -5,7 +5,7 @@ The worker has two queues in Valkey. Each has its own worker loop in the same pr
 - `zerodot-runs` holds run jobs. `ZERODOT_WORKER_CONCURRENCY` (default 20) sets how many run at once.
 - `zerodot-system` holds cron, poll, retention, and sweep jobs. `ZERODOT_SYSTEM_CONCURRENCY` (default 5) sets how many run at once. A slow run cannot delay a cron tick.
 
-To run more jobs at once, raise `ZERODOT_WORKER_CONCURRENCY`, or add workers. With Docker Compose, set `WORKER_REPLICAS` in `.env` or run `docker compose up -d --scale worker=3`. All workers take jobs from the same queue. Each worker opens about `ZERODOT_WORKER_CONCURRENCY + ZERODOT_SYSTEM_CONCURRENCY + 5` Postgres connections, so check `max_connections` (Postgres default: 100) before you add many.
+To run more jobs at once, raise `ZERODOT_WORKER_CONCURRENCY`, or add workers. With Docker Compose, set `WORKER_REPLICAS` in `.env` or run `docker compose up -d --scale worker=3`. All workers take jobs from the same queue. Each worker opens about `ZERODOT_WORKER_CONCURRENCY + ZERODOT_SYSTEM_CONCURRENCY + 5` Postgres connections, so check `max_connections` before you add many. Docker Compose sets it to 200. Change it with `ZERODOT_DB_MAX_CONNECTIONS` in `.env`.
 
 When a worker starts, it removes the old schedulers from `zerodot-runs`. They now live in `zerodot-system`, so nothing fires twice. `GET /metrics` on the worker shows `zerodot_queue_jobs{queue="runs"|"system",state=...}`.
 

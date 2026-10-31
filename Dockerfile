@@ -45,6 +45,9 @@ COPY --from=build --chmod=a+rX /app /app
 # vite preview bundles its config into node_modules/.vite-temp at start.
 RUN mkdir -p apps/web/node_modules/.vite-temp && chown node:node apps/web/node_modules/.vite-temp
 COPY --chmod=a+rx scripts/docker-entrypoint.sh /usr/local/bin/zerodot
+# The release tag, for display only (worker table, /healthz). Jobs match on ZERODOT_APP_VERSION.
+ARG APP_VERSION
+ENV APP_VERSION=$APP_VERSION
 ENV ZERODOT_API_PORT=3003
 EXPOSE 3000 3003
 USER node
