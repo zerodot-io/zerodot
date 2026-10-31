@@ -3,13 +3,21 @@ import { type FromAIType, fromAICalls } from "./expression";
 import type { GraphNode } from "./graph";
 import type { NodeDefinition } from "./node";
 
+/** The JSON Schema of one input of a tool. */
+export type ToolInputProperty = {
+  type?: string;
+  description?: string;
+  default?: unknown;
+  anyOf?: Record<string, unknown>[];
+};
+
 /** What a tool tells the model: its name, what it does, and the JSON Schema of its input. */
 export type ToolSpec = {
   name: string;
   description: string;
   inputSchema: {
     type: "object";
-    properties: Record<string, { type?: string; description?: string }>;
+    properties: Record<string, ToolInputProperty>;
     required: string[];
     additionalProperties: false;
   };
@@ -21,6 +29,12 @@ export type NodeTool = {
   call(input: unknown, signal?: AbortSignal): Promise<unknown>;
 };
 
+/** A `$fromAI` key: 1 to 64 letters, digits, underscores, or hyphens. */
+const FROM_AI_KEY = /^[a-zA-Z0-9_-]{1,64}$/;
+
+/** One input of a node tool. */
+export type FromAIInput = { description: string; type: FromAIType; defaultValue?: unknown };
+
 function* texts(value: unknown): Generator<string> {
   if (typeof value === "string") yield value;
   else if (Array.isArray(value)) for (const item of value) yield* texts(item);
@@ -30,55 +44,113 @@ function* texts(value: unknown): Generator<string> {
 }
 
 /**
- * The `$fromAI` keys of a node config, with the description and type of each. Throws when a call
- * is not in the literal form, or one key has two different descriptions or types.
+ * The `$fromAI` keys of a node config, with the description, type, and default of each. Throws
+ * when a call cannot be read, a key is not valid, or one key has two descriptions or types. When
+ * a key is used more than once, the last call gives the default.
  */
 export function fromAIInputs(
   node: Pick<GraphNode, "config">,
   definition: Pick<NodeDefinition, "rawConfigKeys">,
-): Map<string, { description: string; type: FromAIType }> {
+): Map<string, FromAIInput> {
   const rawKeys = new Set(definition.rawConfigKeys ?? []);
-  const found = new Map<string, { description: string; type: FromAIType }>();
+  const found = new Map<string, FromAIInput>();
   for (const [key, value] of Object.entries(node.config)) {
     if (rawKeys.has(key)) continue;
     for (const text of texts(value)) {
-      const { calls, invalid } = fromAICalls(text);
-      if (invalid) {
-        throw new Error(
-          `config.${key}: write $fromAI("key", "description", "type") with text only. The type is string, number, boolean, or json`,
-        );
-      }
+      const { calls, error } = fromAICalls(text);
+      if (error !== undefined) throw new Error(`config.${key}: ${error}`);
       for (const call of calls) {
+        if (call.key === "") {
+          throw new Error(`config.${key}: You must specify a key when using $fromAI()`);
+        }
+        if (!FROM_AI_KEY.test(call.key)) {
+          throw new Error(
+            `config.${key}: Parameter key \`${call.key}\` is invalid. A key has 1 to 64 letters, numbers, underscores, or hyphens`,
+          );
+        }
         const known = found.get(call.key);
-        if (!known) {
-          found.set(call.key, { description: call.description, type: call.type });
-          continue;
+        if (known && (known.description !== call.description || known.type !== call.type)) {
+          throw new Error(
+            `Duplicate key '${call.key}' found with different description or type. Give all $fromAI() calls with the same key the same description and type`,
+          );
         }
-        if (call.type !== known.type) {
-          throw new Error(`$fromAI("${call.key}") has two types: ${known.type} and ${call.type}`);
-        }
-        if (call.description && known.description && call.description !== known.description) {
-          throw new Error(`$fromAI("${call.key}") has two descriptions`);
-        }
-        if (!known.description) known.description = call.description;
+        found.set(call.key, {
+          description: call.description,
+          type: call.type,
+          ...(call.defaultValue === undefined ? {} : { defaultValue: call.defaultValue }),
+        });
       }
     }
   }
   return found;
 }
 
-/** The JSON Schema of the input of a node tool. "json" accepts any value. */
-export function toolInputSchema(
-  inputs: Map<string, { description: string; type: FromAIType }>,
-): ToolSpec["inputSchema"] {
+/**
+ * The JSON Schema of the input of a node tool. A key with a default value is optional. "json"
+ * takes an object with at least one key or a list with at least one item.
+ */
+export function toolInputSchema(inputs: Map<string, FromAIInput>): ToolSpec["inputSchema"] {
   const properties: ToolSpec["inputSchema"]["properties"] = {};
-  for (const [key, { description, type }] of inputs) {
+  const required: string[] = [];
+  for (const [key, { description, type, defaultValue }] of inputs) {
     properties[key] = {
-      ...(type === "json" ? {} : { type }),
-      ...(description ? { description } : {}),
+      ...(type === "json"
+        ? {
+            anyOf: [
+              { type: "object", minProperties: 1 },
+              { type: "array", minItems: 1 },
+            ],
+          }
+        : { type }),
+      ...(description.trim() ? { description: description.trim() } : {}),
+      ...(defaultValue === undefined ? {} : { default: defaultValue }),
     };
+    if (defaultValue === undefined) required.push(key);
   }
-  return { type: "object", properties, required: [...inputs.keys()], additionalProperties: false };
+  return { type: "object", properties, required, additionalProperties: false };
+}
+
+/**
+ * The input that the model gave a tool, checked against its keys, with the defaults added.
+ * Throws with each problem, so the model can call the tool again with good input.
+ */
+export function checkToolInput(
+  inputs: Map<string, FromAIInput>,
+  given: unknown,
+): Record<string, unknown> {
+  const values =
+    given !== null && typeof given === "object" && !Array.isArray(given)
+      ? { ...(given as Record<string, unknown>) }
+      : {};
+  const problems: string[] = [];
+  for (const [key, { type, defaultValue }] of inputs) {
+    const value = values[key];
+    if (value === undefined) {
+      if (defaultValue === undefined) problems.push(`"${key}" is required`);
+      else values[key] = defaultValue;
+      continue;
+    }
+    const fits =
+      type === "json"
+        ? Array.isArray(value)
+          ? value.length > 0
+          : value !== null && typeof value === "object" && Object.keys(value).length > 0
+        : type === "number"
+          ? typeof value === "number" && Number.isFinite(value)
+          : typeof value === type;
+    if (!fits) {
+      problems.push(
+        type === "json"
+          ? `"${key}" must be a non-empty object or a non-empty array`
+          : `"${key}" must be a ${type}`,
+      );
+    }
+  }
+  for (const key of Object.keys(values)) {
+    if (!inputs.has(key)) problems.push(`"${key}" is not an input of this tool`);
+  }
+  if (problems.length > 0) throw new Error(`The tool input is not valid: ${problems.join("; ")}`);
+  return values;
 }
 
 function isBinary(value: object): value is { data: string; mimeType: string; fileName?: string } {

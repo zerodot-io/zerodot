@@ -45,11 +45,16 @@ An AI Agent can use a node as a tool. Set `usableAsTool` to control this. If you
 defineNode({ type: "acme.greet", usableAsTool: true /* ... */ });
 ```
 
-In a tool node, `$fromAI` marks a value that the model gives. zerodot makes the input schema of the tool from these calls. The type is `string` (default), `number`, `boolean`, or `json`.
+In a tool node, `$fromAI(key, description?, type?, defaultValue?)` marks a value that the model gives. zerodot makes the input schema of the tool from these calls.
+
+- The type is `string` (default), `number`, `boolean`, or `json` (a non-empty object or list). The case does not matter.
+- A key has 1 to 64 letters, numbers, underscores, or hyphens. All calls with the same key must have the same description and type.
+- With a default value, the key is optional: the default is used when the model leaves it out. The default is read as the type (`"true"` is `true` for a boolean).
+- The arguments are text in `"`, `'`, or backtick quotes. They are not expressions.
 
 ```text
 {{ $fromAI("name", "The name of the person") }}
-{{ $fromAI("count", "How many times", "number") }}
+{{ $fromAI("count", "How many times", "number", 1) }}
 ```
 
 The model gets the output of `run`. Binary data is sent as its type, file name and size only.

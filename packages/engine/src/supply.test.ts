@@ -299,6 +299,40 @@ describe("node as tool", () => {
     assert.equal(canBeTool({ category: "data" }), false);
   });
 
+  it("checks keys, duplicates, defaults, and the input of the model", async () => {
+    const { checkToolInput, fromAIInputs, toolInputSchema } = await import("./tool");
+    const inputsOf = (text: string) => fromAIInputs({ config: { text } }, {});
+    assert.throws(() => inputsOf('{{ $fromAI("") }}'), /You must specify a key/);
+    assert.throws(() => inputsOf('{{ $fromAI("a b") }}'), /Parameter key `a b` is invalid/);
+    assert.throws(() => inputsOf(`{{ $fromAI("${"k".repeat(65)}") }}`), /is invalid/);
+    assert.throws(
+      () => inputsOf('{{ $fromAI("k", "one") }} {{ $fromAI("k", "two") }}'),
+      /Duplicate key 'k' found with different description or type/,
+    );
+    const inputs = inputsOf(
+      '{{ $fromAI("n", "How many", "number", 2) }} {{ $fromAI("tags", "", "json") }}',
+    );
+    assert.deepEqual(toolInputSchema(inputs), {
+      type: "object",
+      properties: {
+        n: { type: "number", description: "How many", default: 2 },
+        tags: {
+          anyOf: [
+            { type: "object", minProperties: 1 },
+            { type: "array", minItems: 1 },
+          ],
+        },
+      },
+      required: ["tags"],
+      additionalProperties: false,
+    });
+    assert.deepEqual(checkToolInput(inputs, { tags: ["a"] }), { tags: ["a"], n: 2 });
+    assert.throws(
+      () => checkToolInput(inputs, { n: "2", tags: [], extra: 1 }),
+      /"n" must be a number; "tags" must be a non-empty object or a non-empty array; "extra" is not an input/,
+    );
+  });
+
   it("fails a $fromAI key that is not literal text", async () => {
     const result = await executeGraph({
       graph: toolGraph({ channel: "", text: "{{ $fromAI($input.name) }}", count: 0 }),

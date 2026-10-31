@@ -99,7 +99,11 @@ const insideExpression = (before: string) => before.lastIndexOf("{{") > before.l
 /** A text field. After you type $vars. it lists the variable names, with their values. */
 /** The config key of a field id, for example "text" for "field-text". */
 const fieldKey = (id: string) =>
-  id.replace(/^field-/, "").replace(/[^A-Za-z0-9_]+/g, "_") || "value";
+  id
+    .replace(/^field-/, "")
+    .replace(/[^A-Za-z0-9_]+/g, "_")
+    // A $fromAI key has 64 characters at most.
+    .slice(0, 64) || "value";
 
 export function ExpressionInput({
   id,

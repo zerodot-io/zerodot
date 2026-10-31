@@ -19,6 +19,7 @@ export class ExpressionError extends Error {
 }
 
 type Token =
+  | { kind: "fromAI"; call: FromAICall }
   | { kind: "num"; value: number }
   | { kind: "str"; value: string }
   | { kind: "id"; value: string }
@@ -60,6 +61,11 @@ function tokenize(source: string): Token[] {
     const ch = source[i] as string;
     if (/\s/.test(ch)) {
       i++;
+    } else if (FROM_AI_HEAD.test(source.slice(i))) {
+      // Its arguments are read as text, not as an expression (see `readFromAI`).
+      const { call, end } = readFromAI(source, i);
+      tokens.push({ kind: "fromAI", call });
+      i = end;
     } else if (/[0-9]/.test(ch)) {
       const match = /^[0-9]+(\.[0-9]+)?/.exec(source.slice(i));
       const text = match?.[0] ?? ch;
@@ -101,7 +107,7 @@ type Node =
   | { type: "unary"; op: string; arg: Node }
   | { type: "binary"; op: string; left: Node; right: Node }
   | { type: "cond"; test: Node; yes: Node; no: Node }
-  | { type: "fromAI"; key: string };
+  | { type: "fromAI"; key: string; defaultValue?: unknown };
 
 const CONVERSIONS = ["toString", "toNumber", "toBoolean"] as const;
 type Conversion = (typeof CONVERSIONS)[number];
@@ -213,8 +219,6 @@ class Parser {
           key,
           label: key.type === "lit" ? String(key.value) : "[…]",
         };
-      } else if (this.isOp("(") && node.type === "id" && node.name === FROM_AI) {
-        node = { type: "fromAI", key: this.fromAIArguments()[0] as string };
       } else if (this.isOp("(")) {
         if (node.type !== "member" || node.key.type !== "lit") {
           throw new ExpressionError("Function calls are not allowed. Use a code node.");
@@ -239,26 +243,14 @@ class Parser {
     }
   }
 
-  /** The text arguments of `$fromAI(key, description?, type?)`. Each one must be literal text. */
-  private fromAIArguments(): string[] {
-    this.expectOp("(");
-    const args: string[] = [];
-    while (!this.isOp(")")) {
-      if (args.length > 0) this.expectOp(",");
-      const token = this.peek();
-      if (token.kind !== "str") throw new ExpressionError(FROM_AI_FORM);
-      args.push(token.value);
-      this.pos++;
-    }
-    this.pos++;
-    if (args.length < 1 || args.length > 3) throw new ExpressionError(FROM_AI_FORM);
-    return args;
-  }
-
   private primary(): Node {
     const token = this.peek();
     this.pos++;
     if (token.kind === "num" || token.kind === "str") return { type: "lit", value: token.value };
+    if (token.kind === "fromAI") {
+      const { key, defaultValue } = token.call;
+      return { type: "fromAI", key, ...(defaultValue === undefined ? {} : { defaultValue }) };
+    }
     if (token.kind === "id") {
       if (Object.hasOwn(LITERALS, token.value))
         return { type: "lit", value: LITERALS[token.value] };
@@ -336,39 +328,153 @@ export function credentialRefsUsed(text: string): {
   return { refs, invalid: total !== refs.length };
 }
 
-const FROM_AI = "$fromAI";
-const FROM_AI_FORM =
-  'Write $fromAI("key", "description", "type") with text only. The description and the type are optional';
 export const FROM_AI_TYPES = ["string", "number", "boolean", "json"] as const;
 export type FromAIType = (typeof FROM_AI_TYPES)[number];
+
+/** One `$fromAI(key, description?, type?, defaultValue?)` call. */
+export type FromAICall = {
+  key: string;
+  description: string;
+  type: FromAIType;
+  /** Set when the call has a fourth argument. The model can then leave the key out. */
+  defaultValue?: unknown;
+};
 
 /** What the model gives a node that runs as a tool. `$fromAI("key")` reads it. */
 export class ToolInput {
   constructor(readonly values: Record<string, unknown>) {}
 }
 
-const FROM_AI_CALL =
-  /\$fromAI\(\s*(?:"([^"\\]*)"|'([^'\\]*)')\s*(?:,\s*(?:"([^"\\]*)"|'([^'\\]*)')\s*)?(?:,\s*(?:"([^"\\]*)"|'([^'\\]*)')\s*)?\)/g;
+/** The start of a call. The name is not case sensitive. */
+const FROM_AI_HEAD = /^\$fromAI\s*\(/i;
+/** A new regex for each use, so no `lastIndex` is shared. */
+const fromAIStart = (flags: string) => new RegExp(String.raw`\$fromAI\s*\(\s*`, flags);
+const QUOTES = new Set(['"', "'", "`"]);
+
+/**
+ * Splits the text between the parentheses at the commas that are not in quotes. A backslash
+ * keeps the next character. An argument in quotes loses the quotes and its escapes.
+ */
+function fromAIArguments(text: string): string[] {
+  const args: string[] = [];
+  let current = "";
+  let quote: string | null = null;
+  let escaped = false;
+  for (const ch of text) {
+    if (escaped) {
+      current += ch;
+      escaped = false;
+    } else if (ch === "\\") {
+      escaped = true;
+      current += ch;
+    } else if (quote !== null) {
+      if (ch === quote) quote = null;
+      current += ch;
+    } else if (QUOTES.has(ch)) {
+      quote = ch;
+      current += ch;
+    } else if (ch === ",") {
+      args.push(current.trim());
+      current = "";
+    } else {
+      current += ch;
+    }
+  }
+  if (current.trim() !== "" || args.length > 0) args.push(current.trim());
+  return args.map((arg) => {
+    const first = arg[0];
+    if (first !== undefined && QUOTES.has(first) && arg.length >= 2 && arg.endsWith(first)) {
+      return arg.slice(1, -1).replace(/\\(['"`\\])/g, "$1");
+    }
+    return arg;
+  });
+}
+
+/** The default value of a call, read as its type. A value that does not fit stays text. */
+function fromAIDefault(text: string | undefined, type: FromAIType): unknown {
+  if (text === undefined) return undefined;
+  const json = () => {
+    try {
+      return JSON.parse(text) as unknown;
+    } catch {
+      return text;
+    }
+  };
+  switch (type) {
+    case "boolean": {
+      const lower = text.toLowerCase();
+      return lower === "true" ? true : lower === "false" ? false : json();
+    }
+    case "number":
+      return Number.isNaN(Number(text)) ? text : Number(text);
+    case "json":
+      return json();
+    default:
+      return text;
+  }
+}
+
+/**
+ * Reads the call that starts at `start` (the "$"). The arguments are text: a key, a description,
+ * a type (string, number, boolean or json; any case; default string), and a default value.
+ */
+function readFromAI(text: string, start: number): { call: FromAICall; end: number } {
+  const sticky = fromAIStart("iy");
+  sticky.lastIndex = start;
+  const head = sticky.exec(text);
+  if (!head) throw new ExpressionError("Expected $fromAI(");
+  const argsStart = start + head[0].length;
+  let depth = 1;
+  let quote: string | null = null;
+  let escaped = false;
+  let i = argsStart;
+  for (; i < text.length && depth > 0; i++) {
+    const ch = text[i] as string;
+    if (escaped) escaped = false;
+    else if (ch === "\\") escaped = true;
+    else if (quote !== null) {
+      if (ch === quote) quote = null;
+    } else if (QUOTES.has(ch)) quote = ch;
+    else if (ch === "(") depth++;
+    else if (ch === ")") depth--;
+  }
+  if (depth > 0) {
+    throw new ExpressionError(
+      `Unbalanced parentheses while parsing $fromAI call: ${text.slice(start)}`,
+    );
+  }
+  const [key = "", description = "", rawType, rawDefault] = fromAIArguments(
+    text.slice(argsStart, i - 1),
+  );
+  const typeText = (rawType ?? "string").trim().toLowerCase() || "string";
+  const type = FROM_AI_TYPES.find((name) => name === typeText);
+  if (!type) throw new ExpressionError(`Invalid type: ${rawType}`);
+  const defaultValue = fromAIDefault(rawDefault, type);
+  return {
+    call: { key, description, type, ...(defaultValue === undefined ? {} : { defaultValue }) },
+    end: i,
+  };
+}
 
 /**
  * The `$fromAI` calls in a text, found without running it, so the tool can tell the model what to
- * fill before a call. `invalid` is true when a call is not in the literal form or has an
- * unknown type.
+ * fill before a call. `error` is set (and `invalid` is true) when a call cannot be read.
  */
 export function fromAICalls(text: string): {
-  calls: { key: string; description: string; type: FromAIType }[];
+  calls: FromAICall[];
   invalid: boolean;
+  error?: string;
 } {
-  const calls: { key: string; description: string; type: FromAIType }[] = [];
-  let invalid = false;
-  for (const match of text.matchAll(FROM_AI_CALL)) {
-    const key = match[1] ?? match[2] ?? "";
-    const type = (match[5] ?? match[6] ?? "string") as FromAIType;
-    if (key === "" || !FROM_AI_TYPES.includes(type)) invalid = true;
-    calls.push({ key, description: match[3] ?? match[4] ?? "", type });
+  const calls: FromAICall[] = [];
+  for (const match of text.matchAll(fromAIStart("gi"))) {
+    try {
+      calls.push(readFromAI(text, match.index).call);
+    } catch (error) {
+      const message = error instanceof ExpressionError ? error.detail : String(error);
+      return { calls, invalid: true, error: message };
+    }
   }
-  const total = text.split(FROM_AI).length - 1;
-  return { calls, invalid: invalid || total !== calls.length };
+  return { calls, invalid: false };
 }
 
 const FORBIDDEN_KEYS = new Set(["__proto__", "constructor", "prototype"]);
@@ -437,6 +543,7 @@ function evaluate(node: Node, scope: Record<string, unknown>, path: string): unk
         throw new ExpressionError("$fromAI works only when the node runs as a tool", path);
       }
       if (!Object.hasOwn(input.values, node.key)) {
+        if (node.defaultValue !== undefined) return node.defaultValue;
         throw new ExpressionError(`The model did not give "${node.key}"`, path);
       }
       return input.values[node.key];

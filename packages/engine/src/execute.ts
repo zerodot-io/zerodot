@@ -33,6 +33,7 @@ import type { CodeLog, SandboxClient } from "./sandbox";
 import { type SupplyCall, type SupplyUseStatus, trackUse } from "./supply-use";
 import type { TableStore } from "./tables";
 import {
+  checkToolInput,
   fromAIInputs,
   type NodeTool,
   toolDescription,
@@ -720,10 +721,11 @@ export async function executeGraph(options: ExecuteOptions): Promise<ExecuteResu
     path: Set<string>,
   ): NodeTool => {
     const name = toolName(node.name, used);
+    const inputs = fromAIInputs(node, definition);
     const spec = {
       name,
       description: toolDescription(node, definition),
-      inputSchema: toolInputSchema(fromAIInputs(node, definition)),
+      inputSchema: toolInputSchema(inputs),
     };
     return {
       spec,
@@ -732,10 +734,7 @@ export async function executeGraph(options: ExecuteOptions): Promise<ExecuteResu
         const masked: string[] = [];
         const closers: Closer[] = [];
         try {
-          const values =
-            given !== null && typeof given === "object" && !Array.isArray(given)
-              ? (given as Record<string, unknown>)
-              : {};
+          const values = checkToolInput(inputs, given);
           const toolScope = { ...scope, $fromAI: new ToolInput(values) };
           const { config, credential } = await resolveNode(
             node,
