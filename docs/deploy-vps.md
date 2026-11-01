@@ -254,6 +254,8 @@ docker compose run --rm --user root web chown -R node:node /blobs
 docker compose up -d
 ```
 
+If you mount a host folder for `/blobs` instead of the `blob-data` volume, Docker does not set its owner. Run `chown -R 1000:1000 <host folder>` on the host.
+
 A new install does not need this. At start, web and worker log `blobs.not_writable` when `ZERODOT_BLOB_DIR` is not writable.
 
 ## Back up
