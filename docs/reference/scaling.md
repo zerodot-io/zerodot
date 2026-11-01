@@ -24,7 +24,7 @@ A job that finds no free slot waits 1 to 3 seconds in the queue and tries again.
 
 By default, files (`binary.<property>`) and all node data are `jsonb` in Postgres. To keep them out of Postgres, set a blob store. Web, API, and worker must all use the same store.
 
-- `ZERODOT_BLOB_DIR`: a directory. Use a volume that all processes share.
+- `ZERODOT_BLOB_DIR`: a directory. Use a volume that all processes share. The `node` user must be able to write to it. At start, web and worker log `blobs.not_writable` if it cannot. In Docker the image creates `/blobs` for `node`. If the volume is older and owned by root, see "Fix blob permissions on an older install" in the [VPS guide](../deploy-vps.md).
 - `ZERODOT_BLOB_S3_BUCKET` with `ZERODOT_BLOB_S3_ACCESS_KEY_ID` and `ZERODOT_BLOB_S3_SECRET_ACCESS_KEY`: S3 or an S3-compatible service. Also `ZERODOT_BLOB_S3_ENDPOINT`, `ZERODOT_BLOB_S3_REGION`, `ZERODOT_BLOB_S3_PREFIX`, `ZERODOT_BLOB_S3_FORCE_PATH_STYLE`. S3 wins over the directory.
 - `ZERODOT_INLINE_OUTPUT_BYTES` (default 262144): a node input or output above this size is stored as one blob (`output_ref`). Files are always blobs.
 

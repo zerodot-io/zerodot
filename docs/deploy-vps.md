@@ -245,6 +245,19 @@ You can also set `ZERODOT_SIGNUP_DISABLED=true` in `.env`. Then signup stays off
 cd /var/www/zerodot && git pull && docker compose pull && docker compose up -d
 ```
 
+### Fix blob permissions on an older install
+
+An install from before the fix has a `blob-data` volume that is owned by root. A node that writes a file then fails with `EACCES: permission denied, mkdir '/blobs/<run id>'`. Change the owner one time, then restart:
+
+```sh
+docker compose run --rm --user root web chown -R node:node /blobs
+docker compose up -d
+```
+
+If you mount a host folder for `/blobs` instead of the `blob-data` volume, Docker does not set its owner. Run `chown -R 1000:1000 <host folder>` on the host.
+
+A new install does not need this. At start, web and worker log `blobs.not_writable` when `ZERODOT_BLOB_DIR` is not writable.
+
 ## Back up
 
 ```sh
