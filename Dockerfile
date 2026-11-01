@@ -5,7 +5,9 @@ RUN npm install -g pnpm@12.15.0
 WORKDIR /app
 # Installed node packages live here. Compose mounts a volume, so they survive an upgrade.
 ENV ZERODOT_NODES_DIR=/nodes
-RUN mkdir -p /nodes && chown node:node /nodes
+# /blobs must exist in the image. Else a new compose volume mounts it owned by root, and the
+# node user cannot write blobs.
+RUN mkdir -p /nodes /blobs && chown node:node /nodes /blobs
 
 # The root package.json without its version. A release changes only the version, so the
 # install layer below stays cached.

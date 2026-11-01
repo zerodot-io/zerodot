@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import type { BlobStore } from "@zerodot/engine";
-import { diskBlobStore } from "./disk";
+import { checkBlobDir, diskBlobStore } from "./disk";
 import { s3BlobStore } from "./s3";
 import { s3Settings } from "./s3-sign";
 
@@ -58,6 +58,12 @@ export function blobSetupFromEnv(env: Env = process.env): BlobSetup | null {
   const dir = text(env.ZERODOT_BLOB_DIR);
   if (dir) return { store: diskBlobStore(dir), inlineBytes };
   return null;
+}
+
+/** Throws when `ZERODOT_BLOB_DIR` is in use and not writable. S3 is not checked. */
+export async function checkBlobSetupFromEnv(env: Env = process.env): Promise<void> {
+  const dir = text(env.ZERODOT_BLOB_DIR);
+  if (dir && !text(env.ZERODOT_BLOB_S3_BUCKET)) await checkBlobDir(dir);
 }
 
 let cached: { setup: BlobSetup | null } | undefined;

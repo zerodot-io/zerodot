@@ -5,6 +5,22 @@ import { type BlobRef, type BlobStore, blobId } from "@zerodot/engine";
 
 import { blobIdParts, UUID } from "./id";
 
+/** Throws a clear error when the process cannot write blobs to `dir`. Call it at boot. */
+export async function checkBlobDir(dir: string): Promise<void> {
+  const probe = join(dir, `.write-check.${process.pid}`);
+  try {
+    await mkdir(dir, { recursive: true });
+    await writeFile(probe, "");
+    await rm(probe, { force: true });
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code ?? String(error);
+    throw new Error(
+      `ZERODOT_BLOB_DIR "${dir}" is not writable (${code}). In Docker, run once: ` +
+        `docker compose run --rm --user root web chown -R node:node ${dir}`,
+    );
+  }
+}
+
 /** Files in a directory: `<dir>/<run id>/<sha-256>`. Use a volume that all workers and web share. */
 export function diskBlobStore(dir: string): BlobStore {
   /** The path of a blob. */

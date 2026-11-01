@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { createAuth } from "@zerodot/auth";
-import { blobSetup } from "@zerodot/blob";
+import { blobSetup, checkBlobSetupFromEnv } from "@zerodot/blob";
 import {
   createDb,
   getSignupDisabled,
@@ -80,6 +80,12 @@ async function init() {
   await runMigrations(handle);
   // Reads of node results get large and binary data back from the blob store.
   setBlobSetup(blobSetup());
+  // Tell at boot, not at the first run that writes binary data.
+  await checkBlobSetupFromEnv().catch((error) =>
+    console.log(
+      JSON.stringify({ level: "error", msg: "blobs.not_writable", error: String(error) }),
+    ),
+  );
   const auth = createAuth({
     db: handle.db,
     baseURL: config.ZERODOT_BASE_URL,

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { randomUUID } from "node:crypto";
 import { createServer } from "node:http";
-import { blobSetup } from "@zerodot/blob";
+import { blobSetup, checkBlobSetupFromEnv } from "@zerodot/blob";
 import {
   createDb,
   deleteOrphanBlobs,
@@ -329,6 +329,10 @@ const heartbeat = startHeartbeat(
       activeRuns: activeRuns.ids(),
     }),
   WORKER_HEARTBEAT_MS,
+);
+// Tell at boot, not at the first run that writes binary data.
+checkBlobSetupFromEnv().catch((error) =>
+  log("error", "blobs.not_writable", { error: String(error) }),
 );
 // Without the listener, an admin cannot cancel a run. The worker still runs, so log and go on.
 listenForNodesChanged(nodesRedis, () => void syncNodePackages()).catch((error) =>
